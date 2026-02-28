@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prompt Manager - UI 预览</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        border: 'hsl(220 13% 91%)',
+        input: 'hsl(220 13% 91%)',
+        ring: 'hsl(224 71.4% 4.1%)',
+        background: 'hsl(0 0% 100%)',
+        foreground: 'hsl(224 71.4% 4.1%)',
+        primary: { DEFAULT: 'hsl(220.9 39.3% 11%)', foreground: 'hsl(210 20% 98%)' },
+        secondary: { DEFAULT: 'hsl(220 14.3% 95.9%)', foreground: 'hsl(220.9 39.3% 11%)' },
+        destructive: { DEFAULT: 'hsl(0 84.2% 60.2%)', foreground: 'hsl(210 20% 98%)' },
+        muted: { DEFAULT: 'hsl(220 14.3% 95.9%)', foreground: 'hsl(220 8.9% 46.1%)' },
+        accent: { DEFAULT: 'hsl(220 14.3% 95.9%)', foreground: 'hsl(220.9 39.3% 11%)' },
+        popover: { DEFAULT: 'hsl(0 0% 100%)', foreground: 'hsl(224 71.4% 4.1%)' },
+        card: { DEFAULT: 'hsl(0 0% 100%)', foreground: 'hsl(224 71.4% 4.1%)' },
+      }
+    }
+  }
+}
+</script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, -apple-system, sans-serif; }
+  .badge { display: inline-flex; align-items: center; border-radius: 9999px; padding: 1px 8px; font-size: 11px; font-weight: 500; line-height: 1.6; }
+  .badge-default { background: hsl(220.9 39.3% 11%); color: hsl(210 20% 98%); }
+  .badge-secondary { background: hsl(220 14.3% 95.9%); color: hsl(220.9 39.3% 11%); }
+  .badge-outline { border: 1px solid hsl(220 13% 91%); color: hsl(220 8.9% 46.1%); }
+  .ref-tag-prompt { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; border-radius: 6px; padding: 2px 6px; font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }
+  .ref-tag-doc { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; border-radius: 6px; padding: 2px 6px; font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }
+  .diff-add { background: #dcfce7; color: #166534; padding: 2px 8px; }
+  .diff-remove { background: #fee2e2; color: #991b1b; padding: 2px 8px; text-decoration: line-through; }
+  .diff-context { color: #6b7280; padding: 2px 8px; }
+  .tab-active { border-bottom: 2px solid hsl(220.9 39.3% 11%); color: hsl(220.9 39.3% 11%); font-weight: 500; }
+  .tab-inactive { border-bottom: 2px solid transparent; color: hsl(220 8.9% 46.1%); }
+  pre { font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace; }
+  .highlight-var { color: #2563eb; background: #eff6ff; padding: 0 2px; border-radius: 3px; }
+  /* Animate */
+  .panel-open { width: 400px; opacity: 1; transition: all 0.3s ease; }
+  .panel-closed { width: 0; opacity: 0; overflow: hidden; transition: all 0.3s ease; }
+  /* Tooltip for interactive demo */
+  .tooltip-hint { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); background: #1e293b; color: white; padding: 8px 16px; border-radius: 8px; font-size: 13px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+  .btn { display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; font-size: 13px; font-weight: 500; padding: 6px 12px; cursor: pointer; transition: all 0.15s; border: none; }
+  .btn-primary { background: hsl(220.9 39.3% 11%); color: white; }
+  .btn-primary:hover { background: hsl(220.9 39.3% 18%); }
+  .btn-outline { background: white; border: 1px solid hsl(220 13% 91%); color: hsl(220.9 39.3% 11%); }
+  .btn-outline:hover { background: hsl(220 14.3% 95.9%); }
+  .btn-ghost { background: transparent; color: hsl(220 8.9% 46.1%); }
+  .btn-ghost:hover { background: hsl(220 14.3% 95.9%); color: hsl(220.9 39.3% 11%); }
+  .btn-destructive { background: hsl(0 84.2% 60.2%); color: white; }
+  .input-field { height: 36px; width: 100%; border-radius: 6px; border: 1px solid hsl(220 13% 91%); padding: 0 12px; font-size: 14px; outline: none; }
+  .input-field:focus { border-color: hsl(224 71.4% 4.1%); box-shadow: 0 0 0 2px hsl(224 71.4% 4.1% / 10%); }
+  .textarea-field { width: 100%; border-radius: 6px; border: 1px solid hsl(220 13% 91%); padding: 8px 12px; font-size: 14px; outline: none; resize: none; }
+  .textarea-field:focus { border-color: hsl(224 71.4% 4.1%); box-shadow: 0 0 0 2px hsl(224 71.4% 4.1% / 10%); }
+</style>
+</head>
+<body class="h-screen flex flex-col bg-background text-foreground">
+
+<!-- Tooltip -->
+<div class="tooltip-hint" id="hint">
+  点击左侧 Prompt 或知识库项目查看右侧面板 | 点击下方标签切换视图
+</div>
+
+<!-- Top Bar -->
+<header class="flex h-14 items-center justify-between border-b bg-white px-4 shrink-0">
+  <div class="flex items-center gap-2">
+    <button class="btn btn-outline gap-1" style="min-width:140px; justify-content: space-between;">
+      <span>客服机器人</span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+    </button>
+    <button class="btn btn-ghost gap-1">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+      新建项目
+    </button>
+  </div>
+  <button class="btn btn-ghost gap-1">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+    全局设置
+  </button>
+</header>
+
+<!-- Main Content -->
+<div class="flex flex-1 overflow-hidden">
+
+  <!-- Left Sidebar -->
+  <aside class="flex h-full w-60 shrink-0 flex-col border-r bg-white">
+    <!-- Sessions -->
+    <div class="flex flex-col">
+      <div class="flex items-center justify-between px-3 py-2">
+        <div class="flex items-center gap-1.5 text-sm font-medium">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/></svg>
+          <span>对话</span>
+        </div>
+        <button class="btn btn-ghost p-1" style="width:24px;height:24px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+        </button>
+      </div>
+      <div class="flex flex-col gap-0.5 px-2 pb-2 overflow-auto" style="max-height:180px;">
+        <button class="flex w-full flex-col items-start rounded-md px-2 py-1.5 text-left bg-accent" onclick="switchSession('s1')">
+          <span class="w-full truncate text-sm">优化欢迎语多语言支持</span>
+          <span class="text-xs text-muted-foreground">2 小时前</span>
+        </button>
+        <button class="flex w-full flex-col items-start rounded-md px-2 py-1.5 text-left hover:bg-accent" onclick="switchSession('s2')">
+          <span class="w-full truncate text-sm">新增售后回复 Prompt</span>
+          <span class="text-xs text-muted-foreground">5 小时前</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="border-t my-1"></div>
+
+    <!-- Project Resources -->
+    <div class="flex flex-1 flex-col overflow-hidden">
+      <p class="px-3 py-2 text-xs font-medium text-muted-foreground">项目资源</p>
+      <div class="flex-1 overflow-auto px-1">
+        <!-- Prompts -->
+        <div>
+          <button class="flex w-full items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground" onclick="toggleGroup('prompts')">
+            <svg id="prompts-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+            <span>📋 Prompt</span>
+            <span class="ml-auto">(3)</span>
+          </button>
+          <div id="prompts-group">
+            <button class="flex w-full items-center gap-2 px-6 py-1 text-left hover:bg-accent rounded-sm" onclick="showPromptPreview('welcome')">
+              <span class="flex-1 truncate text-xs">欢迎语 Prompt</span>
+              <span class="badge badge-default">启用</span>
+            </button>
+            <button class="flex w-full items-center gap-2 px-6 py-1 text-left hover:bg-accent rounded-sm" onclick="showPromptPreview('classify')">
+              <span class="flex-1 truncate text-xs">问题分类 Prompt</span>
+              <span class="badge badge-default">启用</span>
+            </button>
+            <button class="flex w-full items-center gap-2 px-6 py-1 text-left hover:bg-accent rounded-sm" onclick="showPromptPreview('reply')">
+              <span class="flex-1 truncate text-xs">回复生成 Prompt</span>
+              <span class="badge badge-default">启用</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Documents -->
+        <div class="mt-1">
+          <button class="flex w-full items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground" onclick="toggleGroup('docs')">
+            <svg id="docs-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+            <span>📁 知识库</span>
+            <span class="ml-auto">(2)</span>
+          </button>
+          <div id="docs-group">
+            <button class="flex w-full items-center gap-2 px-6 py-1 text-left hover:bg-accent rounded-sm" onclick="showDocPreview('manual')">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
+              <span class="flex-1 truncate text-xs">产品手册.pdf</span>
+            </button>
+            <button class="flex w-full items-center gap-2 px-6 py-1 text-left hover:bg-accent rounded-sm" onclick="showDocPreview('faq')">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
+              <span class="flex-1 truncate text-xs">FAQ 文档.md</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Settings -->
+        <button class="flex w-full items-center gap-1.5 px-3 py-1.5 mt-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent rounded-sm" onclick="showProjectSettings()">
+          <span>⚙ 项目设置</span>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Chat Area (Center) -->
+  <main class="flex flex-1 flex-col overflow-hidden" id="chat-area">
+    <!-- Messages -->
+    <div class="flex-1 overflow-auto p-4" id="messages-container">
+      <div class="flex flex-col gap-4 max-w-3xl mx-auto">
+
+        <!-- User message 1 -->
+        <div class="flex w-full justify-end">
+          <div class="max-w-[80%]">
+            <div class="flex flex-wrap gap-1 mb-1 justify-end">
+              <span class="ref-tag-prompt">📋 欢迎语 Prompt</span>
+              <span class="ref-tag-doc">📁 产品手册.pdf</span>
+            </div>
+            <div class="rounded-lg px-3 py-2 text-sm leading-relaxed bg-primary text-white">
+              <p>请帮我优化欢迎语 prompt，增加多语言支持，能根据用户的语言自动切换。</p>
+            </div>
+            <p class="text-[10px] text-muted-foreground mt-1 text-right">10:00</p>
+          </div>
+        </div>
+
+        <!-- Agent message with plan card -->
+        <div class="flex w-full justify-start">
+          <div class="max-w-[80%] space-y-2">
+            <div class="rounded-lg px-3 py-2 text-sm leading-relaxed bg-muted">
+              <p>好的，我已经分析了您的需求。根据当前的业务说明和欢迎语 Prompt 的内容，我制定了以下修改规划：</p>
+            </div>
+            <!-- Plan Card -->
+            <div class="rounded-lg border bg-card p-4 space-y-3">
+              <div class="flex items-center gap-2 text-sm font-medium">
+                <span style="color:#3b82f6;">📋</span>
+                <span>修改规划</span>
+                <span class="text-xs text-green-600 bg-green-50 px-1.5 py-0.5 rounded">已确认</span>
+              </div>
+              <p class="text-xs text-muted-foreground">根据您的需求，我拆分为以下关键点：</p>
+              <div class="space-y-2">
+                <div class="flex items-start gap-2 w-full text-left rounded-md p-2 bg-muted/30">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="#3b82f6" stroke="#3b82f6" stroke-width="0" class="mt-0.5 shrink-0"><rect x="3" y="3" width="18" height="18" rx="2" stroke-width="2" fill="none"/><path d="m9 12 2 2 4-4" stroke-width="2" fill="none"/></svg>
+                  <div>
+                    <p class="text-sm">1. 修改「欢迎语 Prompt」</p>
+                    <p class="text-xs text-muted-foreground mt-0.5">→ 增加语言检测和多语言支持逻辑</p>
+                  </div>
+                </div>
+                <div class="flex items-start gap-2 w-full text-left rounded-md p-2 bg-muted/30">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="#3b82f6" stroke="#3b82f6" stroke-width="0" class="mt-0.5 shrink-0"><rect x="3" y="3" width="18" height="18" rx="2" stroke-width="2" fill="none"/><path d="m9 12 2 2 4-4" stroke-width="2" fill="none"/></svg>
+                  <div>
+                    <p class="text-sm">2. 新建「语言检测 Prompt」</p>
+                    <p class="text-xs text-muted-foreground mt-0.5">→ 自动识别用户语言</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <p class="text-[10px] text-muted-foreground mt-1">10:01</p>
+          </div>
+        </div>
+
+        <!-- User confirm -->
+        <div class="flex w-full justify-end">
+          <div class="max-w-[80%]">
+            <div class="rounded-lg px-3 py-2 text-sm leading-relaxed bg-primary text-white">
+              <p>规划看起来不错，请开始执行。</p>
+            </div>
+            <p class="text-[10px] text-muted-foreground mt-1 text-right">10:02</p>
+          </div>
+        </div>
+
+        <!-- Agent message with Diff card -->
+        <div class="flex w-full justify-start">
+          <div class="max-w-[80%] space-y-2">
+            <div class="rounded-lg px-3 py-2 text-sm leading-relaxed bg-muted">
+              <p>已完成修改，请查看以下变更：</p>
+            </div>
+            <!-- Diff Card -->
+            <div class="rounded-lg border bg-card p-4 space-y-3">
+              <div class="flex items-center gap-2 text-sm font-medium">
+                <span style="color:#f97316;">✏️</span>
+                <span>修改 Prompt：欢迎语 Prompt</span>
+              </div>
+              <div class="rounded-md bg-muted overflow-hidden">
+                <div class="p-3 space-y-0 text-xs leading-relaxed" style="font-family: 'SF Mono', 'Consolas', monospace;">
+                  <div class="diff-context"><span class="mr-2 inline-block w-4 text-right select-none"> </span>你是一个专业的电商客服助手。</div>
+                  <div class="diff-context"><span class="mr-2 inline-block w-4 text-right select-none"> </span>当用户首次进入对话时，请用热情友好的语气打招呼。</div>
+                  <div class="diff-context"><span class="mr-2 inline-block w-4 text-right select-none"> </span></div>
+                  <div class="diff-context"><span class="mr-2 inline-block w-4 text-right select-none"> </span>要求：</div>
+                  <div class="diff-context"><span class="mr-2 inline-block w-4 text-right select-none"> </span>1. 自我介绍</div>
+                  <div class="diff-context"><span class="mr-2 inline-block w-4 text-right select-none"> </span>2. 询问用户需要什么帮助</div>
+                  <div class="diff-remove"><span class="mr-2 inline-block w-4 text-right select-none">-</span>3. 使用{{语言}}回复</div>
+                  <div class="diff-add"><span class="mr-2 inline-block w-4 text-right select-none">+</span>3. 根据用户的语言自动检测并使用对应语言回复</div>
+                  <div class="diff-add"><span class="mr-2 inline-block w-4 text-right select-none">+</span>4. 支持的语言：中文、英文、日文、韩文</div>
+                  <div class="diff-context"><span class="mr-2 inline-block w-4 text-right select-none"> </span></div>
+                  <div class="diff-context"><span class="mr-2 inline-block w-4 text-right select-none"> </span>注意：保持简洁，不超过3句话。</div>
+                </div>
+              </div>
+              <div class="flex gap-2 pt-1">
+                <button class="btn btn-primary">应用修改</button>
+                <button class="btn btn-outline">在右侧编辑</button>
+                <button class="btn btn-ghost">拒绝</button>
+              </div>
+            </div>
+
+            <!-- Preview Card (new prompt) -->
+            <div class="rounded-lg border bg-card p-4 space-y-3 mt-3">
+              <div class="flex items-center gap-2 text-sm font-medium">
+                <span style="color:#eab308;">✨</span>
+                <span>新建 Prompt：语言检测 Prompt</span>
+              </div>
+              <div class="rounded-md bg-muted p-3">
+                <pre class="text-sm whitespace-pre-wrap break-words leading-relaxed">你是一个语言检测助手。分析用户输入的文本，判断其使用的语言。
+
+输出格式：
+{"language": "语言名称", "code": "ISO 639-1 代码", "confidence": 0.95}
+
+支持的语言：
+- 中文 (zh)
+- English (en)
+- 日本語 (ja)
+- 한국어 (ko)
+
+注意：
+1. 如果无法确定语言，默认返回中文
+2. confidence 低于 0.7 时，默认返回中文</pre>
+              </div>
+              <div class="flex gap-1 flex-wrap">
+                <span class="text-xs bg-secondary px-1.5 py-0.5 rounded">客服</span>
+                <span class="text-xs bg-secondary px-1.5 py-0.5 rounded">语言检测</span>
+              </div>
+              <div class="flex gap-2 pt-1">
+                <button class="btn btn-primary">应用保存</button>
+                <button class="btn btn-outline">在右侧编辑</button>
+                <button class="btn btn-ghost">拒绝</button>
+              </div>
+            </div>
+            <p class="text-[10px] text-muted-foreground mt-1">10:03</p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Chat Input -->
+    <div class="border-t bg-white p-4">
+      <div class="max-w-3xl mx-auto">
+        <div class="relative flex items-end gap-2">
+          <textarea
+            class="textarea-field"
+            rows="2"
+            placeholder="输入需求描述，使用 @ 引用 Prompt 或知识库..."
+            style="min-height:44px; max-height:160px;"
+          ></textarea>
+          <button class="btn btn-primary shrink-0" style="width:36px;height:36px;padding:0;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+          </button>
+        </div>
+        <p class="text-[10px] text-muted-foreground mt-1">Enter 发送，Shift+Enter 换行，@ 引用</p>
+      </div>
+    </div>
+  </main>
+
+  <!-- Right Panel -->
+  <div class="flex flex-col border-l bg-white shrink-0 panel-closed" id="right-panel">
+    <div class="flex h-14 items-center justify-between border-b px-4 shrink-0">
+      <span class="text-sm font-semibold truncate" id="panel-title">Prompt 预览</span>
+      <button class="btn btn-ghost p-1" style="width:28px;height:28px;" onclick="closePanel()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+    </div>
+    <div class="flex-1 overflow-auto p-4" id="panel-content">
+      <!-- Dynamic content -->
+    </div>
+  </div>
+
+</div>
+
+<!-- View switcher tabs (for demo) -->
+<div class="fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg z-50 flex justify-center gap-1 p-2" id="view-tabs">
+  <button class="btn btn-primary text-xs" onclick="showView('chat')">对话界面</button>
+  <button class="btn btn-outline text-xs" onclick="showView('settings')">全局设置</button>
+  <button class="btn btn-outline text-xs" onclick="showView('project-settings')">项目设置</button>
+  <button class="btn btn-outline text-xs" onclick="showView('create-project')">新建项目</button>
+</div>
+
+<!-- Settings View (hidden by default) -->
+<div class="fixed inset-0 bg-background z-40 overflow-auto hidden" id="settings-view">
+  <div class="max-w-2xl mx-auto p-8">
+    <button class="btn btn-ghost mb-4" onclick="showView('chat')">← 返回</button>
+    <h1 class="text-xl font-bold mb-6">全局设置</h1>
+
+    <!-- AI Config Card -->
+    <div class="rounded-lg border bg-card p-6 mb-6">
+      <h2 class="text-base font-semibold mb-4">AI 模型配置</h2>
+      <div class="space-y-4">
+        <div>
+          <label class="text-sm font-medium block mb-1">模型提供商</label>
+          <select class="input-field" style="appearance:auto;">
+            <option>OpenAI</option>
+            <option>Claude</option>
+            <option>Kimi (月之暗面)</option>
+            <option>GLM (智谱AI)</option>
+            <option selected>DeepSeek</option>
+            <option>通义千问</option>
+            <option>其他</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-sm font-medium block mb-1">API Key</label>
+          <input type="password" class="input-field" value="sk-xxxxxxxxxxxxxxxx" />
+        </div>
+        <div>
+          <label class="text-sm font-medium block mb-1">模型名称</label>
+          <input class="input-field" value="deepseek-chat" />
+        </div>
+        <div>
+          <label class="text-sm font-medium block mb-1">Base URL</label>
+          <input class="input-field" value="https://api.deepseek.com/v1" />
+          <p class="text-xs text-muted-foreground mt-1">DeepSeek 默认: https://api.deepseek.com/v1</p>
+        </div>
+        <button class="btn btn-primary">保存模型配置</button>
+      </div>
+    </div>
+
+    <!-- Global Business Info Card -->
+    <div class="rounded-lg border bg-card p-6">
+      <h2 class="text-base font-semibold mb-4">全局业务信息</h2>
+      <div class="space-y-4">
+        <div>
+          <label class="text-sm font-medium block mb-1">全局业务说明</label>
+          <textarea class="textarea-field" rows="3" placeholder="适用于所有项目的通用规则...">所有 prompt 必须使用礼貌用语。避免生成不当内容。</textarea>
+        </div>
+        <div>
+          <label class="text-sm font-medium block mb-1">全局业务目标</label>
+          <textarea class="textarea-field" rows="3" placeholder="组织层面的 prompt 使用目标...">提升 AI 应用的质量和一致性，降低人工维护成本。</textarea>
+        </div>
+        <div>
+          <label class="text-sm font-medium block mb-1">全局业务背景</label>
+          <textarea class="textarea-field" rows="3" placeholder="整体业务背景...">公司使用多个 AI 驱动的业务系统，需要统一管理 prompt。</textarea>
+        </div>
+        <button class="btn btn-primary">保存业务信息</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Project Settings View (hidden) -->
+<div class="fixed inset-0 bg-background z-40 overflow-auto hidden" id="project-settings-view">
+  <div class="max-w-2xl mx-auto p-8">
+    <button class="btn btn-ghost mb-4" onclick="showView('chat')">← 返回</button>
+    <h1 class="text-xl font-bold mb-6">项目设置 — 客服机器人</h1>
+
+    <div class="rounded-lg border bg-card p-6 mb-4">
+      <h2 class="text-base font-semibold mb-4">基本信息</h2>
+      <div class="space-y-3">
+        <div><label class="text-sm font-medium block mb-1">项目名称</label><input class="input-field" value="客服机器人" /></div>
+        <div><label class="text-sm font-medium block mb-1">项目简介</label><textarea class="textarea-field" rows="2">智能客服系统的 Prompt 管理</textarea></div>
+        <button class="btn btn-primary">保存</button>
+      </div>
+    </div>
+
+    <div class="rounded-lg border bg-card p-6 mb-4">
+      <h2 class="text-base font-semibold mb-4">业务说明</h2>
+      <textarea class="textarea-field" rows="4">面向电商平台的智能客服系统。强制规则：1. 所有回复必须包含礼貌用语 2. 涉及退款问题必须引导至人工客服</textarea>
+      <p class="text-xs text-muted-foreground mt-1">提示：在此标记需要强制写入 prompt 的规则</p>
+      <button class="btn btn-primary mt-3">保存</button>
+    </div>
+
+    <div class="rounded-lg border bg-card p-6 mb-4">
+      <h2 class="text-base font-semibold mb-4">业务目标</h2>
+      <textarea class="textarea-field" rows="3">提升客服回复质量和效率，降低人工客服工作量</textarea>
+      <button class="btn btn-primary mt-3">保存</button>
+    </div>
+
+    <div class="rounded-lg border bg-card p-6 mb-4">
+      <h2 class="text-base font-semibold mb-4">业务背景</h2>
+      <textarea class="textarea-field" rows="3">当前客服系统使用 GPT-4o 处理用户咨询，prompt 分布在欢迎语、问题分类、回复生成三个环节</textarea>
+      <button class="btn btn-primary mt-3">保存</button>
+    </div>
+
+    <div class="border-t pt-4 mt-4">
+      <p class="text-sm font-medium text-destructive mb-2">危险操作</p>
+      <button class="btn btn-destructive">删除项目</button>
+    </div>
+  </div>
+</div>
+
+<!-- Create Project Dialog (hidden) -->
+<div class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center hidden" id="create-project-view" onclick="if(event.target===this)showView('chat')">
+  <div class="bg-white rounded-lg shadow-xl w-full max-w-lg p-6 mx-4" onclick="event.stopPropagation()">
+    <h2 class="text-lg font-semibold mb-1">新建项目</h2>
+    <p class="text-sm text-muted-foreground mb-4">创建一个新的 Prompt 管理项目</p>
+    <div class="space-y-4">
+      <div><label class="text-sm font-medium block mb-1">项目名称 <span class="text-destructive">*</span></label><input class="input-field" placeholder="输入项目名称" /></div>
+      <div><label class="text-sm font-medium block mb-1">项目简介</label><textarea class="textarea-field" rows="2" placeholder="简要描述项目用途"></textarea></div>
+      <div><label class="text-sm font-medium block mb-1">业务说明</label><textarea class="textarea-field" rows="3" placeholder="包含需要强制写入 prompt 的规则..."></textarea></div>
+      <div><label class="text-sm font-medium block mb-1">业务目标</label><textarea class="textarea-field" rows="2" placeholder="该项目的 prompt 要解决什么问题..."></textarea></div>
+      <div><label class="text-sm font-medium block mb-1">业务背景</label><textarea class="textarea-field" rows="2" placeholder="prompt 在该项目中是怎么应用的..."></textarea></div>
+      <div class="flex justify-end gap-2 pt-2">
+        <button class="btn btn-outline" onclick="showView('chat')">取消</button>
+        <button class="btn btn-primary">创建项目</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Panel content templates
+const promptData = {
+  welcome: {
+    title: '欢迎语 Prompt',
+    status: '启用',
+    tags: ['客服', '欢迎语'],
+    version: 2,
+    content: '你是一个专业的电商客服助手。当用户首次进入对话时，请用热情友好的语气打招呼。\n\n要求：\n1. 自我介绍\n2. 询问用户需要什么帮助\n3. 使用<span class="highlight-var">{{语言}}</span>回复\n\n注意：保持简洁，不超过3句话。',
+    description: '用于客服机器人的欢迎语生成',
+    variables: [{ name: '语言', desc: '回复语言', default: '中文' }]
+  },
+  classify: {
+    title: '问题分类 Prompt',
+    status: '启用',
+    tags: ['客服', '分类'],
+    version: 1,
+    content: '你是一个问题分类助手。请将用户的问题分类到以下类别之一：\n\n- 商品咨询\n- 订单查询\n- 退换货\n- 投诉建议\n- 其他\n\n输出格式：{"category": "类别名", "confidence": 0.95}',
+    description: '对用户问题进行自动分类',
+    variables: []
+  },
+  reply: {
+    title: '回复生成 Prompt',
+    status: '启用',
+    tags: ['客服', '回复'],
+    version: 3,
+    content: '你是<span class="highlight-var">{{品牌名}}</span>的客服代表。根据以下信息生成回复：\n\n用户问题：<span class="highlight-var">{{用户问题}}</span>\n问题类别：<span class="highlight-var">{{问题类别}}</span>\n\n要求：\n1. 保持礼貌专业\n2. 直接回答问题\n3. 如涉及退款，引导至人工客服',
+    description: '根据分类结果生成最终回复',
+    variables: [{ name: '品牌名', desc: '品牌名称' }, { name: '用户问题', desc: '用户原始问题' }, { name: '问题类别', desc: '分类结果' }]
+  }
+};
+
+const docData = {
+  manual: { name: '产品手册.pdf', type: 'PDF', content: '第一章 产品概述\n\n本产品是一个面向电商平台的智能客服系统...\n\n第二章 功能说明\n\n2.1 自动回复\n自动回复功能支持以下场景：\n- 商品咨询\n- 订单状态查询\n- 退换货流程\n...' },
+  faq: { name: 'FAQ 文档.md', type: 'MD', content: '# 常见问题\n\n## Q1: 如何退货？\n在订单详情页点击"申请退货"，填写退货原因后提交。\n\n## Q2: 退款多久到账？\n一般 3-5 个工作日内到账。\n\n## Q3: 如何修改收货地址？\n在订单未发货前，可在订单详情页修改地址。' }
+};
+
+function openPanel(title, html) {
+  document.getElementById('panel-title').textContent = title;
+  document.getElementById('panel-content').innerHTML = html;
+  document.getElementById('right-panel').className = 'flex flex-col border-l bg-white shrink-0 panel-open';
+}
+
+function closePanel() {
+  document.getElementById('right-panel').className = 'flex flex-col border-l bg-white shrink-0 panel-closed';
+}
+
+function showPromptPreview(key) {
+  const p = promptData[key];
+  const varsHtml = p.variables.length > 0
+    ? '<div class="mt-4"><p class="text-xs text-muted-foreground mb-2">变量</p>' +
+      p.variables.map(v => `<div class="flex items-center gap-2 mb-1"><span class="highlight-var text-xs">{{${v.name}}}</span><span class="text-xs text-muted-foreground">${v.desc}${v.default ? ' (默认: ' + v.default + ')' : ''}</span></div>`).join('') +
+      '</div>'
+    : '';
+  const tagsHtml = p.tags.map(t => `<span class="badge badge-outline">${t}</span>`).join(' ');
+
+  openPanel(p.title, `
+    <div class="space-y-4">
+      <div class="flex items-center gap-2">
+        <span class="badge badge-default">${p.status}</span>
+        ${tagsHtml}
+      </div>
+      <div>
+        <p class="text-xs text-muted-foreground mb-1">内容</p>
+        <pre class="text-sm whitespace-pre-wrap bg-muted p-3 rounded-md leading-relaxed">${p.content}</pre>
+      </div>
+      <div>
+        <p class="text-xs text-muted-foreground mb-1">补充说明</p>
+        <p class="text-sm">${p.description}</p>
+      </div>
+      ${varsHtml}
+      <div class="flex items-center gap-4 text-xs text-muted-foreground">
+        <span>版本 v${p.version}</span>
+        <span>最后修改 2026-02-28</span>
+      </div>
+      <div class="flex gap-2 pt-2">
+        <button class="btn btn-primary text-xs">编辑</button>
+        <button class="btn btn-outline text-xs">复制内容</button>
+        <button class="btn btn-ghost text-xs">查看历史</button>
+      </div>
+    </div>
+  `);
+}
+
+function showDocPreview(key) {
+  const d = docData[key];
+  openPanel(d.name, `
+    <div class="space-y-4">
+      <div class="flex items-center gap-2">
+        <span class="badge badge-secondary">${d.type}</span>
+        <span class="text-xs text-muted-foreground">上传于 2026-02-28</span>
+      </div>
+      <div>
+        <p class="text-xs text-muted-foreground mb-1">文档内容</p>
+        <pre class="text-sm whitespace-pre-wrap bg-muted p-3 rounded-md leading-relaxed">${d.content}</pre>
+      </div>
+      <button class="btn btn-destructive text-xs">删除文档</button>
+    </div>
+  `);
+}
+
+function showProjectSettings() {
+  showView('project-settings');
+}
+
+function toggleGroup(id) {
+  const el = document.getElementById(id + '-group');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function showView(view) {
+  document.getElementById('settings-view').classList.add('hidden');
+  document.getElementById('project-settings-view').classList.add('hidden');
+  document.getElementById('create-project-view').classList.add('hidden');
+
+  if (view === 'settings') document.getElementById('settings-view').classList.remove('hidden');
+  if (view === 'project-settings') document.getElementById('project-settings-view').classList.remove('hidden');
+  if (view === 'create-project') document.getElementById('create-project-view').classList.remove('hidden');
+}
+
+function switchSession(id) {
+  // Demo only - just visual feedback
+}
+
+// Auto-hide hint after 5s
+setTimeout(() => { document.getElementById('hint').style.opacity = '0'; document.getElementById('hint').style.transition = 'opacity 1s'; }, 5000);
+setTimeout(() => { document.getElementById('hint').style.display = 'none'; }, 6000);
+</script>
+
+</body>
+</html>
