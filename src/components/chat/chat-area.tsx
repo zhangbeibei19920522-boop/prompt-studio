@@ -5,7 +5,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { MessageBubble } from "./message-bubble"
 import { ChatInput } from "./chat-input"
 import { streamChat } from "@/lib/utils/sse-client"
-import type { Message, MessageReference } from "@/types/database"
+import type { Message, MessageReference, PreviewData, DiffData, PlanData } from "@/types/database"
 import type { StreamEvent } from "@/types/ai"
 
 interface ChatAreaProps {
@@ -14,6 +14,9 @@ interface ChatAreaProps {
   prompts: Array<{ id: string; title: string }>
   documents: Array<{ id: string; name: string }>
   onMessagesChange: () => void
+  onApplyPreview?: (data: PreviewData) => void
+  onApplyDiff?: (data: DiffData) => void
+  onEditInPanel?: (data: PreviewData | DiffData) => void
 }
 
 export function ChatArea({
@@ -22,6 +25,9 @@ export function ChatArea({
   prompts,
   documents,
   onMessagesChange,
+  onApplyPreview,
+  onApplyDiff,
+  onEditInPanel,
 }: ChatAreaProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
   const [streamingText, setStreamingText] = useState("")
@@ -76,7 +82,7 @@ export function ChatArea({
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 overflow-hidden">
         <div className="flex flex-col gap-4 p-4 max-w-3xl mx-auto">
           {messages.length === 0 && !isStreaming && (
             <div className="flex flex-1 items-center justify-center py-20">
@@ -91,7 +97,13 @@ export function ChatArea({
             </div>
           )}
           {messages.map((msg) => (
-            <MessageBubble key={msg.id} message={msg} />
+            <MessageBubble
+              key={msg.id}
+              message={msg}
+              onApplyPreview={onApplyPreview}
+              onApplyDiff={onApplyDiff}
+              onEditInPanel={onEditInPanel}
+            />
           ))}
           {streamingText && (
             <div className="flex w-full justify-start">

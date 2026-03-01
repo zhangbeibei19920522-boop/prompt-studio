@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.1.4 (2026-03-01)
+
+### Bug 修复
+- **右侧面板无法滚动 (回归)**: ScrollArea 在 flex 布局中添加 `overflow-hidden` 约束高度
+- **对话区域无法向上滚动**: 同上修复，聊天历史过长时可正常滚动
+- **Agent 返回原始 JSON**: 改进系统提示词，要求先用自然语言解释再附 JSON；增加裸 JSON 兜底解析
+- **Agent 无法识别引用内容**: 系统提示词明确区分 Prompt 引用和知识库文档引用的用途
+- **操作按钮无响应**: MessageBubble 未传递回调给 PreviewCard/DiffCard，补齐完整回调链路
+- **AI API 连接超时**: 新增 proxy-fetch 模块，支持 HTTP_PROXY 代理连接 OpenAI 等国外 API
+
+### 改进
+- Agent 助手消息保存时去除 JSON 块，只保留自然语言部分
+- 保存的消息内容更干净，不再显示原始 JSON
+
 ## v0.1.3 (2026-03-01)
 
 ### 新功能

@@ -21,7 +21,8 @@ import {
   sessionsApi,
   messagesApi,
 } from "@/lib/utils/api-client"
-import type { Project, Prompt, Document, Session, Message, PromptVersion } from "@/types/database"
+import type { Project, Prompt, Document, Session, Message, PromptVersion, PreviewData, DiffData } from "@/types/database"
+import { applyPrompt } from "@/lib/utils/sse-client"
 
 type RightPanelView =
   | { type: "prompt-preview"; id: string }
@@ -212,6 +213,83 @@ export default function MainPage() {
     refreshPrompts()
   }
 
+  // Agent action handlers
+  const handleApplyPreview = async (data: PreviewData) => {
+    if (!currentProjectId || !currentSessionId) return
+    try {
+      await applyPrompt({
+        action: 'create',
+        projectId: currentProjectId,
+        title: data.title,
+        content: data.content,
+        description: data.description ?? '',
+        tags: data.tags ?? [],
+        variables: data.variables ?? [],
+        changeNote: 'Agent 生成',
+        sessionId: currentSessionId,
+      })
+      refreshPrompts()
+    } catch (e) {
+      console.error('Apply preview failed:', e)
+    }
+  }
+
+  const handleApplyDiff = async (data: DiffData) => {
+    if (!currentSessionId) return
+    try {
+      await applyPrompt({
+        action: 'update',
+        promptId: data.promptId,
+        projectId: currentProjectId ?? '',
+        title: data.title,
+        content: data.newContent,
+        description: '',
+        tags: [],
+        variables: [],
+        changeNote: 'Agent 修改',
+        sessionId: currentSessionId,
+      })
+      refreshPrompts()
+    } catch (e) {
+      console.error('Apply diff failed:', e)
+    }
+  }
+
+  const handleEditInPanel = (data: PreviewData | DiffData) => {
+    const content = 'newContent' in data ? data.newContent : data.content
+    const description = 'description' in data ? (data.description ?? '') : ''
+
+    // Find existing prompt or create temp one for editing
+    if ('promptId' in data && data.promptId) {
+      const existing = prompts.find((p) => p.id === data.promptId)
+      if (existing) {
+        setCurrentPrompt({ ...existing, content, title: data.title })
+        setRightPanelView({ type: 'prompt-edit', id: existing.id })
+        return
+      }
+    }
+
+    // For new prompts, create one first then open editor
+    if (currentProjectId) {
+      promptsApi
+        .create(currentProjectId, {
+          title: data.title,
+          content,
+          description,
+          tags: 'tags' in data ? (data.tags ?? []) : [],
+          variables: 'variables' in data ? (data.variables ?? []) : [],
+          status: 'draft',
+        })
+        .then(async (created) => {
+          refreshPrompts()
+          const prompt = await promptsApi.get(created.id)
+          setCurrentPrompt(prompt)
+          setRightPanelView({ type: 'prompt-edit', id: created.id })
+        })
+        .catch(console.error)
+    }
+  }
+
   // Panel title
   const getRightPanelTitle = (): string => {
     if (!rightPanelView) return ""
@@ -337,6 +415,9 @@ export default function MainPage() {
             prompts={prompts.map((p) => ({ id: p.id, title: p.title }))}
             documents={documents.map((d) => ({ id: d.id, name: d.name }))}
             onMessagesChange={refreshMessages}
+            onApplyPreview={handleApplyPreview}
+            onApplyDiff={handleApplyDiff}
+            onEditInPanel={handleEditInPanel}
           />
         </main>
         <RightPanel

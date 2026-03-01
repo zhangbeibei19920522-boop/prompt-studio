@@ -72,7 +72,7 @@ export async function* handleAgentChat(
     console.log('[Agent] Stream complete. Chunks:', chunkCount, 'Total length:', accumulated.length)
 
     // 5. Parse structured blocks from accumulated response
-    const { jsonBlocks } = parseAgentOutput(accumulated)
+    const { jsonBlocks, plainText } = parseAgentOutput(accumulated)
     console.log('[Agent] Parsed JSON blocks:', jsonBlocks.length)
 
     for (const block of jsonBlocks) {
@@ -109,7 +109,7 @@ export async function* handleAgentChat(
     createMessage({
       sessionId,
       role: 'assistant',
-      content: accumulated,
+      content: plainText || accumulated,
       references: [],
       metadata,
     })

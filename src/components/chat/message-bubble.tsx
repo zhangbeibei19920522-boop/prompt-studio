@@ -9,9 +9,21 @@ import type { Message, PlanData, PreviewData, DiffData } from "@/types/database"
 
 interface MessageBubbleProps {
   message: Message
+  onApplyPreview?: (data: PreviewData) => void
+  onApplyDiff?: (data: DiffData) => void
+  onEditInPanel?: (data: PreviewData | DiffData) => void
+  onConfirmPlan?: (data: PlanData, selectedIndices: number[]) => void
+  onModifyPlan?: (feedback: string) => void
 }
 
-export function MessageBubble({ message }: MessageBubbleProps) {
+export function MessageBubble({
+  message,
+  onApplyPreview,
+  onApplyDiff,
+  onEditInPanel,
+  onConfirmPlan,
+  onModifyPlan,
+}: MessageBubbleProps) {
   const isUser = message.role === "user"
 
   return (
@@ -52,13 +64,27 @@ export function MessageBubble({ message }: MessageBubbleProps) {
 
         {/* Special cards */}
         {message.metadata?.type === "plan" && (
-          <PlanCard data={message.metadata.data as PlanData} />
+          <PlanCard
+            data={message.metadata.data as PlanData}
+            onConfirm={(indices) =>
+              onConfirmPlan?.(message.metadata!.data as PlanData, indices)
+            }
+            onModify={onModifyPlan}
+          />
         )}
         {message.metadata?.type === "preview" && (
-          <PreviewCard data={message.metadata.data as PreviewData} />
+          <PreviewCard
+            data={message.metadata.data as PreviewData}
+            onApply={() => onApplyPreview?.(message.metadata!.data as PreviewData)}
+            onEdit={() => onEditInPanel?.(message.metadata!.data as PreviewData)}
+          />
         )}
         {message.metadata?.type === "diff" && (
-          <DiffCard data={message.metadata.data as DiffData} />
+          <DiffCard
+            data={message.metadata.data as DiffData}
+            onApply={() => onApplyDiff?.(message.metadata!.data as DiffData)}
+            onEdit={() => onEditInPanel?.(message.metadata!.data as DiffData)}
+          />
         )}
 
         {/* Timestamp */}

@@ -1,4 +1,5 @@
 import type { AiProvider, ChatMessage, ChatOptions } from '@/types/ai'
+import { proxyFetch } from './proxy-fetch'
 
 /**
  * OpenAI-compatible provider.
@@ -17,7 +18,7 @@ export function createOpenAiCompatibleProvider(config: {
   ): Promise<string> {
     const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`
 
-    const res = await fetch(url, {
+    const res = await proxyFetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -58,7 +59,7 @@ export function createOpenAiCompatibleProvider(config: {
 
     let res: Response
     try {
-      res = await fetch(url, {
+      res = await proxyFetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -71,7 +72,7 @@ export function createOpenAiCompatibleProvider(config: {
           max_tokens: options?.maxTokens ?? 4096,
           stream: true,
         }),
-      })
+      }) as Response
     } catch (fetchError) {
       console.error('[OpenAI Stream] fetch() threw:', {
         error: fetchError instanceof Error ? fetchError.message : fetchError,

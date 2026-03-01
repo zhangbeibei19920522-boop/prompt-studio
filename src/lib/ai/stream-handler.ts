@@ -66,5 +66,22 @@ export function parseAgentOutput(text: string): {
     }
   }
 
+  // Fallback: if no ```json blocks found, try to find bare JSON objects with "type" field
+  if (jsonBlocks.length === 0) {
+    const bareJsonRegex = /\{[\s\n]*"type"\s*:\s*"(?:plan|preview|diff)"[\s\S]*?\}(?:\s*\})?/g
+    let bareMatch: RegExpExecArray | null
+    while ((bareMatch = bareJsonRegex.exec(text)) !== null) {
+      try {
+        const parsed = JSON.parse(bareMatch[0])
+        if (parsed.type === 'plan' || parsed.type === 'preview' || parsed.type === 'diff') {
+          jsonBlocks.push(parsed)
+          plainText = plainText.replace(bareMatch[0], '').trim()
+        }
+      } catch {
+        // Not valid JSON, skip
+      }
+    }
+  }
+
   return { jsonBlocks, plainText }
 }

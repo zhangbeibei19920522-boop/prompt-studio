@@ -1,4 +1,5 @@
 import type { AiProvider, ChatMessage, ChatOptions } from '@/types/ai'
+import { proxyFetch } from './proxy-fetch'
 
 /**
  * Anthropic Claude provider.
@@ -36,7 +37,7 @@ export function createAnthropicProvider(config: {
     const { system, messages: converted } = convertMessages(messages)
     const url = `${baseUrl.replace(/\/+$/, '')}/v1/messages`
 
-    const res = await fetch(url, {
+    const res = await proxyFetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -80,7 +81,7 @@ export function createAnthropicProvider(config: {
 
     let res: Response
     try {
-      res = await fetch(url, {
+      res = await proxyFetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -95,7 +96,7 @@ export function createAnthropicProvider(config: {
           temperature: options?.temperature ?? 0.7,
           stream: true,
         }),
-      })
+      }) as Response
     } catch (fetchError) {
       console.error('[Anthropic Stream] fetch() threw:', {
         error: fetchError instanceof Error ? fetchError.message : fetchError,
