@@ -24,6 +24,8 @@ export async function* handleAgentChat(
   references: MessageReference[]
 ): AsyncGenerator<StreamEvent> {
   try {
+    console.log('[Agent] === Chat started ===', { sessionId, contentLength: content.length, refCount: references.length })
+
     // 1. Save user message
     createMessage({
       sessionId,
@@ -32,25 +34,46 @@ export async function* handleAgentChat(
       references,
       metadata: null,
     })
+    console.log('[Agent] User message saved')
 
     // 2. Prepare AI provider
     const settings = getSettings()
+    console.log('[Agent] Settings loaded:', {
+      provider: settings.provider,
+      model: settings.model,
+      baseUrl: settings.baseUrl || '(empty)',
+      hasApiKey: !!settings.apiKey,
+    })
+
     const provider = createAiProvider(settings)
+    console.log('[Agent] Provider created')
 
     // 3. Collect context and build messages
     const context = collectAgentContext(sessionId, content, references)
     const messages = buildPlanMessages(context)
+    console.log('[Agent] Messages built:', {
+      messageCount: messages.length,
+      systemLength: messages.find(m => m.role === 'system')?.content.length ?? 0,
+      historyCount: context.sessionHistory.length,
+      refPrompts: context.referencedPrompts.length,
+      refDocs: context.referencedDocuments.length,
+    })
 
     // 4. Stream response and accumulate text
     let accumulated = ''
+    let chunkCount = 0
 
+    console.log('[Agent] Starting stream...')
     for await (const chunk of provider.chatStream(messages)) {
       accumulated += chunk
+      chunkCount++
       yield { type: 'text', content: chunk }
     }
+    console.log('[Agent] Stream complete. Chunks:', chunkCount, 'Total length:', accumulated.length)
 
     // 5. Parse structured blocks from accumulated response
     const { jsonBlocks } = parseAgentOutput(accumulated)
+    console.log('[Agent] Parsed JSON blocks:', jsonBlocks.length)
 
     for (const block of jsonBlocks) {
       if (block.type === 'plan') {
@@ -90,8 +113,13 @@ export async function* handleAgentChat(
       references: [],
       metadata,
     })
+    console.log('[Agent] === Chat complete ===')
   } catch (error) {
     const message = error instanceof Error ? error.message : '未知错误'
+    console.error('[Agent] === Chat FAILED ===', {
+      error: message,
+      stack: error instanceof Error ? error.stack : undefined,
+    })
     yield { type: 'error', message }
   }
 }

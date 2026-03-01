@@ -22,11 +22,21 @@ export function createAiProvider(config: AiProviderConfig): AiProvider {
   const provider = config.provider.toLowerCase()
   const baseUrl = config.baseUrl || PROVIDER_DEFAULTS[provider] || config.baseUrl
 
+  console.log('[AI Provider] Creating provider:', {
+    provider,
+    model: config.model,
+    baseUrl: baseUrl || '(default)',
+    hasApiKey: !!config.apiKey,
+    apiKeyPrefix: config.apiKey ? config.apiKey.slice(0, 8) + '...' : '(none)',
+  })
+
   if (!config.apiKey) {
+    console.error('[AI Provider] API Key 未配置')
     throw new Error('API Key 未配置')
   }
 
   if (provider === 'claude') {
+    console.log('[AI Provider] Using Anthropic provider')
     return createAnthropicProvider({
       apiKey: config.apiKey,
       model: config.model,
@@ -34,10 +44,12 @@ export function createAiProvider(config: AiProviderConfig): AiProvider {
     })
   }
 
+  const finalBaseUrl = baseUrl || 'https://api.openai.com/v1'
+  console.log('[AI Provider] Using OpenAI-compatible provider, baseUrl:', finalBaseUrl)
   return createOpenAiCompatibleProvider({
     apiKey: config.apiKey,
     model: config.model,
-    baseUrl: baseUrl || 'https://api.openai.com/v1',
+    baseUrl: finalBaseUrl,
   })
 }
 

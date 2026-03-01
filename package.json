@@ -1,6 +1,6 @@
 {
   "name": "prompt-manager",
-  "version": "0.1.0",
+  "version": "0.1.3",
   "description": "Agent 驱动的对话式 Prompt 管理平台",
   "keywords": ["prompt", "ai", "agent", "management", "llm"],
   "license": "MIT",
@@ -45,7 +45,7 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-markdown": "^10.1.0",
-    "remark-gfm": "^4.1.0",
+    "remark-gfm": "^4.0.0",
     "tailwind-merge": "^3.5.0"
   },
   "devDependencies": {
@@ -63,3 +63,5 @@
     "typescript": "^5"
   }
 }
+
+

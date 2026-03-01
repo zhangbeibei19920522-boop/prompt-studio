@@ -85,7 +85,7 @@ export function ChatArea({
                   开始新对话
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  使用 @ 引用 Prompt 或知识库文档，描述您的需求
+                  点击输入框左侧按钮引用 Prompt 或知识库文档，描述您的需求
                 </p>
               </div>
             </div>

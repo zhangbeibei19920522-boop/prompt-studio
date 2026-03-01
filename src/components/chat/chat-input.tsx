@@ -1,11 +1,11 @@
 "use client"
 
 import { useState, useRef, useCallback } from "react"
-import { Send } from "lucide-react"
+import { Send, FileText, FolderOpen } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { ReferenceTag } from "./reference-tag"
-import { MentionPopover } from "./mention-popover"
+import { ReferenceSelector } from "./reference-selector"
 import type { MessageReference } from "@/types/database"
 
 interface ChatInputProps {
@@ -23,19 +23,12 @@ export function ChatInput({
 }: ChatInputProps) {
   const [content, setContent] = useState("")
   const [references, setReferences] = useState<MessageReference[]>([])
-  const [showMention, setShowMention] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "@" && !e.shiftKey) {
-      setShowMention(true)
-    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
       handleSend()
-    }
-    if (e.key === "Escape") {
-      setShowMention(false)
     }
   }
 
@@ -45,27 +38,32 @@ export function ChatInput({
     onSend(trimmed, references)
     setContent("")
     setReferences([])
-    setShowMention(false)
   }, [content, references, onSend])
 
-  const handleMentionSelect = (ref: MessageReference) => {
-    const exists = references.some((r) => r.id === ref.id)
-    if (!exists) {
-      setReferences((prev) => [...prev, ref])
-    }
-    setShowMention(false)
-    // Remove the @ character that triggered the popover
-    setContent((prev) => {
-      const lastAt = prev.lastIndexOf("@")
-      if (lastAt >= 0) return prev.slice(0, lastAt)
-      return prev
+  const handleToggleReference = (
+    type: "prompt" | "document",
+    id: string,
+    label: string
+  ) => {
+    setReferences((prev) => {
+      const exists = prev.some((r) => r.id === id)
+      if (exists) {
+        return prev.filter((r) => r.id !== id)
+      }
+      return [...prev, { type, id, title: label }]
     })
-    textareaRef.current?.focus()
   }
 
   const removeReference = (id: string) => {
     setReferences((prev) => prev.filter((r) => r.id !== id))
   }
+
+  const selectedPromptIds = references
+    .filter((r) => r.type === "prompt")
+    .map((r) => r.id)
+  const selectedDocIds = references
+    .filter((r) => r.type === "document")
+    .map((r) => r.id)
 
   return (
     <div className="border-t bg-white p-4">
@@ -84,27 +82,30 @@ export function ChatInput({
       )}
 
       {/* Input area */}
-      <div className="relative flex items-end gap-2">
-        {showMention && (
-          <MentionPopover
-            prompts={prompts}
-            documents={documents}
-            onSelect={handleMentionSelect}
-            onClose={() => setShowMention(false)}
-          />
-        )}
+      <div className="flex items-end gap-1">
+        <ReferenceSelector
+          type="prompt"
+          items={prompts.map((p) => ({ id: p.id, label: p.title }))}
+          selectedIds={selectedPromptIds}
+          onToggle={(id, label) => handleToggleReference("prompt", id, label)}
+          icon={<FileText className="size-4" />}
+          label="Prompt"
+        />
+        <ReferenceSelector
+          type="document"
+          items={documents.map((d) => ({ id: d.id, label: d.name }))}
+          selectedIds={selectedDocIds}
+          onToggle={(id, label) => handleToggleReference("document", id, label)}
+          icon={<FolderOpen className="size-4" />}
+          label="知识库"
+        />
 
         <Textarea
           ref={textareaRef}
           value={content}
-          onChange={(e) => {
-            setContent(e.target.value)
-            if (e.target.value.endsWith("@")) {
-              setShowMention(true)
-            }
-          }}
+          onChange={(e) => setContent(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="输入需求描述，使用 @ 引用 Prompt 或知识库..."
+          placeholder="输入需求描述，点击左侧按钮引用 Prompt 或知识库..."
           className="min-h-[44px] max-h-[160px] resize-none text-sm"
           rows={1}
           disabled={disabled}
@@ -121,7 +122,7 @@ export function ChatInput({
       </div>
 
       <p className="text-[10px] text-muted-foreground mt-1">
-        Enter 发送，Shift+Enter 换行，@ 引用
+        Enter 发送，Shift+Enter 换行
       </p>
     </div>
   )

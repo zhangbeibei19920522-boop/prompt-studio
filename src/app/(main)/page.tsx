@@ -13,6 +13,7 @@ import { PromptEditor } from "@/components/prompt/prompt-editor"
 import { VersionHistory } from "@/components/prompt/version-history"
 import { DocumentPreview } from "@/components/knowledge/document-preview"
 import { UploadDialog } from "@/components/knowledge/upload-dialog"
+import { BatchUploadDialog } from "@/components/prompt/batch-upload-dialog"
 import {
   projectsApi,
   promptsApi,
@@ -49,6 +50,7 @@ export default function MainPage() {
   // Dialogs
   const [createProjectOpen, setCreateProjectOpen] = useState(false)
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
+  const [batchPromptUploadOpen, setBatchPromptUploadOpen] = useState(false)
 
   // Current items for panel
   const [currentPrompt, setCurrentPrompt] = useState<Prompt | null>(null)
@@ -169,6 +171,47 @@ export default function MainPage() {
     setUploadDialogOpen(false)
   }
 
+  const handleCreatePrompt = async () => {
+    if (!currentProjectId) return
+    try {
+      const created = await promptsApi.create(currentProjectId, {
+        title: "新建 Prompt",
+        content: "",
+        description: "",
+        tags: [],
+        variables: [],
+        status: "draft",
+      })
+      refreshPrompts()
+      const prompt = await promptsApi.get(created.id)
+      setCurrentPrompt(prompt)
+      setRightPanelView({ type: "prompt-edit", id: created.id })
+    } catch (e) {
+      console.error("Create prompt failed:", e)
+    }
+  }
+
+  const handleBatchPromptUpload = async (
+    items: Array<{ title: string; content: string }>
+  ) => {
+    if (!currentProjectId) return
+    for (const item of items) {
+      try {
+        await promptsApi.create(currentProjectId, {
+          title: item.title,
+          content: item.content,
+          description: "",
+          tags: [],
+          variables: [],
+          status: "draft",
+        })
+      } catch (e) {
+        console.error("Batch create prompt failed:", e)
+      }
+    }
+    refreshPrompts()
+  }
+
   // Panel title
   const getRightPanelTitle = (): string => {
     if (!rightPanelView) return ""
@@ -280,8 +323,11 @@ export default function MainPage() {
           onNewSession={handleNewSession}
           prompts={prompts.map((p) => ({ id: p.id, title: p.title, status: p.status }))}
           onPromptClick={handlePromptClick}
+          onCreatePrompt={handleCreatePrompt}
+          onBatchUploadPrompt={() => setBatchPromptUploadOpen(true)}
           documents={documents.map((d) => ({ id: d.id, name: d.name, type: d.type }))}
           onDocumentClick={handleDocumentClick}
+          onUploadDocument={() => setUploadDialogOpen(true)}
           onSettingsClick={() => setRightPanelView({ type: "project-settings" })}
         />
         <main className="flex flex-1 overflow-hidden">
@@ -311,6 +357,11 @@ export default function MainPage() {
         open={uploadDialogOpen}
         onOpenChange={setUploadDialogOpen}
         onUpload={handleUpload}
+      />
+      <BatchUploadDialog
+        open={batchPromptUploadOpen}
+        onOpenChange={setBatchPromptUploadOpen}
+        onUpload={handleBatchPromptUpload}
       />
     </div>
   )

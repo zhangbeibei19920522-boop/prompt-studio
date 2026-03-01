@@ -23,6 +23,12 @@ export async function POST(request: NextRequest) {
 
     const { sessionId, content, references = [] } = body
 
+    console.log('[POST /api/ai/chat] Received:', {
+      sessionId,
+      contentLength: content?.length ?? 0,
+      refCount: references.length,
+    })
+
     if (!sessionId || typeof sessionId !== 'string') {
       return NextResponse.json(
         { success: false, data: null, error: 'sessionId is required' },
@@ -40,6 +46,8 @@ export async function POST(request: NextRequest) {
     const generator = handleAgentChat(sessionId, content, references)
     const stream = createSSEStream(generator)
 
+    console.log('[POST /api/ai/chat] SSE stream created, returning response')
+
     return new Response(stream, {
       headers: {
         'Content-Type': 'text/event-stream',
@@ -48,7 +56,7 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error('[POST /api/ai/chat]', error)
+    console.error('[POST /api/ai/chat] Top-level error:', error)
     const message = error instanceof Error ? error.message : 'Internal server error'
     return NextResponse.json(
       { success: false, data: null, error: message },

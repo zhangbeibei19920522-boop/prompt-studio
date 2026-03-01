@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, KeyboardEvent } from "react"
+import { useState, useRef, KeyboardEvent } from "react"
+import { Upload } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -59,6 +60,7 @@ function buildInitialState(prompt: Prompt | null): FormState {
 
 export function PromptEditor({ prompt, onSave, onCancel }: PromptEditorProps) {
   const [form, setForm] = useState<FormState>(() => buildInitialState(prompt))
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   function updateField<K extends keyof FormState>(
     field: K,
@@ -118,6 +120,24 @@ export function PromptEditor({ prompt, onSave, onCancel }: PromptEditorProps) {
 
   const isValid = form.title.trim().length > 0 && form.content.trim().length > 0
 
+  function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>): void {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const text = reader.result as string
+      const nameWithoutExt = file.name.replace(/\.(txt|md)$/i, "")
+      setForm((prev) => ({
+        ...prev,
+        content: text,
+        title: prev.title.trim() === "" ? nameWithoutExt : prev.title,
+      }))
+    }
+    reader.readAsText(file)
+    // reset so same file can be re-selected
+    e.target.value = ""
+  }
+
   return (
     <div className="flex flex-col h-full overflow-auto p-6 gap-6">
       {/* Header */}
@@ -157,9 +177,27 @@ export function PromptEditor({ prompt, onSave, onCancel }: PromptEditorProps) {
 
       {/* Content */}
       <div className="flex flex-col gap-2">
-        <label className="text-sm font-medium" htmlFor="editor-content">
-          内容 <span className="text-destructive">*</span>
-        </label>
+        <div className="flex items-center justify-between">
+          <label className="text-sm font-medium" htmlFor="editor-content">
+            内容 <span className="text-destructive">*</span>
+          </label>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs gap-1"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <Upload className="size-3" />
+            从文件导入
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".txt,.md"
+            className="hidden"
+            onChange={handleFileUpload}
+          />
+        </div>
         <Textarea
           id="editor-content"
           placeholder="输入 Prompt 内容，使用 {{变量名}} 定义变量"

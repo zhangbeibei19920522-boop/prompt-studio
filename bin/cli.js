@@ -36,7 +36,7 @@ function ensureDataDir() {
 function printBanner(port) {
   console.log("");
   console.log("  ╔══════════════════════════════════════╗");
-  console.log("  ║        Prompt Manager v0.1.0         ║");
+  console.log("  ║        Prompt Manager v0.1.3         ║");
   console.log("  ╠══════════════════════════════════════╣");
   console.log(`  ║  http://localhost:${port}               ║`);
   console.log("  ╚══════════════════════════════════════╝");

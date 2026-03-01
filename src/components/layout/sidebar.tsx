@@ -5,6 +5,7 @@ import { formatDistanceToNow } from "date-fns"
 import { zhCN } from "date-fns/locale"
 import {
   Plus,
+  Upload,
   MessageSquare,
   FileText,
   Settings,
@@ -26,8 +27,11 @@ interface SidebarProps {
   onNewSession: () => void
   prompts: Array<{ id: string; title: string; status: string }>
   onPromptClick: (id: string) => void
+  onCreatePrompt?: () => void
+  onBatchUploadPrompt?: () => void
   documents: Array<{ id: string; name: string; type: string }>
   onDocumentClick: (id: string) => void
+  onUploadDocument?: () => void
   onSettingsClick: () => void
 }
 
@@ -77,27 +81,41 @@ function CollapsibleGroup({
   label,
   count,
   children,
+  actions,
 }: {
   label: React.ReactNode
   count: number
   children: React.ReactNode
+  actions?: Array<{ icon: React.ReactNode; title: string; onClick: () => void }>
 }) {
   const [open, setOpen] = React.useState(true)
 
   return (
     <div>
-      <button
-        onClick={() => setOpen((prev) => !prev)}
-        className="flex w-full items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-      >
-        {open ? (
-          <ChevronDown className="size-3.5 shrink-0" />
-        ) : (
-          <ChevronRight className="size-3.5 shrink-0" />
-        )}
-        <span className="flex-1 text-left">{label}</span>
-        <span className="text-xs tabular-nums">({count})</span>
-      </button>
+      <div className="flex w-full items-center gap-1.5 px-3 py-1.5">
+        <button
+          onClick={() => setOpen((prev) => !prev)}
+          className="flex flex-1 items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+        >
+          {open ? (
+            <ChevronDown className="size-3.5 shrink-0" />
+          ) : (
+            <ChevronRight className="size-3.5 shrink-0" />
+          )}
+          <span className="flex-1 text-left">{label}</span>
+          <span className="text-xs tabular-nums">({count})</span>
+        </button>
+        {actions?.map((action, i) => (
+          <button
+            key={i}
+            onClick={(e) => { e.stopPropagation(); action.onClick() }}
+            className="p-0.5 text-muted-foreground hover:text-foreground transition-colors"
+            title={action.title}
+          >
+            {action.icon}
+          </button>
+        ))}
+      </div>
       {open && <div className="pb-1">{children}</div>}
     </div>
   )
@@ -110,8 +128,11 @@ export function Sidebar({
   onNewSession,
   prompts,
   onPromptClick,
+  onCreatePrompt,
+  onBatchUploadPrompt,
   documents,
   onDocumentClick,
+  onUploadDocument,
   onSettingsClick,
 }: SidebarProps) {
   return (
@@ -179,6 +200,10 @@ export function Sidebar({
                 </span>
               }
               count={prompts.length}
+              actions={[
+                ...(onCreatePrompt ? [{ icon: <Plus className="size-3" />, title: "新建 Prompt", onClick: onCreatePrompt }] : []),
+                ...(onBatchUploadPrompt ? [{ icon: <Upload className="size-3" />, title: "批量导入 Prompt", onClick: onBatchUploadPrompt }] : []),
+              ]}
             >
               {prompts.length === 0 && (
                 <p className="px-6 py-1 text-xs text-muted-foreground">暂无 Prompt</p>
@@ -209,6 +234,7 @@ export function Sidebar({
                 </span>
               }
               count={documents.length}
+              actions={onUploadDocument ? [{ icon: <Plus className="size-3" />, title: "上传文档", onClick: onUploadDocument }] : []}
             >
               {documents.length === 0 && (
                 <p className="px-6 py-1 text-xs text-muted-foreground">暂无文档</p>

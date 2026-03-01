@@ -18,12 +18,19 @@ export function createSSEStream(
   return new ReadableStream({
     async start(controller) {
       try {
+        let eventCount = 0
         for await (const event of generator) {
+          eventCount++
           controller.enqueue(encoder.encode(encodeSSE(event)))
         }
+        console.log('[SSE Stream] Generator finished. Events sent:', eventCount)
         controller.enqueue(encoder.encode(encodeSSE({ type: 'done' })))
       } catch (error) {
         const message = error instanceof Error ? error.message : '未知错误'
+        console.error('[SSE Stream] Generator threw error:', {
+          message,
+          stack: error instanceof Error ? error.stack : undefined,
+        })
         controller.enqueue(
           encoder.encode(encodeSSE({ type: 'error', message }))
         )
