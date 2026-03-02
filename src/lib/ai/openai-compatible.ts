@@ -2,6 +2,18 @@ import type { AiProvider, ChatMessage, ChatOptions } from '@/types/ai'
 import { proxyFetch } from './proxy-fetch'
 
 /**
+ * Determine which token limit parameter to use.
+ * Newer OpenAI models (gpt-4o, gpt-5, o1, o3, etc.) require max_completion_tokens.
+ * Older/third-party models use max_tokens.
+ */
+function buildTokenLimit(model: string, maxTokens: number): Record<string, number> {
+  const needsCompletionTokens = /^(gpt-4o|gpt-5|o1|o3|o4)/i.test(model)
+  return needsCompletionTokens
+    ? { max_completion_tokens: maxTokens }
+    : { max_tokens: maxTokens }
+}
+
+/**
  * OpenAI-compatible provider.
  * Works with: OpenAI, Kimi, GLM, DeepSeek, Qwen, and any OpenAI-compatible API.
  */
@@ -28,7 +40,7 @@ export function createOpenAiCompatibleProvider(config: {
         model,
         messages,
         temperature: options?.temperature ?? 0.7,
-        max_tokens: options?.maxTokens ?? 4096,
+        ...buildTokenLimit(model, options?.maxTokens ?? 4096),
         stream: false,
       }),
     })
@@ -54,7 +66,7 @@ export function createOpenAiCompatibleProvider(config: {
       messageCount: messages.length,
       firstMsgRole: messages[0]?.role,
       temperature: options?.temperature ?? 0.7,
-      max_tokens: options?.maxTokens ?? 4096,
+      ...buildTokenLimit(model, options?.maxTokens ?? 4096),
     })
 
     let res: Response
@@ -69,7 +81,7 @@ export function createOpenAiCompatibleProvider(config: {
           model,
           messages,
           temperature: options?.temperature ?? 0.7,
-          max_tokens: options?.maxTokens ?? 4096,
+          ...buildTokenLimit(model, options?.maxTokens ?? 4096),
           stream: true,
         }),
       }) as Response
