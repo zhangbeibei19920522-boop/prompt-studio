@@ -5,6 +5,7 @@
 ### Bug 修复
 - **右侧面板文本不换行**: Diff 卡片、预览卡片、Prompt 预览面板均添加 `break-words whitespace-pre-wrap`，长文本自动换行不再溢出；按钮区域添加 `flex-wrap` 防止按钮被截断
 - **右侧面板内容溢出**: 面板内容容器添加 `min-w-0 overflow-hidden`，阻止子元素撑开父容器
+- **GPT-5/o 系列模型 400 错误**: 新模型不支持 `max_tokens` 参数，自动检测模型名称切换为 `max_completion_tokens`
 
 ### 新功能
 - **Prompt 删除**: Prompt 预览面板新增"删除"按钮，带确认弹窗，删除后自动关闭面板并刷新列表
@@ -20,6 +21,7 @@
 - `src/components/layout/right-panel.tsx` — 内容容器 min-w-0 overflow-hidden
 - `src/components/layout/sidebar.tsx` — Prompt/知识库列表项添加 hover 删除按钮
 - `src/lib/ai/agent-prompt.ts` — 系统提示词四阶段重构
+- `src/lib/ai/openai-compatible.ts` — 兼容 max_completion_tokens 参数
 - `src/app/(main)/page.tsx` — 新增 handleDeletePrompt/handleDeleteDocument + 串联
 
 ## v0.1.5 (2026-03-02)
