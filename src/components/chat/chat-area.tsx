@@ -1,7 +1,9 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
+import { MessageSquarePlus } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Button } from "@/components/ui/button"
 import { MessageBubble } from "./message-bubble"
 import { ChatInput } from "./chat-input"
 import { streamChat } from "@/lib/utils/sse-client"
@@ -17,6 +19,8 @@ interface ChatAreaProps {
   onApplyPreview?: (data: PreviewData) => void
   onApplyDiff?: (data: DiffData) => void
   onEditInPanel?: (data: PreviewData | DiffData) => void
+  onViewHistory?: (promptId: string) => void
+  onNewSession?: () => void
 }
 
 export function ChatArea({
@@ -28,6 +32,8 @@ export function ChatArea({
   onApplyPreview,
   onApplyDiff,
   onEditInPanel,
+  onViewHistory,
+  onNewSession,
 }: ChatAreaProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
   const [streamingText, setStreamingText] = useState("")
@@ -86,13 +92,23 @@ export function ChatArea({
         <div className="flex flex-col gap-4 p-4 max-w-3xl mx-auto">
           {messages.length === 0 && !isStreaming && (
             <div className="flex flex-1 items-center justify-center py-20">
-              <div className="text-center space-y-2">
+              <div className="text-center space-y-4">
+                <MessageSquarePlus className="size-12 mx-auto text-muted-foreground/50" />
                 <p className="text-lg font-medium text-muted-foreground">
                   开始新对话
                 </p>
                 <p className="text-sm text-muted-foreground">
                   点击输入框左侧按钮引用 Prompt 或知识库文档，描述您的需求
                 </p>
+                {!sessionId && onNewSession && (
+                  <Button
+                    onClick={onNewSession}
+                    className="mt-2"
+                  >
+                    <MessageSquarePlus className="size-4 mr-2" />
+                    开始对话
+                  </Button>
+                )}
               </div>
             </div>
           )}
@@ -103,6 +119,7 @@ export function ChatArea({
               onApplyPreview={onApplyPreview}
               onApplyDiff={onApplyDiff}
               onEditInPanel={onEditInPanel}
+              onViewHistory={onViewHistory}
             />
           ))}
           {streamingText && (

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createPrompt, updatePrompt } from '@/lib/db/repositories/prompts'
+import { createPrompt, updatePrompt, findPromptById, findPromptByTitle } from '@/lib/db/repositories/prompts'
 import type { PromptVariable } from '@/types/database'
 
 interface ApplyBody {
@@ -100,9 +100,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Resolve promptId: try by ID first, then fallback to title match
+    let resolvedId = promptId
+    const byId = findPromptById(promptId)
+    if (!byId) {
+      const byTitle = findPromptByTitle(promptId) ?? findPromptByTitle(title!)
+      if (byTitle) {
+        resolvedId = byTitle.id
+      }
+    }
+
     const updated = updatePrompt(
-      promptId,
-      { title, content, description, tags, variables, ...(changeNote ? {} : {}) },
+      resolvedId,
+      { title, content, description, tags, variables },
       sessionId
     )
 

@@ -46,6 +46,12 @@ export function findPromptById(id: string): Prompt | null {
   return row ? mapRowToPrompt(row) : null
 }
 
+export function findPromptByTitle(title: string): Prompt | null {
+  const db = getDb()
+  const row = db.prepare('SELECT * FROM prompts WHERE title = ? LIMIT 1').get(title) as PromptRow | undefined
+  return row ? mapRowToPrompt(row) : null
+}
+
 export function createPrompt(
   data: Omit<Prompt, 'id' | 'version' | 'createdAt' | 'updatedAt'>
 ): Prompt {

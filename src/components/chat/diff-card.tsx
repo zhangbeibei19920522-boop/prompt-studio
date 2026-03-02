@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Pencil } from "lucide-react"
+import { Pencil, Copy, Check, History } from "lucide-react"
 import { diffLines } from "diff"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -12,13 +12,25 @@ interface DiffCardProps {
   onApply?: () => void
   onEdit?: () => void
   onReject?: (reason: string) => void
+  onViewHistory?: () => void
 }
 
-export function DiffCard({ data, onApply, onEdit, onReject }: DiffCardProps) {
+export function DiffCard({ data, onApply, onEdit, onReject, onViewHistory }: DiffCardProps) {
   const [showReject, setShowReject] = useState(false)
   const [rejectReason, setRejectReason] = useState("")
+  const [copied, setCopied] = useState(false)
 
   const changes = diffLines(data.oldContent, data.newContent)
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(data.newContent)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // silently handle clipboard errors
+    }
+  }
 
   return (
     <div className="rounded-lg border bg-card p-4 space-y-3">
@@ -85,13 +97,23 @@ export function DiffCard({ data, onApply, onEdit, onReject }: DiffCardProps) {
       )}
 
       {!showReject && (
-        <div className="flex gap-2 pt-1">
+        <div className="flex gap-2 pt-1 flex-wrap">
           <Button size="sm" onClick={onApply}>
             应用修改
           </Button>
           <Button size="sm" variant="outline" onClick={onEdit}>
             在右侧编辑
           </Button>
+          <Button size="sm" variant="outline" onClick={handleCopy}>
+            {copied ? <Check className="size-3 mr-1" /> : <Copy className="size-3 mr-1" />}
+            {copied ? "已复制" : "复制内容"}
+          </Button>
+          {onViewHistory && (
+            <Button size="sm" variant="outline" onClick={onViewHistory}>
+              <History className="size-3 mr-1" />
+              版本记录
+            </Button>
+          )}
           <Button
             size="sm"
             variant="ghost"

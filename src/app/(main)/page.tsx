@@ -237,9 +237,21 @@ export default function MainPage() {
   const handleApplyDiff = async (data: DiffData) => {
     if (!currentSessionId) return
     try {
+      // Try to find prompt by ID first; if not found, fallback to find by title
+      let resolvedPromptId = data.promptId
+      const directMatch = prompts.find((p) => p.id === data.promptId)
+      if (!directMatch) {
+        const titleMatch = prompts.find(
+          (p) => p.title === data.promptId || p.title === data.title
+        )
+        if (titleMatch) {
+          resolvedPromptId = titleMatch.id
+        }
+      }
+
       await applyPrompt({
         action: 'update',
-        promptId: data.promptId,
+        promptId: resolvedPromptId,
         projectId: currentProjectId ?? '',
         title: data.title,
         content: data.newContent,
@@ -418,6 +430,13 @@ export default function MainPage() {
             onApplyPreview={handleApplyPreview}
             onApplyDiff={handleApplyDiff}
             onEditInPanel={handleEditInPanel}
+            onViewHistory={(promptId) => {
+              // Resolve promptId — might be actual ID or title
+              const byId = prompts.find((p) => p.id === promptId)
+              const resolved = byId ?? prompts.find((p) => p.title === promptId)
+              if (resolved) handleViewHistory(resolved.id)
+            }}
+            onNewSession={handleNewSession}
           />
         </main>
         <RightPanel

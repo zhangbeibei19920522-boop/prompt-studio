@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Sparkles, ChevronDown, ChevronUp } from "lucide-react"
+import { Sparkles, ChevronDown, ChevronUp, Copy, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import type { PreviewData } from "@/types/database"
@@ -17,10 +17,21 @@ export function PreviewCard({ data, onApply, onEdit, onReject }: PreviewCardProp
   const [expanded, setExpanded] = useState(true)
   const [showReject, setShowReject] = useState(false)
   const [rejectReason, setRejectReason] = useState("")
+  const [copied, setCopied] = useState(false)
 
   const lines = data.content.split("\n")
   const isLong = lines.length > 20
   const displayContent = expanded ? data.content : lines.slice(0, 20).join("\n") + "\n..."
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(data.content)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // silently handle clipboard errors
+    }
+  }
 
   return (
     <div className="rounded-lg border bg-card p-4 space-y-3">
@@ -103,6 +114,10 @@ export function PreviewCard({ data, onApply, onEdit, onReject }: PreviewCardProp
           </Button>
           <Button size="sm" variant="outline" onClick={onEdit}>
             在右侧编辑
+          </Button>
+          <Button size="sm" variant="outline" onClick={handleCopy}>
+            {copied ? <Check className="size-3 mr-1" /> : <Copy className="size-3 mr-1" />}
+            {copied ? "已复制" : "复制内容"}
           </Button>
           <Button
             size="sm"

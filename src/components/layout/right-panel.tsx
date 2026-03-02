@@ -19,7 +19,7 @@ function RightPanel({ open, onClose, title, children }: RightPanelProps) {
     <div
       className={cn(
         "flex flex-col border-l bg-white transition-all duration-300 ease-in-out overflow-hidden shrink-0",
-        open ? "w-[400px] opacity-100" : "w-0 opacity-0"
+        open ? "w-[560px] opacity-100" : "w-0 opacity-0"
       )}
     >
       {/* Top bar */}

@@ -14,6 +14,7 @@ interface MessageBubbleProps {
   onEditInPanel?: (data: PreviewData | DiffData) => void
   onConfirmPlan?: (data: PlanData, selectedIndices: number[]) => void
   onModifyPlan?: (feedback: string) => void
+  onViewHistory?: (promptId: string) => void
 }
 
 export function MessageBubble({
@@ -23,6 +24,7 @@ export function MessageBubble({
   onEditInPanel,
   onConfirmPlan,
   onModifyPlan,
+  onViewHistory,
 }: MessageBubbleProps) {
   const isUser = message.role === "user"
 
@@ -84,6 +86,10 @@ export function MessageBubble({
             data={message.metadata.data as DiffData}
             onApply={() => onApplyDiff?.(message.metadata!.data as DiffData)}
             onEdit={() => onEditInPanel?.(message.metadata!.data as DiffData)}
+            onViewHistory={() => {
+              const diffData = message.metadata!.data as DiffData
+              if (diffData.promptId) onViewHistory?.(diffData.promptId)
+            }}
           />
         )}
 

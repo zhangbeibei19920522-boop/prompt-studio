@@ -52,20 +52,35 @@ export function collectAgentContext(
     }
   }
 
-  // 3. Resolve references
-  const referencedPrompts = references
+  // 3. Session history (last N messages)
+  const allMessages = findMessagesBySession(sessionId)
+  const sessionHistory = allMessages.slice(-MAX_HISTORY_MESSAGES)
+
+  // 4. Resolve references — include current message refs AND refs from session history
+  // This ensures follow-up messages still have access to previously referenced content
+  const allRefs = [...references]
+  const seenIds = new Set(references.map((r) => r.id))
+
+  for (const msg of sessionHistory) {
+    if (msg.references && Array.isArray(msg.references)) {
+      for (const ref of msg.references) {
+        if (!seenIds.has(ref.id)) {
+          seenIds.add(ref.id)
+          allRefs.push(ref)
+        }
+      }
+    }
+  }
+
+  const referencedPrompts = allRefs
     .filter((ref) => ref.type === 'prompt')
     .map((ref) => findPromptById(ref.id))
     .filter((p): p is NonNullable<typeof p> => p !== null)
 
-  const referencedDocuments = references
+  const referencedDocuments = allRefs
     .filter((ref) => ref.type === 'document')
     .map((ref) => findDocumentById(ref.id))
     .filter((d): d is NonNullable<typeof d> => d !== null)
-
-  // 4. Session history (last N messages)
-  const allMessages = findMessagesBySession(sessionId)
-  const sessionHistory = allMessages.slice(-MAX_HISTORY_MESSAGES)
 
   return {
     globalBusiness,

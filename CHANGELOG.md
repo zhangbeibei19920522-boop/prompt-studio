@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.1.5 (2026-03-02)
+
+### Bug 修复
+- **右侧面板宽度不足**: 面板宽度从 400px 调整为 560px，Prompt 内容不再被截断，滚动功能保持正常
+- **应用修改 404 错误**: Agent 输出的 promptId 为标题而非 UUID，客户端和服务端均增加按标题回退查找逻辑
+- **对话上下文丢失**: 后续消息丢失之前引用的 Prompt 和知识库内容，改为从会话历史中收集并去重所有引用
+- **修改已有 Prompt 错误新建**: Agent 引用已有 Prompt 时错误使用 preview（新建）格式，强化系统提示词要求使用 diff（修改）格式
+
+### 新功能
+- **空状态开始对话按钮**: 无会话时在对话区域中心显示可点击的"开始对话"按钮
+- **对话卡片复制按钮**: PreviewCard 和 DiffCard 均新增"复制内容"按钮
+- **对话卡片版本记录**: DiffCard 新增"版本记录"按钮，可直接查看被修改 Prompt 的历史版本
+
+### 改进
+- Agent 系统提示词大幅增强：明确知识库文档必须深度阅读、diff 必须使用实际 ID、引用 Prompt 修改必须用 diff 格式
+- 新增 `findPromptByTitle` 数据库查询方法，作为 promptId 解析的回退机制
+
+### 修改文件
+- `src/components/layout/right-panel.tsx` — 面板宽度调整
+- `src/app/api/ai/apply/route.ts` — promptId 回退查找
+- `src/lib/db/repositories/prompts.ts` — 新增 findPromptByTitle
+- `src/lib/ai/context-collector.ts` — 历史引用收集
+- `src/lib/ai/agent-prompt.ts` — 系统提示词增强
+- `src/components/chat/chat-area.tsx` — 空状态按钮 + onViewHistory/onNewSession
+- `src/components/chat/preview-card.tsx` — 复制按钮
+- `src/components/chat/diff-card.tsx` — 复制 + 版本记录按钮
+- `src/components/chat/message-bubble.tsx` — 传递 onViewHistory
+- `src/app/(main)/page.tsx` — promptId 回退 + onViewHistory/onNewSession 串联
+
 ## v0.1.4 (2026-03-01)
 
 ### Bug 修复
