@@ -40,7 +40,7 @@ export function DiffCard({ data, onApply, onEdit, onReject, onViewHistory }: Dif
       </div>
 
       <div className="rounded-md bg-muted overflow-hidden">
-        <div className="p-3 space-y-0 font-mono text-xs leading-relaxed">
+        <div className="p-3 space-y-0 font-mono text-xs leading-relaxed break-words">
           {changes.map((change, i) => {
             const lines = change.value.replace(/\n$/, "").split("\n")
             return lines.map((line, j) => (
@@ -48,10 +48,10 @@ export function DiffCard({ data, onApply, onEdit, onReject, onViewHistory }: Dif
                 key={`${i}-${j}`}
                 className={
                   change.added
-                    ? "bg-green-100 text-green-800 px-2 py-0.5 -mx-3"
+                    ? "bg-green-100 text-green-800 px-2 py-0.5 -mx-3 whitespace-pre-wrap break-words"
                     : change.removed
-                      ? "bg-red-100 text-red-800 px-2 py-0.5 -mx-3 line-through"
-                      : "text-muted-foreground px-2 py-0.5"
+                      ? "bg-red-100 text-red-800 px-2 py-0.5 -mx-3 line-through whitespace-pre-wrap break-words"
+                      : "text-muted-foreground px-2 py-0.5 whitespace-pre-wrap break-words"
                 }
               >
                 <span className="select-none mr-2 inline-block w-4 text-right">

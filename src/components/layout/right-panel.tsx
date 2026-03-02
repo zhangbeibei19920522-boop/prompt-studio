@@ -37,7 +37,7 @@ function RightPanel({ open, onClose, title, children }: RightPanelProps) {
 
       {/* Scrollable content area */}
       <ScrollArea className="flex-1 overflow-hidden">
-        <div className="p-4">{children}</div>
+        <div className="p-4 min-w-0 overflow-hidden">{children}</div>
       </ScrollArea>
     </div>
   )

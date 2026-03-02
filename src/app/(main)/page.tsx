@@ -213,6 +213,44 @@ export default function MainPage() {
     refreshPrompts()
   }
 
+  const handleDeletePrompt = async (id: string) => {
+    try {
+      await promptsApi.delete(id)
+      refreshPrompts()
+      // Close right panel if the deleted prompt is currently open
+      if (
+        rightPanelView &&
+        (rightPanelView.type === "prompt-preview" ||
+          rightPanelView.type === "prompt-edit" ||
+          rightPanelView.type === "prompt-history") &&
+        rightPanelView.id === id
+      ) {
+        setRightPanelView(null)
+      }
+    } catch (e) {
+      console.error("Delete prompt failed:", e)
+    }
+  }
+
+  const handleDeleteDocument = async (id: string) => {
+    try {
+      await documentsApi.delete(id)
+      if (currentProjectId) {
+        documentsApi.listByProject(currentProjectId).then(setDocuments).catch(console.error)
+      }
+      // Close right panel if the deleted document is currently open
+      if (
+        rightPanelView &&
+        rightPanelView.type === "document-preview" &&
+        rightPanelView.id === id
+      ) {
+        setRightPanelView(null)
+      }
+    } catch (e) {
+      console.error("Delete document failed:", e)
+    }
+  }
+
   // Agent action handlers
   const handleApplyPreview = async (data: PreviewData) => {
     if (!currentProjectId || !currentSessionId) return
@@ -330,6 +368,9 @@ export default function MainPage() {
             prompt={currentPrompt}
             onEdit={() => setRightPanelView({ type: "prompt-edit", id: currentPrompt.id })}
             onViewHistory={() => handleViewHistory(currentPrompt.id)}
+            onDelete={async () => {
+              await handleDeletePrompt(currentPrompt.id)
+            }}
           />
         )
       case "prompt-edit":
@@ -419,6 +460,8 @@ export default function MainPage() {
           onDocumentClick={handleDocumentClick}
           onUploadDocument={() => setUploadDialogOpen(true)}
           onSettingsClick={() => setRightPanelView({ type: "project-settings" })}
+          onDeletePrompt={handleDeletePrompt}
+          onDeleteDocument={handleDeleteDocument}
         />
         <main className="flex flex-1 overflow-hidden">
           <ChatArea

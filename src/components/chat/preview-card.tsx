@@ -108,7 +108,7 @@ export function PreviewCard({ data, onApply, onEdit, onReject }: PreviewCardProp
       )}
 
       {!showReject && (
-        <div className="flex gap-2 pt-1">
+        <div className="flex gap-2 pt-1 flex-wrap">
           <Button size="sm" onClick={onApply}>
             应用保存
           </Button>

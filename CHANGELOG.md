@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.1.6 (2026-03-02)
+
+### Bug 修复
+- **右侧面板文本不换行**: Diff 卡片、预览卡片、Prompt 预览面板均添加 `break-words whitespace-pre-wrap`，长文本自动换行不再溢出；按钮区域添加 `flex-wrap` 防止按钮被截断
+- **右侧面板内容溢出**: 面板内容容器添加 `min-w-0 overflow-hidden`，阻止子元素撑开父容器
+
+### 新功能
+- **Prompt 删除**: Prompt 预览面板新增"删除"按钮，带确认弹窗，删除后自动关闭面板并刷新列表
+- **侧边栏快捷删除**: Prompt 和知识库列表项 hover 时显示 X 删除按钮，可快速删除
+
+### 改进
+- **Agent 思考链精细化**: 系统提示词重构为四阶段流程——需求挖掘→知识库深度利用→方案对齐→精细化产出。Agent 不再一步到位产出 prompt，而是先理解场景、提取知识库要素、与用户确认方案后再精细化写作
+
+### 修改文件
+- `src/components/chat/diff-card.tsx` — 添加文本换行样式
+- `src/components/chat/preview-card.tsx` — 按钮区域 flex-wrap
+- `src/components/prompt/prompt-preview.tsx` — 文本换行 + 删除按钮 + 确认弹窗
+- `src/components/layout/right-panel.tsx` — 内容容器 min-w-0 overflow-hidden
+- `src/components/layout/sidebar.tsx` — Prompt/知识库列表项添加 hover 删除按钮
+- `src/lib/ai/agent-prompt.ts` — 系统提示词四阶段重构
+- `src/app/(main)/page.tsx` — 新增 handleDeletePrompt/handleDeleteDocument + 串联
+
 ## v0.1.5 (2026-03-02)
 
 ### Bug 修复

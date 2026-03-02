@@ -12,6 +12,7 @@ import {
   File,
   ChevronDown,
   ChevronRight,
+  X,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -33,6 +34,8 @@ interface SidebarProps {
   onDocumentClick: (id: string) => void
   onUploadDocument?: () => void
   onSettingsClick: () => void
+  onDeletePrompt?: (id: string) => void
+  onDeleteDocument?: (id: string) => void
 }
 
 function getStatusVariant(status: string): "default" | "secondary" | "outline" {
@@ -134,6 +137,8 @@ export function Sidebar({
   onDocumentClick,
   onUploadDocument,
   onSettingsClick,
+  onDeletePrompt,
+  onDeleteDocument,
 }: SidebarProps) {
   return (
     <aside className="flex h-full w-60 shrink-0 flex-col border-r bg-white">
@@ -209,19 +214,32 @@ export function Sidebar({
                 <p className="px-6 py-1 text-xs text-muted-foreground">暂无 Prompt</p>
               )}
               {prompts.map((prompt) => (
-                <button
+                <div
                   key={prompt.id}
-                  onClick={() => onPromptClick(prompt.id)}
-                  className="flex w-full items-center gap-2 px-6 py-1 text-left hover:bg-accent transition-colors rounded-sm"
+                  className="group flex w-full items-center gap-1 px-6 py-1 text-left hover:bg-accent transition-colors rounded-sm"
                 >
-                  <span className="flex-1 truncate text-xs">{prompt.title}</span>
-                  <Badge
-                    variant={getStatusVariant(prompt.status)}
-                    className="shrink-0 text-[10px] px-1 py-0"
+                  <button
+                    onClick={() => onPromptClick(prompt.id)}
+                    className="flex flex-1 items-center gap-2 min-w-0"
                   >
-                    {getStatusLabel(prompt.status)}
-                  </Badge>
-                </button>
+                    <span className="flex-1 truncate text-xs">{prompt.title}</span>
+                    <Badge
+                      variant={getStatusVariant(prompt.status)}
+                      className="shrink-0 text-[10px] px-1 py-0"
+                    >
+                      {getStatusLabel(prompt.status)}
+                    </Badge>
+                  </button>
+                  {onDeletePrompt && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onDeletePrompt(prompt.id) }}
+                      className="hidden group-hover:block shrink-0 p-0.5 text-muted-foreground hover:text-destructive transition-colors"
+                      title="删除 Prompt"
+                    >
+                      <X className="size-3" />
+                    </button>
+                  )}
+                </div>
               ))}
             </CollapsibleGroup>
 
@@ -240,14 +258,27 @@ export function Sidebar({
                 <p className="px-6 py-1 text-xs text-muted-foreground">暂无文档</p>
               )}
               {documents.map((doc) => (
-                <button
+                <div
                   key={doc.id}
-                  onClick={() => onDocumentClick(doc.id)}
-                  className="flex w-full items-center gap-2 px-6 py-1 text-left hover:bg-accent transition-colors rounded-sm"
+                  className="group flex w-full items-center gap-1 px-6 py-1 text-left hover:bg-accent transition-colors rounded-sm"
                 >
-                  {getDocumentTypeIcon(doc.type)}
-                  <span className="flex-1 truncate text-xs">{doc.name}</span>
-                </button>
+                  <button
+                    onClick={() => onDocumentClick(doc.id)}
+                    className="flex flex-1 items-center gap-2 min-w-0"
+                  >
+                    {getDocumentTypeIcon(doc.type)}
+                    <span className="flex-1 truncate text-xs">{doc.name}</span>
+                  </button>
+                  {onDeleteDocument && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onDeleteDocument(doc.id) }}
+                      className="hidden group-hover:block shrink-0 p-0.5 text-muted-foreground hover:text-destructive transition-colors"
+                      title="删除文档"
+                    >
+                      <X className="size-3" />
+                    </button>
+                  )}
+                </div>
               ))}
             </CollapsibleGroup>
 

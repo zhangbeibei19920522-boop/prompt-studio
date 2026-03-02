@@ -1,7 +1,17 @@
 "use client"
 
+import * as React from "react"
+import { Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Separator } from "@/components/ui/separator"
 
 interface Variable {
@@ -26,6 +36,7 @@ interface PromptPreviewProps {
   prompt: Prompt
   onEdit: () => void
   onViewHistory: () => void
+  onDelete?: () => void
 }
 
 function highlightVariables(content: string): React.ReactNode[] {
@@ -85,7 +96,10 @@ export function PromptPreview({
   prompt,
   onEdit,
   onViewHistory,
+  onDelete,
 }: PromptPreviewProps) {
+  const [confirmOpen, setConfirmOpen] = React.useState(false)
+
   async function handleCopy() {
     try {
       await navigator.clipboard.writeText(prompt.content)
@@ -95,6 +109,7 @@ export function PromptPreview({
   }
 
   return (
+    <>
     <div className="flex flex-col h-full overflow-auto p-6 gap-6">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
@@ -111,7 +126,7 @@ export function PromptPreview({
             ))}
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
           <Button variant="default" size="sm" onClick={onEdit}>
             编辑
           </Button>
@@ -121,6 +136,17 @@ export function PromptPreview({
           <Button variant="outline" size="sm" onClick={onViewHistory}>
             查看历史
           </Button>
+          {onDelete && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground hover:text-destructive"
+              onClick={() => setConfirmOpen(true)}
+            >
+              <Trash2 className="size-3.5 mr-1" />
+              删除
+            </Button>
+          )}
         </div>
       </div>
 
@@ -129,7 +155,7 @@ export function PromptPreview({
       {/* Content */}
       <div className="flex flex-col gap-2">
         <h3 className="text-sm font-medium text-muted-foreground">内容</h3>
-        <pre className="whitespace-pre-wrap font-mono text-sm bg-muted rounded-md p-4 leading-relaxed overflow-x-auto">
+        <pre className="whitespace-pre-wrap break-words font-mono text-sm bg-muted rounded-md p-4 leading-relaxed">
           {highlightVariables(prompt.content)}
         </pre>
       </div>
@@ -202,5 +228,33 @@ export function PromptPreview({
         </span>
       </div>
     </div>
+
+    {/* Delete confirmation dialog */}
+    <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>确认删除</DialogTitle>
+          <DialogDescription>
+            确定要删除 Prompt「{prompt.title}」吗？此操作无法撤销。
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setConfirmOpen(false)}>
+            取消
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={() => {
+              setConfirmOpen(false)
+              onDelete?.()
+            }}
+          >
+            <Trash2 className="size-4" />
+            删除
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   )
 }
