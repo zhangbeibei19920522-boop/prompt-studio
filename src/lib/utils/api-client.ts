@@ -85,6 +85,21 @@ export const documentsApi = {
     }),
   delete: (id: string) =>
     fetchApi<null>(`/api/documents/${id}`, { method: 'DELETE' }),
+  upload: async (projectId: string, files: File[]): Promise<Document[]> => {
+    const formData = new FormData()
+    for (const file of files) {
+      formData.append('files', file)
+    }
+    const res = await fetch(`/api/projects/${projectId}/documents/upload`, {
+      method: 'POST',
+      body: formData,
+    })
+    const json = await res.json()
+    if (!json.success) {
+      throw new Error(json.error ?? '上传失败')
+    }
+    return json.data as Document[]
+  },
 }
 
 // Sessions

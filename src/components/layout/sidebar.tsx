@@ -65,6 +65,10 @@ function getStatusLabel(status: string): string {
   }
 }
 
+function truncateText(text: string, maxLen: number = 10): string {
+  return text.length > maxLen ? text.slice(0, maxLen) + '...' : text
+}
+
 function getDocumentTypeIcon(type: string): React.ReactNode {
   switch (type) {
     case "pdf":
@@ -222,7 +226,7 @@ export function Sidebar({
                     onClick={() => onPromptClick(prompt.id)}
                     className="flex flex-1 items-center gap-2 min-w-0"
                   >
-                    <span className="flex-1 truncate text-xs">{prompt.title}</span>
+                    <span className="flex-1 truncate text-xs text-left" title={prompt.title}>{truncateText(prompt.title)}</span>
                     <Badge
                       variant={getStatusVariant(prompt.status)}
                       className="shrink-0 text-[10px] px-1 py-0"
@@ -267,7 +271,7 @@ export function Sidebar({
                     className="flex flex-1 items-center gap-2 min-w-0"
                   >
                     {getDocumentTypeIcon(doc.type)}
-                    <span className="flex-1 truncate text-xs">{doc.name}</span>
+                    <span className="flex-1 truncate text-xs text-left" title={doc.name}>{truncateText(doc.name)}</span>
                   </button>
                   {onDeleteDocument && (
                     <button

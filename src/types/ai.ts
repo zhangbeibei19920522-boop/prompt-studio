@@ -58,9 +58,19 @@ export interface AgentPlan {
   keyPoints: PlanData['keyPoints']
 }
 
+// Agent 上下文摘要（思考链日志）
+export interface AgentContextSummary {
+  referencedPrompts: Array<{ id: string; title: string }>
+  referencedDocuments: Array<{ id: string; name: string }>
+  hasGlobalBusiness: boolean
+  hasProjectBusiness: boolean
+  historyMessageCount: number
+}
+
 // 流式响应事件
 export type StreamEvent =
   | { type: 'text'; content: string }
+  | { type: 'context'; data: AgentContextSummary }
   | { type: 'plan'; data: PlanData }
   | { type: 'preview'; data: PreviewData }
   | { type: 'diff'; data: DiffData }

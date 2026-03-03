@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.1.7 (2026-03-03)
+
+### Bug 修复
+- **PDF/DOCX 上传乱码**: 二进制文件（PDF/DOCX）之前被 `file.text()` 当作文本读取导致乱码。新建服务端 FormData 上传路由，使用 `pdf-parse` v2 和 `mammoth` 在服务端解析二进制文件后存入数据库
+- **侧边栏文件名过长**: 长文件名将"添加"按钮撑出可视区域。添加 `truncateText` 截断函数（10 字符 + ...），hover 时 title tooltip 显示完整名称
+- **侧边栏文件名居中**: Prompt 和文档列表项文本未左对齐，添加 `text-left` class 修复
+
+### 新功能
+- **Agent 思考链日志**: Agent 响应前发送 `context` 事件，聊天界面展示可折叠的"Agent 思考链"面板，显示引用的 Prompt/文档、全局/项目业务信息、历史消息数
+
+### 新增文件
+- `src/lib/utils/parse-document.ts` — 服务端文件解析工具（PDF/DOCX/TXT/MD）
+- `src/app/api/projects/[id]/documents/upload/route.ts` — FormData 文件上传 API 路由
+
+### 修改文件
+- `next.config.ts` — serverExternalPackages 添加 pdf-parse、mammoth
+- `src/lib/utils/api-client.ts` — 新增 `documentsApi.upload` 方法
+- `src/app/(main)/page.tsx` — handleUpload 改用 FormData 上传
+- `src/components/layout/sidebar.tsx` — truncateText + text-left + title tooltip
+- `src/types/ai.ts` — 新增 AgentContextSummary 接口和 context 事件类型
+- `src/lib/ai/agent.ts` — 流式响应前 yield context 上下文摘要事件
+- `src/components/chat/chat-area.tsx` — ContextLog 可折叠组件 + context 事件处理
+
 ## v0.1.6 (2026-03-02)
 
 ### Bug 修复

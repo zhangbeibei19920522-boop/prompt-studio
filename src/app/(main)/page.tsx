@@ -155,18 +155,10 @@ export default function MainPage() {
 
   const handleUpload = async (files: File[]) => {
     if (!currentProjectId) return
-    for (const file of files) {
-      const content = await file.text()
-      const ext = file.name.split(".").pop() ?? "txt"
-      try {
-        await documentsApi.create(currentProjectId, {
-          name: file.name,
-          type: ext,
-          content,
-        })
-      } catch (e) {
-        console.error("Upload failed:", e)
-      }
+    try {
+      await documentsApi.upload(currentProjectId, files)
+    } catch (e) {
+      console.error("Upload failed:", e)
     }
     documentsApi.listByProject(currentProjectId).then(setDocuments).catch(console.error)
     setUploadDialogOpen(false)

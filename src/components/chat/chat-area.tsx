@@ -1,14 +1,53 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
-import { MessageSquarePlus } from "lucide-react"
+import { MessageSquarePlus, ChevronDown, ChevronRight } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import { MessageBubble } from "./message-bubble"
 import { ChatInput } from "./chat-input"
 import { streamChat } from "@/lib/utils/sse-client"
 import type { Message, MessageReference, PreviewData, DiffData, PlanData } from "@/types/database"
-import type { StreamEvent } from "@/types/ai"
+import type { StreamEvent, AgentContextSummary } from "@/types/ai"
+
+function ContextLog({ summary }: { summary: AgentContextSummary }) {
+  const [open, setOpen] = useState(false)
+
+  const items: string[] = []
+  if (summary.hasGlobalBusiness) items.push("全局业务信息")
+  if (summary.hasProjectBusiness) items.push("项目业务信息")
+  if (summary.referencedPrompts.length > 0)
+    items.push(`Prompt: ${summary.referencedPrompts.map((p) => p.title).join(", ")}`)
+  if (summary.referencedDocuments.length > 0)
+    items.push(`文档: ${summary.referencedDocuments.map((d) => d.name).join(", ")}`)
+  if (summary.historyMessageCount > 0)
+    items.push(`历史消息: ${summary.historyMessageCount} 条`)
+
+  if (items.length === 0) return null
+
+  return (
+    <div className="rounded-lg border bg-muted/50 text-xs mb-2">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-1.5 px-3 py-1.5 text-muted-foreground hover:text-foreground transition-colors"
+      >
+        {open ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+        <span className="font-medium">Agent 思考链</span>
+        <span className="ml-auto tabular-nums">{items.length} 项上下文</span>
+      </button>
+      {open && (
+        <ul className="px-3 pb-2 space-y-0.5 text-muted-foreground">
+          {items.map((item, i) => (
+            <li key={i} className="flex items-start gap-1.5">
+              <span className="mt-0.5 shrink-0">-</span>
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
 
 interface ChatAreaProps {
   messages: Message[]
@@ -38,6 +77,7 @@ export function ChatArea({
   const bottomRef = useRef<HTMLDivElement>(null)
   const [streamingText, setStreamingText] = useState("")
   const [isStreaming, setIsStreaming] = useState(false)
+  const [contextSummary, setContextSummary] = useState<AgentContextSummary | null>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -49,6 +89,7 @@ export function ChatArea({
 
       setIsStreaming(true)
       setStreamingText("")
+      setContextSummary(null)
 
       try {
         for await (const event of streamChat({
@@ -57,6 +98,9 @@ export function ChatArea({
           references,
         })) {
           switch (event.type) {
+            case "context":
+              setContextSummary(event.data)
+              break
             case "text":
               setStreamingText((prev) => prev + event.content)
               break
@@ -80,6 +124,7 @@ export function ChatArea({
       } finally {
         setIsStreaming(false)
         setStreamingText("")
+        setContextSummary(null)
         onMessagesChange()
       }
     },
@@ -122,13 +167,16 @@ export function ChatArea({
               onViewHistory={onViewHistory}
             />
           ))}
-          {streamingText && (
+          {(contextSummary || streamingText) && (
             <div className="flex w-full justify-start">
               <div className="max-w-[80%]">
-                <div className="rounded-lg px-3 py-2 text-sm leading-relaxed bg-muted text-foreground">
-                  <p className="whitespace-pre-wrap">{streamingText}</p>
-                  <span className="inline-block w-1.5 h-4 bg-foreground/60 animate-pulse ml-0.5" />
-                </div>
+                {contextSummary && <ContextLog summary={contextSummary} />}
+                {streamingText && (
+                  <div className="rounded-lg px-3 py-2 text-sm leading-relaxed bg-muted text-foreground">
+                    <p className="whitespace-pre-wrap">{streamingText}</p>
+                    <span className="inline-block w-1.5 h-4 bg-foreground/60 animate-pulse ml-0.5" />
+                  </div>
+                )}
               </div>
             </div>
           )}

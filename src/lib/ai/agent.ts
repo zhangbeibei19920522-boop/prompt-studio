@@ -59,7 +59,19 @@ export async function* handleAgentChat(
       refDocs: context.referencedDocuments.length,
     })
 
-    // 4. Stream response and accumulate text
+    // 4. Yield context summary for thinking-chain display
+    yield {
+      type: 'context' as const,
+      data: {
+        referencedPrompts: context.referencedPrompts.map((p) => ({ id: p.id, title: p.title })),
+        referencedDocuments: context.referencedDocuments.map((d) => ({ id: d.id, name: d.name })),
+        hasGlobalBusiness: !!(context.globalBusiness.description || context.globalBusiness.goal || context.globalBusiness.background),
+        hasProjectBusiness: !!(context.projectBusiness.description || context.projectBusiness.goal || context.projectBusiness.background),
+        historyMessageCount: context.sessionHistory.length,
+      },
+    }
+
+    // 5. Stream response and accumulate text
     let accumulated = ''
     let chunkCount = 0
 
@@ -71,7 +83,7 @@ export async function* handleAgentChat(
     }
     console.log('[Agent] Stream complete. Chunks:', chunkCount, 'Total length:', accumulated.length)
 
-    // 5. Parse structured blocks from accumulated response
+    // 6. Parse structured blocks from accumulated response
     const { jsonBlocks, plainText } = parseAgentOutput(accumulated)
     console.log('[Agent] Parsed JSON blocks:', jsonBlocks.length)
 
@@ -97,7 +109,7 @@ export async function* handleAgentChat(
       }
     }
 
-    // 6. Persist assistant message
+    // 7. Persist assistant message
     const firstBlock = jsonBlocks[0] ?? null
     const metadata = firstBlock
       ? ({
