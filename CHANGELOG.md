@@ -5,6 +5,9 @@
 ### Bug 修复
 - **PDF/DOCX 上传乱码**: 二进制文件（PDF/DOCX）之前被 `file.text()` 当作文本读取导致乱码。新建服务端 FormData 上传路由，使用 `pdf-parse` v2 和 `mammoth` 在服务端解析二进制文件后存入数据库
 - **旧版 .doc 文件上传报错**: mammoth 不支持旧版二进制 .doc 格式，上传 .doc 文件报 "Can't find end of central directory" 错误。新增 `word-extractor` 库专门解析 .doc 格式，上传接口返回具体错误信息
+- **DOC/DOCX 扩展名与实际格式不匹配**: 文件扩展名为 `.docx` 但实际内容为旧版 `.doc` 格式时解析失败。改用 magic bytes 检测实际文件格式（OLE2→word-extractor，ZIP→mammoth），不再仅依赖扩展名
+- **上传对话框不接受 .doc 文件**: 文件选择器的 ACCEPTED_EXTENSIONS 和 MIME 类型缺少 `.doc`/`application/msword`，导致旧版 Word 文件无法选择上传
+- **HTML 伪装 .doc 文件上传报错**: 部分 .doc 文件实际为 HTML 格式（Word "另存为网页"或网络下载），magic bytes 既非 OLE2 也非 ZIP，mammoth 和 word-extractor 均无法解析。新增 fallback：剥离 HTML 标签和解码常见实体后作为纯文本读取
 - **侧边栏文件名过长**: 长文件名将"添加"按钮撑出可视区域。添加 `truncateText` 截断函数（10 字符 + ...），hover 时 title tooltip 显示完整名称
 - **侧边栏文件名居中**: Prompt 和文档列表项文本未左对齐，添加 `text-left` class 修复
 
@@ -23,6 +26,7 @@
 - `src/types/ai.ts` — 新增 AgentContextSummary 接口和 context 事件类型
 - `src/lib/ai/agent.ts` — 流式响应前 yield context 上下文摘要事件
 - `src/components/chat/chat-area.tsx` — ContextLog 可折叠组件 + context 事件处理
+- `src/components/knowledge/upload-dialog.tsx` — ACCEPTED_EXTENSIONS 和 MIME 类型添加 .doc 支持
 
 ## v0.1.6 (2026-03-02)
 

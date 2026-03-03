@@ -12,9 +12,10 @@ import {
 } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 
-const ACCEPTED_EXTENSIONS = [".pdf", ".docx", ".txt", ".md"]
+const ACCEPTED_EXTENSIONS = [".pdf", ".doc", ".docx", ".txt", ".md"]
 const ACCEPTED_MIME_TYPES = [
   "application/pdf",
+  "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "text/plain",
   "text/markdown",

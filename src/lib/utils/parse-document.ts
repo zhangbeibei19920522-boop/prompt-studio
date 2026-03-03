@@ -1,7 +1,50 @@
 /**
  * Server-side document parser.
- * Extracts plain text from PDF, DOCX, and text-based files.
+ * Extracts plain text from PDF, DOCX, DOC, and text-based files.
+ * Uses magic bytes to detect actual file format, not just extension.
  */
+
+// OLE2 Compound Document magic bytes (used by .doc)
+const OLE2_MAGIC = [0xd0, 0xcf, 0x11, 0xe0]
+// ZIP magic bytes (used by .docx)
+const ZIP_MAGIC = [0x50, 0x4b]
+
+function isOle2(buffer: Buffer): boolean {
+  return buffer.length >= 4 && OLE2_MAGIC.every((b, i) => buffer[i] === b)
+}
+
+function isZip(buffer: Buffer): boolean {
+  return buffer.length >= 2 && ZIP_MAGIC.every((b, i) => buffer[i] === b)
+}
+
+/** Strip HTML tags and decode common entities (for HTML-as-.doc files) */
+function stripHtmlTags(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+async function parseWithMammoth(buffer: Buffer): Promise<string> {
+  const mammoth = await import('mammoth')
+  const result = await mammoth.extractRawText({ buffer })
+  return result.value
+}
+
+async function parseWithWordExtractor(buffer: Buffer): Promise<string> {
+  const WordExtractor = (await import('word-extractor')).default
+  const extractor = new WordExtractor()
+  const doc = await extractor.extract(buffer)
+  return doc.getBody()
+}
 
 export async function parseDocumentBuffer(
   buffer: Buffer,
@@ -18,16 +61,17 @@ export async function parseDocumentBuffer(
       await pdf.destroy()
       return text
     }
+    case 'doc':
     case 'docx': {
-      const mammoth = await import('mammoth')
-      const result = await mammoth.extractRawText({ buffer })
-      return result.value
-    }
-    case 'doc': {
-      const WordExtractor = (await import('word-extractor')).default
-      const extractor = new WordExtractor()
-      const doc = await extractor.extract(buffer)
-      return doc.getBody()
+      // Detect actual format by magic bytes, not extension
+      if (isOle2(buffer)) {
+        return parseWithWordExtractor(buffer)
+      }
+      if (isZip(buffer)) {
+        return parseWithMammoth(buffer)
+      }
+      // Neither OLE2 nor ZIP — likely HTML/RTF saved as .doc (common)
+      return stripHtmlTags(buffer.toString('utf-8'))
     }
     case 'md':
     case 'txt':
