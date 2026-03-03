@@ -18,11 +18,16 @@ export async function parseDocumentBuffer(
       await pdf.destroy()
       return text
     }
-    case 'docx':
-    case 'doc': {
+    case 'docx': {
       const mammoth = await import('mammoth')
       const result = await mammoth.extractRawText({ buffer })
       return result.value
+    }
+    case 'doc': {
+      const WordExtractor = (await import('word-extractor')).default
+      const extractor = new WordExtractor()
+      const doc = await extractor.extract(buffer)
+      return doc.getBody()
     }
     case 'md':
     case 'txt':

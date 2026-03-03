@@ -41,9 +41,10 @@ export async function POST(
       { status: 201 }
     )
   } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to upload documents'
     console.error('[POST /api/projects/[id]/documents/upload]', err)
     return NextResponse.json(
-      { success: false, data: null, error: 'Failed to upload documents' },
+      { success: false, data: null, error: message },
       { status: 500 }
     )
   }

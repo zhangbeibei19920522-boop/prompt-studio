@@ -3,7 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: "standalone",
   // Allow better-sqlite3 native module
-  serverExternalPackages: ["better-sqlite3", "undici", "pdf-parse", "mammoth"],
+  serverExternalPackages: ["better-sqlite3", "undici", "pdf-parse", "mammoth", "word-extractor"],
 };
 
 export default nextConfig;
