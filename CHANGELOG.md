@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.10 (2026-03-04)
+
+### Bug 修复
+- **测试 Agent 不识别引用内容**: 测试对话中引用 Prompt 和知识库文档后 Agent 无法识别。原因是测试 Agent 从 UI 到提示词全链路均未传递引用。修复后测试 Agent 可基于引用的 Prompt 内容设计针对性测试用例，基于知识库文档设计符合业务场景的测试用例
+
+### 修改文件
+- `src/lib/utils/sse-client.ts` — streamTestChat 接受并发送 references 参数
+- `src/app/api/ai/test-chat/route.ts` — 提取 references 并传递给 handler
+- `src/lib/ai/agent.ts` — handleTestAgentChat 接受 references，调用 collectAgentContext 收集上下文，yield context 思考链事件
+- `src/lib/ai/test-agent-prompt.ts` — buildTestAgentMessages 改用 AgentContext，注入引用的 Prompt/文档/项目业务信息到系统提示词
+- `src/components/chat/chat-area.tsx` — 测试对话传递 references 给 streamTestChat
+
 ## v0.1.9 (2026-03-04)
 
 ### 新功能

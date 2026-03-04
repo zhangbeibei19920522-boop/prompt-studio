@@ -82,14 +82,15 @@ export async function applyPrompt(data: {
 /**
  * Stream test chat with the Agent API via SSE.
  */
-export async function* streamTestChat(
-  sessionId: string,
+export async function* streamTestChat(request: {
+  sessionId: string
   content: string
-): AsyncGenerator<StreamEvent> {
+  references: MessageReference[]
+}): AsyncGenerator<StreamEvent> {
   const res = await fetch('/api/ai/test-chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sessionId, content }),
+    body: JSON.stringify(request),
   })
 
   if (!res.ok) {

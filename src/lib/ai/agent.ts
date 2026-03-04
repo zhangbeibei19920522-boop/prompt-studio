@@ -6,7 +6,7 @@ import { getSettings } from '@/lib/db/repositories/settings'
 import { buildPlanMessages } from './agent-prompt'
 import { buildTestAgentMessages } from './test-agent-prompt'
 import { parseAgentOutput } from './stream-handler'
-import { createMessage, findMessagesBySession } from '@/lib/db/repositories/messages'
+import { createMessage } from '@/lib/db/repositories/messages'
 import { createMemory, deleteMemory } from '@/lib/db/repositories/memories'
 import { findSessionById } from '@/lib/db/repositories/sessions'
 
@@ -176,20 +176,22 @@ export async function* handleAgentChat(
 
 /**
  * Test Agent entry point — simplified version for test suite creation.
+ * Supports references (prompts + knowledge base documents) for context-aware test generation.
  */
 export async function* handleTestAgentChat(
   sessionId: string,
-  content: string
+  content: string,
+  references: MessageReference[] = []
 ): AsyncGenerator<StreamEvent> {
   try {
-    console.log('[TestAgent] === Chat started ===', { sessionId })
+    console.log('[TestAgent] === Chat started ===', { sessionId, refCount: references.length })
 
     // 1. Save user message
     createMessage({
       sessionId,
       role: 'user',
       content,
-      references: [],
+      references,
       metadata: null,
     })
 
@@ -197,11 +199,25 @@ export async function* handleTestAgentChat(
     const settings = getSettings()
     const provider = createAiProvider(settings)
 
-    // 3. Build messages with session history
-    const history = findMessagesBySession(sessionId)
-    const messages = buildTestAgentMessages(history.slice(-20), content)
+    // 3. Collect context (references, business info) and build messages
+    const context = collectAgentContext(sessionId, content, references)
+    const messages = buildTestAgentMessages(context)
 
-    // 4. Stream response
+    // 4. Yield context summary for thinking-chain display
+    yield {
+      type: 'context' as const,
+      data: {
+        referencedPrompts: context.referencedPrompts.map((p) => ({ id: p.id, title: p.title })),
+        referencedDocuments: context.referencedDocuments.map((d) => ({ id: d.id, name: d.name })),
+        hasGlobalBusiness: !!(context.globalBusiness.description || context.globalBusiness.goal || context.globalBusiness.background),
+        hasProjectBusiness: !!(context.projectBusiness.description || context.projectBusiness.goal || context.projectBusiness.background),
+        historyMessageCount: context.sessionHistory.length,
+        globalMemoryCount: context.globalMemories.length,
+        projectMemoryCount: context.projectMemories.length,
+      },
+    }
+
+    // 5. Stream response
     let accumulated = ''
     for await (const chunk of provider.chatStream(messages)) {
       accumulated += chunk

@@ -105,7 +105,7 @@ export function ChatArea({
 
       try {
         const stream = useTestAgent
-          ? streamTestChat(sessionId, content)
+          ? streamTestChat({ sessionId, content, references })
           : streamChat({ sessionId, content, references })
         for await (const event of stream) {
           switch (event.type) {
