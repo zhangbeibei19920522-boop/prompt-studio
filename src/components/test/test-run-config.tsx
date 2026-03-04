@@ -24,7 +24,7 @@ interface TestRunConfigProps {
   config: TestSuiteConfig
   promptId: string | null
   prompts: Array<{ id: string; title: string }>
-  onSave: (config: TestSuiteConfig) => void
+  onSave: (config: TestSuiteConfig) => void | Promise<void>
   onRunWithPrompt: (promptId: string) => void
 }
 
@@ -65,8 +65,8 @@ export function TestRunConfig({
     })
   }
 
-  function handleSaveAndRun() {
-    onSave({
+  async function handleSaveAndRun() {
+    await onSave({
       provider: provider.trim(),
       model: model.trim(),
       apiKey: apiKey.trim(),

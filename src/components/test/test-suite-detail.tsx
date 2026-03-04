@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import {
   Play,
   Plus,
@@ -10,9 +10,7 @@ import {
   XCircle,
   Loader2,
   Settings2,
-  X,
 } from "lucide-react"
-import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -80,6 +78,7 @@ export function TestSuiteDetail({
   const [configOpen, setConfigOpen] = useState(false)
   const [isRunning, setIsRunning] = useState(false)
   const [runProgress, setRunProgress] = useState<RunProgress | null>(null)
+  const actualOutputsRef = useRef<Record<string, string>>({})
 
   const latestResults = runProgress?.results ?? latestRun?.results ?? []
   const latestReport = runProgress?.report ?? latestRun?.report ?? null
@@ -94,6 +93,7 @@ export function TestSuiteDetail({
     setConfigOpen(false)
     setIsRunning(true)
     setRunProgress({ phase: "running", current: 0, total: cases.length, results: [], report: null })
+    actualOutputsRef.current = {}
 
     try {
       for await (const event of streamTestRun(suite.id, promptId)) {
@@ -109,7 +109,8 @@ export function TestSuiteDetail({
             )
             break
           case "test-case-done":
-            // Actual output received; full result comes in eval-case-done
+            // Store actual output for use in eval-case-done
+            actualOutputsRef.current[event.data.caseId] = event.data.actualOutput
             break
           case "eval-start":
             setRunProgress((prev) =>
@@ -121,7 +122,7 @@ export function TestSuiteDetail({
               if (!prev) return prev
               const newResult: TestCaseResult = {
                 testCaseId: event.data.caseId,
-                actualOutput: "",
+                actualOutput: actualOutputsRef.current[event.data.caseId] ?? "",
                 passed: event.data.passed,
                 score: event.data.score,
                 reason: event.data.reason,
@@ -194,7 +195,7 @@ export function TestSuiteDetail({
     onSuiteUpdate()
   }
 
-  async function handleConfigSave(config: TestSuiteConfig) {
+  async function handleConfigSave(config: TestSuiteConfig): Promise<void> {
     await testSuitesApi.update(suite.id, { config })
     onSuiteUpdate()
   }

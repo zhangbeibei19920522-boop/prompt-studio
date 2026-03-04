@@ -19,7 +19,13 @@ function mapRowToTestRun(row: TestRunRow): TestRun {
     testSuiteId: row.test_suite_id,
     status: row.status,
     results: JSON.parse(row.results) as TestCaseResult[],
-    report: row.report ? JSON.parse(row.report) as TestReport : null,
+    report: (() => {
+      if (!row.report || row.report === '{}') return null
+      try {
+        const parsed = JSON.parse(row.report)
+        return parsed.summary ? parsed as TestReport : null
+      } catch { return null }
+    })(),
     score: row.score,
     startedAt: row.started_at,
     completedAt: row.completed_at,

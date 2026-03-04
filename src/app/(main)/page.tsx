@@ -60,6 +60,7 @@ export default function MainPage() {
   const [currentTestSuiteId, setCurrentTestSuiteId] = useState<string | null>(null)
   const [currentTestCases, setCurrentTestCases] = useState<TestCase[]>([])
   const [currentTestRun, setCurrentTestRun] = useState<TestRun | null>(null)
+  const [testMode, setTestMode] = useState(false)
 
   // Memory extraction tracking
   const prevSessionIdRef = useRef<string | null>(null)
@@ -74,6 +75,7 @@ export default function MainPage() {
   const [currentPrompt, setCurrentPrompt] = useState<Prompt | null>(null)
   const [currentDocument, setCurrentDocument] = useState<Document | null>(null)
   const currentProject = projects.find((p) => p.id === currentProjectId) ?? null
+  const currentSuite = testSuites.find((s) => s.id === currentTestSuiteId) ?? null
 
   // Load projects on mount
   useEffect(() => {
@@ -397,6 +399,7 @@ export default function MainPage() {
       setSessions((prev) => [session, ...prev])
       setCurrentSessionId(session.id)
       setCurrentTestSuiteId(null)
+      setTestMode(true)
     } catch (e) {
       console.error("Create test session failed:", e)
     }
@@ -437,6 +440,7 @@ export default function MainPage() {
       })
       await testCasesApi.createBatch(suite.id, data.cases)
       refreshTestSuites()
+      setTestMode(false)
       handleTestSuiteClick(suite.id)
     } catch (e) {
       console.error('Create test suite failed:', e)
@@ -570,7 +574,7 @@ export default function MainPage() {
         <Sidebar
           sessions={sessions}
           currentSessionId={currentSessionId}
-          onSessionSelect={(id) => { setCurrentSessionId(id); setCurrentTestSuiteId(null) }}
+          onSessionSelect={(id) => { setCurrentSessionId(id); setCurrentTestSuiteId(null); setTestMode(false) }}
           onNewSession={handleNewSession}
           prompts={prompts.map((p) => ({ id: p.id, title: p.title, status: p.status }))}
           onPromptClick={handlePromptClick}
@@ -594,10 +598,10 @@ export default function MainPage() {
           onDeleteTestSuite={handleDeleteTestSuite}
         />
         <main className="flex flex-1 overflow-hidden">
-          {currentTestSuiteId ? (
+          {currentSuite ? (
             <div className="flex-1 overflow-hidden">
               <TestSuiteDetail
-                suite={testSuites.find((s) => s.id === currentTestSuiteId)!}
+                suite={currentSuite}
                 cases={currentTestCases}
                 latestRun={currentTestRun}
                 prompts={prompts.map((p) => ({ id: p.id, title: p.title }))}
@@ -641,6 +645,7 @@ export default function MainPage() {
                 }
               }}
               onConfirmTestSuite={handleConfirmTestSuite}
+              useTestAgent={testMode}
             />
           )}
         </main>

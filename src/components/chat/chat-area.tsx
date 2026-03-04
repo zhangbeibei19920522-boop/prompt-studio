@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { MessageBubble } from "./message-bubble"
 import { ChatInput } from "./chat-input"
 import { TestSuiteCard } from "@/components/test/test-suite-card"
-import { streamChat } from "@/lib/utils/sse-client"
+import { streamChat, streamTestChat } from "@/lib/utils/sse-client"
 import type { Message, MessageReference, PreviewData, DiffData, PlanData } from "@/types/database"
 import type { StreamEvent, AgentContextSummary, MemoryCommandData, TestSuiteGenerationData } from "@/types/ai"
 
@@ -67,6 +67,7 @@ interface ChatAreaProps {
   onNewSession?: () => void
   onMemoryCommand?: (data: MemoryCommandData) => void
   onConfirmTestSuite?: (data: TestSuiteGenerationData) => void
+  useTestAgent?: boolean
 }
 
 export function ChatArea({
@@ -82,6 +83,7 @@ export function ChatArea({
   onNewSession,
   onMemoryCommand,
   onConfirmTestSuite,
+  useTestAgent,
 }: ChatAreaProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
   const [streamingText, setStreamingText] = useState("")
@@ -102,11 +104,10 @@ export function ChatArea({
       setContextSummary(null)
 
       try {
-        for await (const event of streamChat({
-          sessionId,
-          content,
-          references,
-        })) {
+        const stream = useTestAgent
+          ? streamTestChat(sessionId, content)
+          : streamChat({ sessionId, content, references })
+        for await (const event of stream) {
           switch (event.type) {
             case "context":
               setContextSummary(event.data)
@@ -146,7 +147,7 @@ export function ChatArea({
         onMessagesChange()
       }
     },
-    [sessionId, onMessagesChange]
+    [sessionId, onMessagesChange, useTestAgent]
   )
 
   return (
