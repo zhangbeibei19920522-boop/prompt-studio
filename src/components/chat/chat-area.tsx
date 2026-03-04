@@ -9,7 +9,7 @@ import { ChatInput } from "./chat-input"
 import { TestSuiteCard } from "@/components/test/test-suite-card"
 import { streamChat, streamTestChat } from "@/lib/utils/sse-client"
 import type { Message, MessageReference, PreviewData, DiffData, PlanData } from "@/types/database"
-import type { StreamEvent, AgentContextSummary, MemoryCommandData, TestSuiteGenerationData } from "@/types/ai"
+import type { StreamEvent, AgentContextSummary, MemoryCommandData, TestSuiteGenerationData, TestSuiteProgressData } from "@/types/ai"
 
 function ContextLog({ summary }: { summary: AgentContextSummary }) {
   const [open, setOpen] = useState(false)
@@ -90,10 +90,11 @@ export function ChatArea({
   const [isStreaming, setIsStreaming] = useState(false)
   const [contextSummary, setContextSummary] = useState<AgentContextSummary | null>(null)
   const [pendingTestSuite, setPendingTestSuite] = useState<TestSuiteGenerationData | null>(null)
+  const [batchProgress, setBatchProgress] = useState<TestSuiteProgressData | null>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages.length, streamingText, pendingTestSuite])
+  }, [messages.length, streamingText, pendingTestSuite, batchProgress])
 
   const handleSend = useCallback(
     async (content: string, references: MessageReference[]) => {
@@ -102,6 +103,7 @@ export function ChatArea({
       setIsStreaming(true)
       setStreamingText("")
       setContextSummary(null)
+      setBatchProgress(null)
 
       try {
         const stream = useTestAgent
@@ -118,9 +120,14 @@ export function ChatArea({
             case "memory":
               onMemoryCommand?.(event.data)
               break
+            case "test-suite-progress":
+              setBatchProgress(event.data)
+              setStreamingText("")
+              break
             case "test-suite":
               setPendingTestSuite(event.data)
               setStreamingText("")
+              setBatchProgress(null)
               onMessagesChange()
               break
             case "plan":
@@ -144,6 +151,7 @@ export function ChatArea({
         setIsStreaming(false)
         setStreamingText("")
         setContextSummary(null)
+        setBatchProgress(null)
         onMessagesChange()
       }
     },
@@ -186,7 +194,7 @@ export function ChatArea({
               onViewHistory={onViewHistory}
             />
           ))}
-          {(contextSummary || streamingText) && (
+          {(contextSummary || streamingText || batchProgress) && (
             <div className="flex w-full justify-start">
               <div className="max-w-[80%]">
                 {contextSummary && <ContextLog summary={contextSummary} />}
@@ -194,6 +202,20 @@ export function ChatArea({
                   <div className="rounded-lg px-3 py-2 text-sm leading-relaxed bg-muted text-foreground">
                     <p className="whitespace-pre-wrap">{streamingText}</p>
                     <span className="inline-block w-1.5 h-4 bg-foreground/60 animate-pulse ml-0.5" />
+                  </div>
+                )}
+                {batchProgress && !streamingText && (
+                  <div className="rounded-lg px-3 py-2 text-sm leading-relaxed bg-muted text-foreground">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block w-1.5 h-4 bg-foreground/60 animate-pulse" />
+                      <span>正在生成测试用例 ({batchProgress.generated}/{batchProgress.total})...</span>
+                    </div>
+                    <div className="mt-2 h-1.5 rounded-full bg-muted-foreground/20 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-blue-500 transition-all duration-300"
+                        style={{ width: `${(batchProgress.generated / batchProgress.total) * 100}%` }}
+                      />
+                    </div>
                   </div>
                 )}
               </div>

@@ -1,6 +1,6 @@
 {
   "name": "prompt-manager",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "Agent 驱动的对话式 Prompt 管理平台",
   "keywords": [
     "prompt",

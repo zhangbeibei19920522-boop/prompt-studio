@@ -1,10 +1,10 @@
-import type { StreamEvent, MemoryCommandData, TestSuiteGenerationData } from '@/types/ai'
+import type { StreamEvent, MemoryCommandData, TestSuiteGenerationData, TestSuiteBatchData } from '@/types/ai'
 import type { MessageReference } from '@/types/database'
 import { collectAgentContext } from './context-collector'
 import { createAiProvider } from './provider'
 import { getSettings } from '@/lib/db/repositories/settings'
 import { buildPlanMessages } from './agent-prompt'
-import { buildTestAgentMessages } from './test-agent-prompt'
+import { buildTestAgentMessages, buildBatchContinuationMessages } from './test-agent-prompt'
 import { parseAgentOutput } from './stream-handler'
 import { createMessage } from '@/lib/db/repositories/messages'
 import { createMemory, deleteMemory } from '@/lib/db/repositories/memories'
@@ -175,8 +175,14 @@ export async function* handleAgentChat(
 }
 
 /**
- * Test Agent entry point — simplified version for test suite creation.
+ * Test Agent entry point — supports batch generation for test suites.
  * Supports references (prompts + knowledge base documents) for context-aware test generation.
+ *
+ * Batch generation flow:
+ * 1. First LLM call streams normally → if response contains a test-suite-batch block
+ * 2. Check if all cases are generated (cases.length >= totalPlanned)
+ * 3. If not, loop: yield progress → build continuation prompt → call LLM → parse batch
+ * 4. Merge all batches into a single test-suite event
  */
 export async function* handleTestAgentChat(
   sessionId: string,
@@ -217,34 +223,98 @@ export async function* handleTestAgentChat(
       },
     }
 
-    // 5. Stream response
+    // 5. Stream first response
     let accumulated = ''
     for await (const chunk of provider.chatStream(messages)) {
       accumulated += chunk
       yield { type: 'text', content: chunk }
     }
 
-    // 5. Parse structured blocks
+    // 6. Parse structured blocks
     const { jsonBlocks, plainText } = parseAgentOutput(accumulated)
 
-    for (const block of jsonBlocks) {
-      if (block.type === 'plan') {
-        yield {
-          type: 'plan',
-          data: {
-            keyPoints: block.keyPoints as import('@/types/database').PlanData['keyPoints'],
-            status: 'pending',
-          },
+    // Check for batch block and handle batch generation loop
+    const batchBlock = jsonBlocks.find(b => b.type === 'test-suite-batch') as unknown as TestSuiteBatchData | undefined
+
+    if (batchBlock) {
+      // --- Batch generation mode ---
+      const allCases = [...batchBlock.cases]
+      const totalPlanned = batchBlock.totalPlanned || allCases.length
+
+      console.log('[TestAgent] Batch mode: got', allCases.length, '/', totalPlanned, 'cases')
+
+      yield {
+        type: 'test-suite-progress',
+        data: { generated: allCases.length, total: totalPlanned },
+      }
+
+      // Loop to generate remaining batches
+      const MAX_BATCH_ITERATIONS = 20 // safety limit
+      let iteration = 0
+      while (allCases.length < totalPlanned && iteration < MAX_BATCH_ITERATIONS) {
+        iteration++
+        console.log('[TestAgent] Batch iteration', iteration, '- generating more cases...')
+
+        const continuationMessages = buildBatchContinuationMessages(context, batchBlock, allCases)
+
+        let batchAccumulated = ''
+        for await (const chunk of provider.chatStream(continuationMessages)) {
+          batchAccumulated += chunk
+          // Don't yield text chunks for continuation calls — only show progress
         }
-      } else if (block.type === 'test-suite') {
+
+        const { jsonBlocks: batchBlocks } = parseAgentOutput(batchAccumulated)
+        const nextBatch = batchBlocks.find(b => b.type === 'test-suite-batch') as unknown as TestSuiteBatchData | undefined
+
+        if (nextBatch && nextBatch.cases.length > 0) {
+          allCases.push(...nextBatch.cases)
+          console.log('[TestAgent] Batch', iteration, '- got', nextBatch.cases.length, 'new cases, total:', allCases.length)
+        } else {
+          // No more cases returned, stop looping
+          console.log('[TestAgent] Batch', iteration, '- no new cases, stopping')
+          break
+        }
+
         yield {
-          type: 'test-suite',
-          data: block as unknown as TestSuiteGenerationData,
+          type: 'test-suite-progress',
+          data: { generated: Math.min(allCases.length, totalPlanned), total: totalPlanned },
+        }
+      }
+
+      // Merge into final test-suite event
+      const mergedData: TestSuiteGenerationData = {
+        name: batchBlock.name,
+        description: batchBlock.description,
+        cases: allCases.slice(0, totalPlanned), // trim to planned count
+      }
+
+      console.log('[TestAgent] Batch complete:', mergedData.cases.length, 'total cases')
+
+      yield {
+        type: 'test-suite',
+        data: mergedData,
+      }
+    } else {
+      // --- Non-batch mode (plan, old-style test-suite, etc.) ---
+      for (const block of jsonBlocks) {
+        if (block.type === 'plan') {
+          yield {
+            type: 'plan',
+            data: {
+              keyPoints: block.keyPoints as import('@/types/database').PlanData['keyPoints'],
+              status: 'pending',
+            },
+          }
+        } else if (block.type === 'test-suite') {
+          yield {
+            type: 'test-suite',
+            data: block as unknown as TestSuiteGenerationData,
+          }
         }
       }
     }
 
-    // 6. Persist assistant message
+    // 7. Persist assistant message
     createMessage({
       sessionId,
       role: 'assistant',

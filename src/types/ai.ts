@@ -103,6 +103,7 @@ export type StreamEvent =
   | { type: 'diff'; data: DiffData }
   | { type: 'memory'; data: MemoryCommandData }
   | { type: 'test-suite'; data: TestSuiteGenerationData }
+  | { type: 'test-suite-progress'; data: TestSuiteProgressData }
   | { type: 'done' }
   | { type: 'error'; message: string }
 
@@ -117,10 +118,29 @@ export type TestRunEvent =
   | { type: 'test-complete'; data: { runId: string; score: number } }
   | { type: 'test-error'; data: { error: string } }
 
+// 测试集生成进度
+export interface TestSuiteProgressData {
+  generated: number
+  total: number
+}
+
 // 测试集生成数据（Agent 对话中生成）
 export interface TestSuiteGenerationData {
   name: string
   description: string
+  cases: Array<{
+    title: string
+    context: string
+    input: string
+    expectedOutput: string
+  }>
+}
+
+// 测试集分批生成数据（Agent 每次最多 3 个用例）
+export interface TestSuiteBatchData {
+  name: string
+  description: string
+  totalPlanned: number
   cases: Array<{
     title: string
     context: string

@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.11 (2026-03-04)
+
+### 改进
+- **测试用例分批生成**: 测试集生成时 LLM 输出长度容易被截断，改为分批生成。每次最多生成 3 个用例，自动循环调用 LLM 续生成，每次携带引用的 Prompt、知识库文档和用户要求。全部生成完毕后合并为完整测试集供用户确认。前端显示生成进度条
+
+### 修改文件
+- `src/types/ai.ts` — 新增 TestSuiteBatchData、TestSuiteProgressData 类型，StreamEvent 增加 test-suite-progress 事件
+- `src/lib/ai/stream-handler.ts` — parseAgentOutput 支持解析 test-suite-batch JSON 块
+- `src/lib/ai/test-agent-prompt.ts` — 系统提示词改为分批生成（max 3），新增 buildBatchContinuationMessages 续生成函数
+- `src/lib/ai/agent.ts` — handleTestAgentChat 新增批次循环逻辑，检测 test-suite-batch → 循环调用 LLM → 合并为 test-suite 事件
+- `src/components/chat/chat-area.tsx` — 处理 test-suite-progress 事件，显示进度条和生成计数
+
 ## v0.1.10 (2026-03-04)
 
 ### Bug 修复
