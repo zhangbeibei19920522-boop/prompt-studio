@@ -1,11 +1,12 @@
-import type { StreamEvent, MemoryCommandData } from '@/types/ai'
+import type { StreamEvent, MemoryCommandData, TestSuiteGenerationData } from '@/types/ai'
 import type { MessageReference } from '@/types/database'
 import { collectAgentContext } from './context-collector'
 import { createAiProvider } from './provider'
 import { getSettings } from '@/lib/db/repositories/settings'
 import { buildPlanMessages } from './agent-prompt'
+import { buildTestAgentMessages } from './test-agent-prompt'
 import { parseAgentOutput } from './stream-handler'
-import { createMessage } from '@/lib/db/repositories/messages'
+import { createMessage, findMessagesBySession } from '@/lib/db/repositories/messages'
 import { createMemory, deleteMemory } from '@/lib/db/repositories/memories'
 import { findSessionById } from '@/lib/db/repositories/sessions'
 
@@ -169,6 +170,77 @@ export async function* handleAgentChat(
       error: message,
       stack: error instanceof Error ? error.stack : undefined,
     })
+    yield { type: 'error', message }
+  }
+}
+
+/**
+ * Test Agent entry point — simplified version for test suite creation.
+ */
+export async function* handleTestAgentChat(
+  sessionId: string,
+  content: string
+): AsyncGenerator<StreamEvent> {
+  try {
+    console.log('[TestAgent] === Chat started ===', { sessionId })
+
+    // 1. Save user message
+    createMessage({
+      sessionId,
+      role: 'user',
+      content,
+      references: [],
+      metadata: null,
+    })
+
+    // 2. Prepare AI provider (use global settings)
+    const settings = getSettings()
+    const provider = createAiProvider(settings)
+
+    // 3. Build messages with session history
+    const history = findMessagesBySession(sessionId)
+    const messages = buildTestAgentMessages(history.slice(-20), content)
+
+    // 4. Stream response
+    let accumulated = ''
+    for await (const chunk of provider.chatStream(messages)) {
+      accumulated += chunk
+      yield { type: 'text', content: chunk }
+    }
+
+    // 5. Parse structured blocks
+    const { jsonBlocks, plainText } = parseAgentOutput(accumulated)
+
+    for (const block of jsonBlocks) {
+      if (block.type === 'plan') {
+        yield {
+          type: 'plan',
+          data: {
+            keyPoints: block.keyPoints as import('@/types/database').PlanData['keyPoints'],
+            status: 'pending',
+          },
+        }
+      } else if (block.type === 'test-suite') {
+        yield {
+          type: 'test-suite',
+          data: block as unknown as TestSuiteGenerationData,
+        }
+      }
+    }
+
+    // 6. Persist assistant message
+    createMessage({
+      sessionId,
+      role: 'assistant',
+      content: plainText || accumulated,
+      references: [],
+      metadata: null,
+    })
+
+    console.log('[TestAgent] === Chat complete ===')
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '未知错误'
+    console.error('[TestAgent] === Chat FAILED ===', message)
     yield { type: 'error', message }
   }
 }

@@ -1,4 +1,12 @@
-import type { ApiResponse, CreateMemoryRequest, UpdateMemoryRequest } from '@/types/api'
+import type {
+  ApiResponse,
+  CreateMemoryRequest,
+  UpdateMemoryRequest,
+  CreateTestSuiteRequest,
+  UpdateTestSuiteRequest,
+  CreateTestCaseRequest,
+  UpdateTestCaseRequest,
+} from '@/types/api'
 import type {
   GlobalSettings,
   Project,
@@ -8,6 +16,9 @@ import type {
   Message,
   Memory,
   PromptVersion,
+  TestSuite,
+  TestCase,
+  TestRun,
 } from '@/types/database'
 
 async function fetchApi<T>(url: string, options?: RequestInit): Promise<T> {
@@ -150,4 +161,55 @@ export const memoriesApi = {
     }),
   delete: (id: string) =>
     fetchApi<null>(`/api/memories/${id}`, { method: 'DELETE' }),
+}
+
+// Test Suites
+export const testSuitesApi = {
+  listByProject: (projectId: string) =>
+    fetchApi<TestSuite[]>(`/api/projects/${projectId}/test-suites`),
+  get: (id: string) =>
+    fetchApi<TestSuite & { cases: TestCase[] }>(`/api/test-suites/${id}`),
+  create: (projectId: string, data: CreateTestSuiteRequest) =>
+    fetchApi<TestSuite>(`/api/projects/${projectId}/test-suites`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  update: (id: string, data: UpdateTestSuiteRequest) =>
+    fetchApi<TestSuite>(`/api/test-suites/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  delete: (id: string) =>
+    fetchApi<null>(`/api/test-suites/${id}`, { method: 'DELETE' }),
+}
+
+// Test Cases
+export const testCasesApi = {
+  listBySuite: (suiteId: string) =>
+    fetchApi<TestCase[]>(`/api/test-suites/${suiteId}/cases`),
+  create: (suiteId: string, data: CreateTestCaseRequest) =>
+    fetchApi<TestCase>(`/api/test-suites/${suiteId}/cases`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  createBatch: (suiteId: string, cases: CreateTestCaseRequest[]) =>
+    fetchApi<TestCase[]>(`/api/test-suites/${suiteId}/cases`, {
+      method: 'POST',
+      body: JSON.stringify(cases),
+    }),
+  update: (id: string, data: UpdateTestCaseRequest) =>
+    fetchApi<TestCase>(`/api/test-cases/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  delete: (id: string) =>
+    fetchApi<null>(`/api/test-cases/${id}`, { method: 'DELETE' }),
+}
+
+// Test Runs
+export const testRunsApi = {
+  listBySuite: (suiteId: string) =>
+    fetchApi<TestRun[]>(`/api/test-suites/${suiteId}/runs`),
+  get: (id: string) =>
+    fetchApi<TestRun>(`/api/test-runs/${id}`),
 }
