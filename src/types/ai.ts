@@ -102,5 +102,29 @@ export type StreamEvent =
   | { type: 'preview'; data: PreviewData }
   | { type: 'diff'; data: DiffData }
   | { type: 'memory'; data: MemoryCommandData }
+  | { type: 'test-suite'; data: TestSuiteGenerationData }
   | { type: 'done' }
   | { type: 'error'; message: string }
+
+// 测试运行 SSE 事件
+export type TestRunEvent =
+  | { type: 'test-start'; data: { totalCases: number } }
+  | { type: 'test-case-start'; data: { caseId: string; index: number; title: string } }
+  | { type: 'test-case-done'; data: { caseId: string; actualOutput: string } }
+  | { type: 'eval-start' }
+  | { type: 'eval-case-done'; data: { caseId: string; passed: boolean; score: number; reason: string } }
+  | { type: 'eval-report'; data: import('./database').TestReport }
+  | { type: 'test-complete'; data: { runId: string; score: number } }
+  | { type: 'test-error'; data: { error: string } }
+
+// 测试集生成数据（Agent 对话中生成）
+export interface TestSuiteGenerationData {
+  name: string
+  description: string
+  cases: Array<{
+    title: string
+    context: string
+    input: string
+    expectedOutput: string
+  }>
+}

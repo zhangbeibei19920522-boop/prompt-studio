@@ -107,3 +107,43 @@ CREATE TABLE IF NOT EXISTS session_extraction_progress (
 CREATE INDEX IF NOT EXISTS idx_memories_scope ON memories(scope);
 CREATE INDEX IF NOT EXISTS idx_memories_project ON memories(project_id);
 CREATE INDEX IF NOT EXISTS idx_memories_scope_project ON memories(scope, project_id);
+
+-- 自动化测试系统
+CREATE TABLE IF NOT EXISTS test_suites (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  prompt_id TEXT REFERENCES prompts(id) ON DELETE SET NULL,
+  prompt_version_id TEXT REFERENCES prompt_versions(id) ON DELETE SET NULL,
+  config TEXT NOT NULL DEFAULT '{}',
+  status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft', 'ready', 'running', 'completed')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS test_cases (
+  id TEXT PRIMARY KEY,
+  test_suite_id TEXT NOT NULL REFERENCES test_suites(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  context TEXT NOT NULL DEFAULT '',
+  input TEXT NOT NULL,
+  expected_output TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS test_runs (
+  id TEXT PRIMARY KEY,
+  test_suite_id TEXT NOT NULL REFERENCES test_suites(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'running' CHECK(status IN ('running', 'completed', 'failed')),
+  results TEXT NOT NULL DEFAULT '[]',
+  report TEXT NOT NULL DEFAULT '{}',
+  score REAL,
+  started_at TEXT NOT NULL DEFAULT (datetime('now')),
+  completed_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_test_suites_project ON test_suites(project_id);
+CREATE INDEX IF NOT EXISTS idx_test_cases_suite ON test_cases(test_suite_id);
+CREATE INDEX IF NOT EXISTS idx_test_runs_suite ON test_runs(test_suite_id);

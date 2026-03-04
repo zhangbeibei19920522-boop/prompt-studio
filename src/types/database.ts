@@ -148,3 +148,68 @@ export interface SessionExtractionProgress {
   lastExtractedMessageIndex: number
   updatedAt: string
 }
+
+// 测试集配置
+export interface TestSuiteConfig {
+  provider: string
+  model: string
+  apiKey: string
+  baseUrl: string
+}
+
+// 测试集
+export interface TestSuite {
+  id: string
+  projectId: string
+  sessionId: string | null
+  name: string
+  description: string
+  promptId: string | null
+  promptVersionId: string | null
+  config: TestSuiteConfig
+  status: 'draft' | 'ready' | 'running' | 'completed'
+  createdAt: string
+  updatedAt: string
+}
+
+// 测试用例
+export interface TestCase {
+  id: string
+  testSuiteId: string
+  title: string
+  context: string
+  input: string
+  expectedOutput: string
+  sortOrder: number
+}
+
+// 单条测试结果
+export interface TestCaseResult {
+  testCaseId: string
+  actualOutput: string
+  passed: boolean
+  score: number
+  reason: string
+}
+
+// 测试报告
+export interface TestReport {
+  summary: string
+  totalCases: number
+  passedCases: number
+  score: number
+  improvements: string[]
+  details: string
+}
+
+// 测试运行记录
+export interface TestRun {
+  id: string
+  testSuiteId: string
+  status: 'running' | 'completed' | 'failed'
+  results: TestCaseResult[]
+  report: TestReport | null
+  score: number | null
+  startedAt: string
+  completedAt: string | null
+}

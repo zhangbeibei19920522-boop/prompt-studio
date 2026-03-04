@@ -41,3 +41,39 @@ export interface ApplyPromptRequest {
   variables: Prompt['variables']
   changeNote: string
 }
+
+// 测试集请求类型
+export interface CreateTestSuiteRequest {
+  name: string
+  description?: string
+  sessionId?: string
+}
+
+export interface UpdateTestSuiteRequest {
+  name?: string
+  description?: string
+  promptId?: string
+  promptVersionId?: string
+  config?: import('./database').TestSuiteConfig
+  status?: 'draft' | 'ready' | 'running' | 'completed'
+}
+
+export interface CreateTestCaseRequest {
+  title: string
+  context?: string
+  input: string
+  expectedOutput: string
+  sortOrder?: number
+}
+
+export interface UpdateTestCaseRequest {
+  title?: string
+  context?: string
+  input?: string
+  expectedOutput?: string
+  sortOrder?: number
+}
+
+export interface RunTestRequest {
+  promptId: string
+}
