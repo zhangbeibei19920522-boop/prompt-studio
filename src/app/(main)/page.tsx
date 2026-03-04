@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { TopBar } from "@/components/layout/top-bar"
 import { Sidebar } from "@/components/layout/sidebar"
@@ -20,8 +20,9 @@ import {
   documentsApi,
   sessionsApi,
   messagesApi,
+  memoriesApi,
 } from "@/lib/utils/api-client"
-import type { Project, Prompt, Document, Session, Message, PromptVersion, PreviewData, DiffData } from "@/types/database"
+import type { Project, Prompt, Document, Session, Message, Memory, PromptVersion, PreviewData, DiffData } from "@/types/database"
 import { applyPrompt } from "@/lib/utils/sse-client"
 
 type RightPanelView =
@@ -47,6 +48,11 @@ export default function MainPage() {
   const [sessions, setSessions] = useState<Session[]>([])
   const [messages, setMessages] = useState<Message[]>([])
   const [versions, setVersions] = useState<PromptVersion[]>([])
+  const [projectMemories, setProjectMemories] = useState<Memory[]>([])
+
+  // Memory extraction tracking
+  const prevSessionIdRef = useRef<string | null>(null)
+  const [memoryBadgeCount, setMemoryBadgeCount] = useState(0)
 
   // Dialogs
   const [createProjectOpen, setCreateProjectOpen] = useState(false)
@@ -68,17 +74,51 @@ export default function MainPage() {
     }).catch(console.error)
   }, [])
 
+  const refreshProjectMemories = useCallback(() => {
+    if (!currentProjectId) return
+    memoriesApi.listByProject(currentProjectId).then(setProjectMemories).catch(console.error)
+  }, [currentProjectId])
+
   // Load project data when project changes
   useEffect(() => {
     if (!currentProjectId) return
     promptsApi.listByProject(currentProjectId).then(setPrompts).catch(console.error)
     documentsApi.listByProject(currentProjectId).then(setDocuments).catch(console.error)
+    memoriesApi.listByProject(currentProjectId).then(setProjectMemories).catch(console.error)
     sessionsApi.listByProject(currentProjectId).then((data) => {
       setSessions(data)
       if (data.length > 0) setCurrentSessionId(data[0].id)
       else setCurrentSessionId(null)
     }).catch(console.error)
   }, [currentProjectId])
+
+  // Trigger memory extraction when switching sessions
+  useEffect(() => {
+    const prevId = prevSessionIdRef.current
+    prevSessionIdRef.current = currentSessionId
+
+    if (prevId && prevId !== currentSessionId) {
+      // Fire-and-forget extraction for previous session
+      fetch('/api/ai/extract-memories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: prevId }),
+      })
+        .then((res) => res.json())
+        .then((json) => {
+          if (json.success && json.data?.actions) {
+            const newCount = json.data.actions.filter(
+              (a: { action: string }) => a.action === 'insert' || a.action === 'update'
+            ).length
+            if (newCount > 0) {
+              setMemoryBadgeCount(newCount)
+              refreshProjectMemories()
+            }
+          }
+        })
+        .catch(console.error)
+    }
+  }, [currentSessionId, refreshProjectMemories])
 
   // Load messages when session changes
   useEffect(() => {
@@ -420,6 +460,23 @@ export default function MainPage() {
               setCurrentProjectId(remaining[0]?.id ?? null)
               setRightPanelView(null)
             }}
+            memories={projectMemories}
+            onMemoryAdd={async (data) => {
+              await memoriesApi.createForProject(currentProject.id, data)
+              refreshProjectMemories()
+            }}
+            onMemoryEdit={async (id, data) => {
+              await memoriesApi.update(id, data)
+              refreshProjectMemories()
+            }}
+            onMemoryDelete={async (id) => {
+              await memoriesApi.delete(id)
+              refreshProjectMemories()
+            }}
+            onMemoryPromote={async (id) => {
+              await memoriesApi.promote(id)
+              refreshProjectMemories()
+            }}
           />
         )
     }
@@ -454,6 +511,11 @@ export default function MainPage() {
           onSettingsClick={() => setRightPanelView({ type: "project-settings" })}
           onDeletePrompt={handleDeletePrompt}
           onDeleteDocument={handleDeleteDocument}
+          memoryBadgeCount={memoryBadgeCount}
+          onMemoryBadgeClick={() => {
+            setMemoryBadgeCount(0)
+            setRightPanelView({ type: "project-settings" })
+          }}
         />
         <main className="flex flex-1 overflow-hidden">
           <ChatArea
@@ -472,6 +534,12 @@ export default function MainPage() {
               if (resolved) handleViewHistory(resolved.id)
             }}
             onNewSession={handleNewSession}
+            onMemoryCommand={(data) => {
+              // Refresh memories after create/delete commands
+              if (data.command === 'create' || data.command === 'delete') {
+                refreshProjectMemories()
+              }
+            }}
           />
         </main>
         <RightPanel

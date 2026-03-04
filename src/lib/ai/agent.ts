@@ -1,4 +1,4 @@
-import type { StreamEvent } from '@/types/ai'
+import type { StreamEvent, MemoryCommandData } from '@/types/ai'
 import type { MessageReference } from '@/types/database'
 import { collectAgentContext } from './context-collector'
 import { createAiProvider } from './provider'
@@ -6,6 +6,8 @@ import { getSettings } from '@/lib/db/repositories/settings'
 import { buildPlanMessages } from './agent-prompt'
 import { parseAgentOutput } from './stream-handler'
 import { createMessage } from '@/lib/db/repositories/messages'
+import { createMemory, deleteMemory } from '@/lib/db/repositories/memories'
+import { findSessionById } from '@/lib/db/repositories/sessions'
 
 /**
  * Main Agent entry point that orchestrates the full chat workflow.
@@ -68,6 +70,8 @@ export async function* handleAgentChat(
         hasGlobalBusiness: !!(context.globalBusiness.description || context.globalBusiness.goal || context.globalBusiness.background),
         hasProjectBusiness: !!(context.projectBusiness.description || context.projectBusiness.goal || context.projectBusiness.background),
         historyMessageCount: context.sessionHistory.length,
+        globalMemoryCount: context.globalMemories.length,
+        projectMemoryCount: context.projectMemories.length,
       },
     }
 
@@ -105,6 +109,39 @@ export async function* handleAgentChat(
         yield {
           type: 'diff',
           data: block as unknown as import('@/types/database').DiffData,
+        }
+      } else if (block.type === 'memory') {
+        const memoryData = block.data as unknown as MemoryCommandData | undefined
+        const memoryCommand = memoryData ?? (block as unknown as MemoryCommandData)
+
+        if (memoryCommand.command === 'create' && memoryCommand.content) {
+          // Determine projectId for project-scoped memories
+          let projectId: string | null = null
+          if (memoryCommand.scope === 'project') {
+            const currentSession = findSessionById(sessionId)
+            projectId = currentSession?.projectId ?? null
+          }
+
+          const created = createMemory({
+            scope: memoryCommand.scope,
+            projectId,
+            category: 'preference',
+            content: memoryCommand.content,
+            source: 'manual',
+            sourceSessionId: sessionId,
+          })
+          console.log('[Agent] Memory created:', { id: created.id, scope: created.scope, content: created.content })
+        } else if (memoryCommand.command === 'delete' && memoryCommand.memoryId) {
+          const deleted = deleteMemory(memoryCommand.memoryId)
+          console.log('[Agent] Memory deleted:', { memoryId: memoryCommand.memoryId, success: deleted })
+        } else if (memoryCommand.command === 'list') {
+          // list is handled client-side, just log
+          console.log('[Agent] Memory list requested:', { scope: memoryCommand.scope })
+        }
+
+        yield {
+          type: 'memory',
+          data: memoryCommand,
         }
       }
     }

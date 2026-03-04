@@ -4,8 +4,9 @@ import { findProjectById } from '@/lib/db/repositories/projects'
 import { findPromptById } from '@/lib/db/repositories/prompts'
 import { findDocumentById } from '@/lib/db/repositories/documents'
 import { findMessagesBySession } from '@/lib/db/repositories/messages'
+import { findGlobalMemories, findProjectMemories } from '@/lib/db/repositories/memories'
 import type { AgentContext, BusinessInfo } from '@/types/ai'
-import type { MessageReference } from '@/types/database'
+import type { MessageReference, Memory } from '@/types/database'
 
 const EMPTY_BUSINESS: BusinessInfo = {
   description: '',
@@ -82,9 +83,23 @@ export function collectAgentContext(
     .map((ref) => findDocumentById(ref.id))
     .filter((d): d is NonNullable<typeof d> => d !== null)
 
+  // 5. Load memories (global + project)
+  let globalMemories: Memory[] = []
+  let projectMemories: Memory[] = []
+  try {
+    globalMemories = findGlobalMemories()
+    if (session) {
+      projectMemories = findProjectMemories(session.projectId)
+    }
+  } catch (error) {
+    console.error('[ContextCollector] Failed to load memories:', error)
+  }
+
   return {
     globalBusiness,
     projectBusiness,
+    globalMemories,
+    projectMemories,
     referencedPrompts,
     referencedDocuments,
     sessionHistory,

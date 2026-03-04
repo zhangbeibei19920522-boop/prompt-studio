@@ -1,4 +1,4 @@
-import type { ApiResponse } from '@/types/api'
+import type { ApiResponse, CreateMemoryRequest, UpdateMemoryRequest } from '@/types/api'
 import type {
   GlobalSettings,
   Project,
@@ -6,6 +6,7 @@ import type {
   Document,
   Session,
   Message,
+  Memory,
   PromptVersion,
 } from '@/types/database'
 
@@ -120,4 +121,33 @@ export const sessionsApi = {
 export const messagesApi = {
   listBySession: (sessionId: string) =>
     fetchApi<Message[]>(`/api/sessions/${sessionId}/messages`),
+}
+
+// Memories
+export const memoriesApi = {
+  listGlobal: () => fetchApi<Memory[]>('/api/memories'),
+  listByProject: (projectId: string) =>
+    fetchApi<Memory[]>(`/api/projects/${projectId}/memories`),
+  create: (data: CreateMemoryRequest) =>
+    fetchApi<Memory>('/api/memories', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  createForProject: (projectId: string, data: Omit<CreateMemoryRequest, 'scope' | 'projectId'>) =>
+    fetchApi<Memory>(`/api/projects/${projectId}/memories`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  update: (id: string, data: UpdateMemoryRequest) =>
+    fetchApi<Memory>(`/api/memories/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  promote: (id: string) =>
+    fetchApi<Memory>(`/api/memories/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ promote: true }),
+    }),
+  delete: (id: string) =>
+    fetchApi<null>(`/api/memories/${id}`, { method: 'DELETE' }),
 }

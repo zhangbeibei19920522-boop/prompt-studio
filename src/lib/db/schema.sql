@@ -84,3 +84,26 @@ CREATE INDEX IF NOT EXISTS idx_prompt_versions_prompt ON prompt_versions(prompt_
 CREATE INDEX IF NOT EXISTS idx_documents_project ON documents(project_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id);
 CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id);
+
+-- 记忆系统
+CREATE TABLE IF NOT EXISTS memories (
+  id TEXT PRIMARY KEY,
+  scope TEXT NOT NULL CHECK(scope IN ('global', 'project')),
+  project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+  category TEXT NOT NULL CHECK(category IN ('preference', 'fact')),
+  content TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'manual' CHECK(source IN ('auto', 'manual')),
+  source_session_id TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS session_extraction_progress (
+  session_id TEXT PRIMARY KEY,
+  last_extracted_message_index INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_memories_scope ON memories(scope);
+CREATE INDEX IF NOT EXISTS idx_memories_project ON memories(project_id);
+CREATE INDEX IF NOT EXISTS idx_memories_scope_project ON memories(scope, project_id);

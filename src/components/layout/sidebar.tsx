@@ -36,6 +36,8 @@ interface SidebarProps {
   onSettingsClick: () => void
   onDeletePrompt?: (id: string) => void
   onDeleteDocument?: (id: string) => void
+  memoryBadgeCount?: number
+  onMemoryBadgeClick?: () => void
 }
 
 function getStatusVariant(status: string): "default" | "secondary" | "outline" {
@@ -143,6 +145,8 @@ export function Sidebar({
   onSettingsClick,
   onDeletePrompt,
   onDeleteDocument,
+  memoryBadgeCount,
+  onMemoryBadgeClick,
 }: SidebarProps) {
   return (
     <aside className="flex h-full w-60 shrink-0 flex-col border-r bg-white">
@@ -293,6 +297,15 @@ export function Sidebar({
             >
               <Settings className="size-3.5 shrink-0" />
               <span>⚙ 项目设置</span>
+              {memoryBadgeCount && memoryBadgeCount > 0 ? (
+                <Badge
+                  variant="default"
+                  className="ml-auto text-[10px] px-1 py-0 cursor-pointer"
+                  onClick={(e) => { e.stopPropagation(); onMemoryBadgeClick?.() }}
+                >
+                  +{memoryBadgeCount} 记忆
+                </Badge>
+              ) : null}
             </button>
           </div>
         </ScrollArea>

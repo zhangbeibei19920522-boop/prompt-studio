@@ -1,4 +1,4 @@
-import type { MessageReference, Project, Prompt } from './database'
+import type { Memory, MessageReference, Project, Prompt } from './database'
 
 // 通用 API 响应
 export interface ApiResponse<T> {
@@ -20,6 +20,13 @@ export interface ChatRequest {
   content: string
   references: MessageReference[]
 }
+
+// 记忆请求类型
+export type CreateMemoryRequest = Pick<Memory, 'scope' | 'category' | 'content'> & {
+  projectId?: string
+}
+
+export type UpdateMemoryRequest = Partial<Pick<Memory, 'content' | 'category'>>
 
 // AI 应用修改请求
 export interface ApplyPromptRequest {
