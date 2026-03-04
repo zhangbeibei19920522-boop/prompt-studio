@@ -1,5 +1,44 @@
 # Changelog
 
+## v0.1.8 (2026-03-04)
+
+### 新功能
+- **记忆系统**: Agent 可跨会话记住用户偏好和业务知识，生成更贴合需求的 prompt
+  - 两层结构：全局记忆 + 项目记忆，项目记忆优先级高于全局
+  - 混合模式：Agent 自动提取 + 用户手动管理
+  - 自动提取：切换/新建会话时后台增量提取，单次 LLM 调用完成提取+去重
+  - 对话指令：支持"记住 XXX"、"忘掉 XXX"、"我的记忆有哪些"等自然语言指令
+  - 管理 UI：全局设置和项目设置各新增"记忆" tab，支持增删改查、筛选、提升为全局
+  - 上下文注入：Agent 系统提示词自动注入记忆，思考链日志显示记忆计数
+  - 侧边栏通知：提取完成后项目设置按钮旁显示"+N 记忆"徽标
+  - 各层上限 50 条，超限先合并再淘汰
+
+### 新增文件
+- `src/lib/db/repositories/memories.ts` — 记忆 CRUD + promoteToGlobal
+- `src/lib/db/repositories/extraction-progress.ts` — 提取进度追踪
+- `src/lib/ai/memory-extraction.ts` — LLM 记忆提取服务
+- `src/app/api/memories/route.ts` — 全局记忆 API（GET + POST）
+- `src/app/api/memories/[id]/route.ts` — 单条记忆 API（GET + PUT + DELETE）
+- `src/app/api/projects/[id]/memories/route.ts` — 项目记忆 API（GET + POST）
+- `src/app/api/ai/extract-memories/route.ts` — 提取触发 API
+- `src/components/memory/memory-list.tsx` — 记忆列表组件（分类分组、筛选、增删改）
+
+### 修改文件
+- `src/lib/db/schema.sql` — 新增 memories 表 + session_extraction_progress 表 + 3 索引
+- `src/types/database.ts` — 新增 Memory、SessionExtractionProgress 接口
+- `src/types/ai.ts` — AgentContext 增加记忆字段、StreamEvent 增加 memory 事件、新增提取/指令类型
+- `src/types/api.ts` — 新增 CreateMemoryRequest、UpdateMemoryRequest
+- `src/lib/utils/api-client.ts` — 新增 memoriesApi 命名空间
+- `src/lib/ai/context-collector.ts` — 从数据库加载全局/项目记忆
+- `src/lib/ai/agent-prompt.ts` — 系统提示词注入记忆系统章节 + 上下文注入记忆块
+- `src/lib/ai/agent.ts` — 处理 memory 类型 JSON 块（create/delete/list）
+- `src/lib/ai/stream-handler.ts` — 解析 memory JSON 块
+- `src/app/(main)/settings/page.tsx` — Tabs 包裹 + 新增记忆 tab
+- `src/app/(main)/page.tsx` — 会话切换触发提取 + 记忆状态 + 指令回调 + 徽标
+- `src/components/layout/sidebar.tsx` — 新增记忆徽标通知
+- `src/components/chat/chat-area.tsx` — memory 事件处理 + 思考链记忆计数
+- `src/components/project/project-settings.tsx` — Tabs 包裹 + 新增记忆 tab
+
 ## v0.1.7 (2026-03-03)
 
 ### Bug 修复

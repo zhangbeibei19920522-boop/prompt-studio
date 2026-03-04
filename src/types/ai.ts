@@ -1,5 +1,6 @@
 import type {
   DiffData,
+  Memory,
   Message,
   PlanData,
   PreviewData,
@@ -47,6 +48,8 @@ export interface BusinessInfo {
 export interface AgentContext {
   globalBusiness: BusinessInfo
   projectBusiness: BusinessInfo
+  globalMemories: Memory[]
+  projectMemories: Memory[]
   referencedPrompts: Prompt[]
   referencedDocuments: Document[]
   sessionHistory: Message[]
@@ -65,6 +68,30 @@ export interface AgentContextSummary {
   hasGlobalBusiness: boolean
   hasProjectBusiness: boolean
   historyMessageCount: number
+  globalMemoryCount: number
+  projectMemoryCount: number
+}
+
+// 记忆提取动作
+export interface MemoryExtractionAction {
+  action: 'insert' | 'update' | 'skip'
+  content?: string
+  category?: 'preference' | 'fact'
+  targetId?: string
+}
+
+// 记忆提取结果
+export interface MemoryExtractionResult {
+  actions: MemoryExtractionAction[]
+  sessionId: string
+}
+
+// 记忆指令数据
+export interface MemoryCommandData {
+  command: 'create' | 'delete' | 'list'
+  scope: 'global' | 'project'
+  content?: string
+  memoryId?: string
 }
 
 // 流式响应事件
@@ -74,5 +101,6 @@ export type StreamEvent =
   | { type: 'plan'; data: PlanData }
   | { type: 'preview'; data: PreviewData }
   | { type: 'diff'; data: DiffData }
+  | { type: 'memory'; data: MemoryCommandData }
   | { type: 'done' }
   | { type: 'error'; message: string }

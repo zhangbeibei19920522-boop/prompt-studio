@@ -13,6 +13,9 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { MemoryList } from "@/components/memory/memory-list"
+import type { Memory } from "@/types/database"
 
 type Project = {
   id: string
@@ -27,9 +30,14 @@ type Props = {
   project: Project
   onSave: (data: Partial<Project>) => void
   onDelete: () => void
+  memories?: Memory[]
+  onMemoryAdd?: (data: { content: string; category: "preference" | "fact" }) => void
+  onMemoryEdit?: (id: string, data: { content: string; category: "preference" | "fact" }) => void
+  onMemoryDelete?: (id: string) => void
+  onMemoryPromote?: (id: string) => void
 }
 
-export function ProjectSettings({ project, onSave, onDelete }: Props) {
+export function ProjectSettings({ project, onSave, onDelete, memories = [], onMemoryAdd, onMemoryEdit, onMemoryDelete, onMemoryPromote }: Props) {
   const [basicInfo, setBasicInfo] = React.useState({
     name: project.name,
     description: project.description,
@@ -72,7 +80,13 @@ export function ProjectSettings({ project, onSave, onDelete }: Props) {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <Tabs defaultValue="settings" className="flex flex-col gap-4">
+      <TabsList>
+        <TabsTrigger value="settings">设置</TabsTrigger>
+        <TabsTrigger value="memory">记忆</TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="settings" className="flex flex-col gap-6 mt-0">
       {/* 基本信息 */}
       <Card>
         <CardHeader>
@@ -213,6 +227,18 @@ export function ProjectSettings({ project, onSave, onDelete }: Props) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+      </TabsContent>
+
+      <TabsContent value="memory" className="mt-0">
+        <MemoryList
+          memories={memories}
+          scope="project"
+          onAdd={onMemoryAdd ?? (() => {})}
+          onEdit={onMemoryEdit ?? (() => {})}
+          onDelete={onMemoryDelete ?? (() => {})}
+          onPromote={onMemoryPromote}
+        />
+      </TabsContent>
+    </Tabs>
   )
 }

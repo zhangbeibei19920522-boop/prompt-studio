@@ -8,7 +8,7 @@ import { MessageBubble } from "./message-bubble"
 import { ChatInput } from "./chat-input"
 import { streamChat } from "@/lib/utils/sse-client"
 import type { Message, MessageReference, PreviewData, DiffData, PlanData } from "@/types/database"
-import type { StreamEvent, AgentContextSummary } from "@/types/ai"
+import type { StreamEvent, AgentContextSummary, MemoryCommandData } from "@/types/ai"
 
 function ContextLog({ summary }: { summary: AgentContextSummary }) {
   const [open, setOpen] = useState(false)
@@ -20,6 +20,10 @@ function ContextLog({ summary }: { summary: AgentContextSummary }) {
     items.push(`Prompt: ${summary.referencedPrompts.map((p) => p.title).join(", ")}`)
   if (summary.referencedDocuments.length > 0)
     items.push(`文档: ${summary.referencedDocuments.map((d) => d.name).join(", ")}`)
+  if (summary.globalMemoryCount > 0)
+    items.push(`全局记忆: ${summary.globalMemoryCount} 条`)
+  if (summary.projectMemoryCount > 0)
+    items.push(`项目记忆: ${summary.projectMemoryCount} 条`)
   if (summary.historyMessageCount > 0)
     items.push(`历史消息: ${summary.historyMessageCount} 条`)
 
@@ -60,6 +64,7 @@ interface ChatAreaProps {
   onEditInPanel?: (data: PreviewData | DiffData) => void
   onViewHistory?: (promptId: string) => void
   onNewSession?: () => void
+  onMemoryCommand?: (data: MemoryCommandData) => void
 }
 
 export function ChatArea({
@@ -73,6 +78,7 @@ export function ChatArea({
   onEditInPanel,
   onViewHistory,
   onNewSession,
+  onMemoryCommand,
 }: ChatAreaProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
   const [streamingText, setStreamingText] = useState("")
@@ -103,6 +109,9 @@ export function ChatArea({
               break
             case "text":
               setStreamingText((prev) => prev + event.content)
+              break
+            case "memory":
+              onMemoryCommand?.(event.data)
               break
             case "plan":
             case "preview":

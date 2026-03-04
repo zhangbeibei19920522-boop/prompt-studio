@@ -7,7 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
-import { settingsApi } from "@/lib/utils/api-client"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { settingsApi, memoriesApi } from "@/lib/utils/api-client"
+import { MemoryList } from "@/components/memory/memory-list"
+import type { Memory } from "@/types/database"
 
 type Provider =
   | "OpenAI"
@@ -74,6 +77,16 @@ export default function SettingsPage() {
   const [globalBusiness, setGlobalBusiness] =
     React.useState<GlobalBusinessInfo>(INITIAL_GLOBAL_BUSINESS)
   const [loaded, setLoaded] = React.useState(false)
+  const [globalMemories, setGlobalMemories] = React.useState<Memory[]>([])
+
+  // Load global memories
+  const refreshMemories = React.useCallback(() => {
+    memoriesApi.listGlobal().then(setGlobalMemories).catch(console.error)
+  }, [])
+
+  React.useEffect(() => {
+    refreshMemories()
+  }, [refreshMemories])
 
   // Load settings from API on mount
   React.useEffect(() => {
@@ -156,6 +169,13 @@ export default function SettingsPage() {
       </div>
 
       <div className="mx-auto max-w-2xl px-4 py-8 flex flex-col gap-6">
+        <Tabs defaultValue="settings">
+          <TabsList>
+            <TabsTrigger value="settings">设置</TabsTrigger>
+            <TabsTrigger value="memory">记忆</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="settings" className="flex flex-col gap-6 mt-4">
         {/* AI 模型配置 */}
         <Card>
           <CardHeader>
@@ -276,6 +296,27 @@ export default function SettingsPage() {
             </div>
           </CardContent>
         </Card>
+          </TabsContent>
+
+          <TabsContent value="memory" className="mt-4">
+            <MemoryList
+              memories={globalMemories}
+              scope="global"
+              onAdd={async (data) => {
+                await memoriesApi.create({ scope: "global", ...data })
+                refreshMemories()
+              }}
+              onEdit={async (id, data) => {
+                await memoriesApi.update(id, data)
+                refreshMemories()
+              }}
+              onDelete={async (id) => {
+                await memoriesApi.delete(id)
+                refreshMemories()
+              }}
+            />
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   )

@@ -128,3 +128,23 @@ export interface DiffData {
   oldContent: string
   newContent: string
 }
+
+// 记忆
+export interface Memory {
+  id: string
+  scope: 'global' | 'project'
+  projectId: string | null
+  category: 'preference' | 'fact'
+  content: string
+  source: 'auto' | 'manual'
+  sourceSessionId: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+// 会话提取进度
+export interface SessionExtractionProgress {
+  sessionId: string
+  lastExtractedMessageIndex: number
+  updatedAt: string
+}
