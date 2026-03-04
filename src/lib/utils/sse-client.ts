@@ -173,7 +173,7 @@ export async function* streamTestRun(
       try {
         const event: TestRunEvent = JSON.parse(payload)
         yield event
-        if (event.type === 'complete' || event.type === 'error') return
+        if (event.type === 'test-complete' || event.type === 'test-error') return
       } catch {
         // Skip malformed data
       }

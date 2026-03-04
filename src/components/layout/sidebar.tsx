@@ -38,6 +38,11 @@ interface SidebarProps {
   onDeleteDocument?: (id: string) => void
   memoryBadgeCount?: number
   onMemoryBadgeClick?: () => void
+  testSuites?: Array<{ id: string; name: string; status: string }>
+  currentTestSuiteId?: string | null
+  onTestSuiteClick?: (id: string) => void
+  onNewTestSuite?: () => void
+  onDeleteTestSuite?: (id: string) => void
 }
 
 function getStatusVariant(status: string): "default" | "secondary" | "outline" {
@@ -147,6 +152,11 @@ export function Sidebar({
   onDeleteDocument,
   memoryBadgeCount,
   onMemoryBadgeClick,
+  testSuites,
+  currentTestSuiteId,
+  onTestSuiteClick,
+  onNewTestSuite,
+  onDeleteTestSuite,
 }: SidebarProps) {
   return (
     <aside className="flex h-full w-60 shrink-0 flex-col border-r bg-white">
@@ -289,6 +299,57 @@ export function Sidebar({
                 </div>
               ))}
             </CollapsibleGroup>
+
+            {/* Test Suites Group */}
+            {testSuites && (
+              <CollapsibleGroup
+                label={
+                  <span className="flex items-center gap-1">
+                    <span>🧪</span>
+                    <span>测试</span>
+                  </span>
+                }
+                count={testSuites.length}
+                actions={onNewTestSuite ? [{ icon: <Plus className="size-3" />, title: "新建测试集", onClick: onNewTestSuite }] : []}
+              >
+                {testSuites.length === 0 && (
+                  <p className="px-6 py-1 text-xs text-muted-foreground">暂无测试集</p>
+                )}
+                {testSuites.map((suite) => (
+                  <div
+                    key={suite.id}
+                    className={cn(
+                      "group flex w-full items-center gap-1 px-6 py-1 text-left hover:bg-accent transition-colors rounded-sm",
+                      currentTestSuiteId === suite.id && "bg-accent"
+                    )}
+                  >
+                    <button
+                      onClick={() => onTestSuiteClick?.(suite.id)}
+                      className="flex flex-1 items-center gap-2 min-w-0"
+                    >
+                      <span className="flex-1 truncate text-xs text-left" title={suite.name}>
+                        {truncateText(suite.name)}
+                      </span>
+                      <Badge
+                        variant={suite.status === 'completed' || suite.status === 'ready' ? 'default' : 'secondary'}
+                        className="shrink-0 text-[10px] px-1 py-0"
+                      >
+                        {suite.status === 'draft' ? '草稿' : suite.status === 'ready' ? '就绪' : suite.status === 'running' ? '运行中' : '已完成'}
+                      </Badge>
+                    </button>
+                    {onDeleteTestSuite && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onDeleteTestSuite(suite.id) }}
+                        className="hidden group-hover:block shrink-0 p-0.5 text-muted-foreground hover:text-destructive transition-colors"
+                        title="删除测试集"
+                      >
+                        <X className="size-3" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </CollapsibleGroup>
+            )}
 
             {/* Settings Link */}
             <button

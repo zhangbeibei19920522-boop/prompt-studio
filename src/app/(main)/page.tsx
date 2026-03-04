@@ -6,6 +6,7 @@ import { TopBar } from "@/components/layout/top-bar"
 import { Sidebar } from "@/components/layout/sidebar"
 import { RightPanel } from "@/components/layout/right-panel"
 import { ChatArea } from "@/components/chat/chat-area"
+import { TestSuiteDetail } from "@/components/test/test-suite-detail"
 import { CreateProjectDialog } from "@/components/project/create-project-dialog"
 import { ProjectSettings } from "@/components/project/project-settings"
 import { PromptPreview } from "@/components/prompt/prompt-preview"
@@ -21,8 +22,12 @@ import {
   sessionsApi,
   messagesApi,
   memoriesApi,
+  testSuitesApi,
+  testCasesApi,
+  testRunsApi,
 } from "@/lib/utils/api-client"
-import type { Project, Prompt, Document, Session, Message, Memory, PromptVersion, PreviewData, DiffData } from "@/types/database"
+import type { Project, Prompt, Document, Session, Message, Memory, PromptVersion, PreviewData, DiffData, TestSuite, TestCase, TestRun } from "@/types/database"
+import type { TestSuiteGenerationData } from "@/types/ai"
 import { applyPrompt } from "@/lib/utils/sse-client"
 
 type RightPanelView =
@@ -49,6 +54,12 @@ export default function MainPage() {
   const [messages, setMessages] = useState<Message[]>([])
   const [versions, setVersions] = useState<PromptVersion[]>([])
   const [projectMemories, setProjectMemories] = useState<Memory[]>([])
+
+  // Test state
+  const [testSuites, setTestSuites] = useState<TestSuite[]>([])
+  const [currentTestSuiteId, setCurrentTestSuiteId] = useState<string | null>(null)
+  const [currentTestCases, setCurrentTestCases] = useState<TestCase[]>([])
+  const [currentTestRun, setCurrentTestRun] = useState<TestRun | null>(null)
 
   // Memory extraction tracking
   const prevSessionIdRef = useRef<string | null>(null)
@@ -90,6 +101,7 @@ export default function MainPage() {
       if (data.length > 0) setCurrentSessionId(data[0].id)
       else setCurrentSessionId(null)
     }).catch(console.error)
+    testSuitesApi.listByProject(currentProjectId).then(setTestSuites).catch(console.error)
   }, [currentProjectId])
 
   // Trigger memory extraction when switching sessions
@@ -372,6 +384,65 @@ export default function MainPage() {
     }
   }
 
+  // Test suite handlers
+  const refreshTestSuites = useCallback(() => {
+    if (!currentProjectId) return
+    testSuitesApi.listByProject(currentProjectId).then(setTestSuites).catch(console.error)
+  }, [currentProjectId])
+
+  const handleNewTestSuite = async () => {
+    if (!currentProjectId) return
+    try {
+      const session = await sessionsApi.create(currentProjectId, '新建测试集')
+      setSessions((prev) => [session, ...prev])
+      setCurrentSessionId(session.id)
+      setCurrentTestSuiteId(null)
+    } catch (e) {
+      console.error("Create test session failed:", e)
+    }
+  }
+
+  const handleTestSuiteClick = async (id: string) => {
+    try {
+      const data = await testSuitesApi.get(id)
+      setCurrentTestSuiteId(id)
+      setCurrentTestCases(data.cases)
+      setCurrentSessionId(null)
+      const runs = await testRunsApi.listBySuite(id)
+      setCurrentTestRun(runs.length > 0 ? runs[0] : null)
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  const handleDeleteTestSuite = async (id: string) => {
+    try {
+      await testSuitesApi.delete(id)
+      refreshTestSuites()
+      if (currentTestSuiteId === id) {
+        setCurrentTestSuiteId(null)
+      }
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  const handleConfirmTestSuite = async (data: TestSuiteGenerationData) => {
+    if (!currentProjectId || !currentSessionId) return
+    try {
+      const suite = await testSuitesApi.create(currentProjectId, {
+        name: data.name,
+        description: data.description,
+        sessionId: currentSessionId,
+      })
+      await testCasesApi.createBatch(suite.id, data.cases)
+      refreshTestSuites()
+      handleTestSuiteClick(suite.id)
+    } catch (e) {
+      console.error('Create test suite failed:', e)
+    }
+  }
+
   // Panel title
   const getRightPanelTitle = (): string => {
     if (!rightPanelView) return ""
@@ -499,7 +570,7 @@ export default function MainPage() {
         <Sidebar
           sessions={sessions}
           currentSessionId={currentSessionId}
-          onSessionSelect={setCurrentSessionId}
+          onSessionSelect={(id) => { setCurrentSessionId(id); setCurrentTestSuiteId(null) }}
           onNewSession={handleNewSession}
           prompts={prompts.map((p) => ({ id: p.id, title: p.title, status: p.status }))}
           onPromptClick={handlePromptClick}
@@ -516,31 +587,62 @@ export default function MainPage() {
             setMemoryBadgeCount(0)
             setRightPanelView({ type: "project-settings" })
           }}
+          testSuites={testSuites.map((s) => ({ id: s.id, name: s.name, status: s.status }))}
+          currentTestSuiteId={currentTestSuiteId}
+          onTestSuiteClick={handleTestSuiteClick}
+          onNewTestSuite={handleNewTestSuite}
+          onDeleteTestSuite={handleDeleteTestSuite}
         />
         <main className="flex flex-1 overflow-hidden">
-          <ChatArea
-            messages={messages}
-            sessionId={currentSessionId}
-            prompts={prompts.map((p) => ({ id: p.id, title: p.title }))}
-            documents={documents.map((d) => ({ id: d.id, name: d.name }))}
-            onMessagesChange={refreshMessages}
-            onApplyPreview={handleApplyPreview}
-            onApplyDiff={handleApplyDiff}
-            onEditInPanel={handleEditInPanel}
-            onViewHistory={(promptId) => {
-              // Resolve promptId — might be actual ID or title
-              const byId = prompts.find((p) => p.id === promptId)
-              const resolved = byId ?? prompts.find((p) => p.title === promptId)
-              if (resolved) handleViewHistory(resolved.id)
-            }}
-            onNewSession={handleNewSession}
-            onMemoryCommand={(data) => {
-              // Refresh memories after create/delete commands
-              if (data.command === 'create' || data.command === 'delete') {
-                refreshProjectMemories()
-              }
-            }}
-          />
+          {currentTestSuiteId ? (
+            <div className="flex-1 overflow-hidden">
+              <TestSuiteDetail
+                suite={testSuites.find((s) => s.id === currentTestSuiteId)!}
+                cases={currentTestCases}
+                latestRun={currentTestRun}
+                prompts={prompts.map((p) => ({ id: p.id, title: p.title }))}
+                onSuiteUpdate={() => {
+                  refreshTestSuites()
+                  if (currentTestSuiteId) {
+                    testSuitesApi.get(currentTestSuiteId).then((data) => {
+                      setCurrentTestCases(data.cases)
+                    }).catch(console.error)
+                    testRunsApi.listBySuite(currentTestSuiteId).then((runs) => {
+                      setCurrentTestRun(runs.length > 0 ? runs[0] : null)
+                    }).catch(console.error)
+                  }
+                }}
+                onCaseUpdate={() => {
+                  if (currentTestSuiteId) {
+                    testCasesApi.listBySuite(currentTestSuiteId).then(setCurrentTestCases).catch(console.error)
+                  }
+                }}
+              />
+            </div>
+          ) : (
+            <ChatArea
+              messages={messages}
+              sessionId={currentSessionId}
+              prompts={prompts.map((p) => ({ id: p.id, title: p.title }))}
+              documents={documents.map((d) => ({ id: d.id, name: d.name }))}
+              onMessagesChange={refreshMessages}
+              onApplyPreview={handleApplyPreview}
+              onApplyDiff={handleApplyDiff}
+              onEditInPanel={handleEditInPanel}
+              onViewHistory={(promptId) => {
+                const byId = prompts.find((p) => p.id === promptId)
+                const resolved = byId ?? prompts.find((p) => p.title === promptId)
+                if (resolved) handleViewHistory(resolved.id)
+              }}
+              onNewSession={handleNewSession}
+              onMemoryCommand={(data) => {
+                if (data.command === 'create' || data.command === 'delete') {
+                  refreshProjectMemories()
+                }
+              }}
+              onConfirmTestSuite={handleConfirmTestSuite}
+            />
+          )}
         </main>
         <RightPanel
           open={rightPanelView !== null}

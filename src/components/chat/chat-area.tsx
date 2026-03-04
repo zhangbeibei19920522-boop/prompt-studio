@@ -6,9 +6,10 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import { MessageBubble } from "./message-bubble"
 import { ChatInput } from "./chat-input"
+import { TestSuiteCard } from "@/components/test/test-suite-card"
 import { streamChat } from "@/lib/utils/sse-client"
 import type { Message, MessageReference, PreviewData, DiffData, PlanData } from "@/types/database"
-import type { StreamEvent, AgentContextSummary, MemoryCommandData } from "@/types/ai"
+import type { StreamEvent, AgentContextSummary, MemoryCommandData, TestSuiteGenerationData } from "@/types/ai"
 
 function ContextLog({ summary }: { summary: AgentContextSummary }) {
   const [open, setOpen] = useState(false)
@@ -65,6 +66,7 @@ interface ChatAreaProps {
   onViewHistory?: (promptId: string) => void
   onNewSession?: () => void
   onMemoryCommand?: (data: MemoryCommandData) => void
+  onConfirmTestSuite?: (data: TestSuiteGenerationData) => void
 }
 
 export function ChatArea({
@@ -79,15 +81,17 @@ export function ChatArea({
   onViewHistory,
   onNewSession,
   onMemoryCommand,
+  onConfirmTestSuite,
 }: ChatAreaProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
   const [streamingText, setStreamingText] = useState("")
   const [isStreaming, setIsStreaming] = useState(false)
   const [contextSummary, setContextSummary] = useState<AgentContextSummary | null>(null)
+  const [pendingTestSuite, setPendingTestSuite] = useState<TestSuiteGenerationData | null>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages.length, streamingText])
+  }, [messages.length, streamingText, pendingTestSuite])
 
   const handleSend = useCallback(
     async (content: string, references: MessageReference[]) => {
@@ -112,6 +116,11 @@ export function ChatArea({
               break
             case "memory":
               onMemoryCommand?.(event.data)
+              break
+            case "test-suite":
+              setPendingTestSuite(event.data)
+              setStreamingText("")
+              onMessagesChange()
               break
             case "plan":
             case "preview":
@@ -186,6 +195,19 @@ export function ChatArea({
                     <span className="inline-block w-1.5 h-4 bg-foreground/60 animate-pulse ml-0.5" />
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+          {pendingTestSuite && (
+            <div className="flex w-full justify-start">
+              <div className="max-w-[80%]">
+                <TestSuiteCard
+                  data={pendingTestSuite}
+                  onConfirm={(data) => {
+                    onConfirmTestSuite?.(data)
+                    setPendingTestSuite(null)
+                  }}
+                />
               </div>
             </div>
           )}
