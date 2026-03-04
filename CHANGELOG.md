@@ -1,5 +1,54 @@
 # Changelog
 
+## v0.1.9 (2026-03-04)
+
+### 新功能
+- **自动化测试**: 为项目中的 Prompt 创建自动化测试集，逐条运行测试用例，由 LLM 评估结果并生成测试报告
+  - 对话式创建：通过对话与测试 Agent 交互，描述测试需求后自动生成测试用例及预期结果
+  - 逐条执行：每个测试用例独立调用 LLM，使用测试集配置的 model/key
+  - 混合评估：逐条判断通过/不通过（全局 model），再整体评估改进建议
+  - 测试集级别 model 配置：运行用测试集配置，评估用全局配置
+  - 实时进度：SSE 流式推送执行和评估进度
+  - 测试报告：展示总分、通过率、每条用例详情、Prompt 改进建议
+  - 侧边栏入口：与会话、Prompt、知识库平级的独立模块
+  - 测试用例管理：创建后可编辑/新增/删除用例，确认后方可运行
+
+### 新增文件
+- `src/lib/db/repositories/test-suites.ts` — 测试集 CRUD
+- `src/lib/db/repositories/test-cases.ts` — 测试用例 CRUD（含批量创建）
+- `src/lib/db/repositories/test-runs.ts` — 测试运行记录 CRUD
+- `src/lib/ai/test-runner.ts` — 测试执行引擎（逐条调用 LLM + SSE 事件）
+- `src/lib/ai/test-evaluator.ts` — 测试评估引擎（逐条评分 + 整体报告）
+- `src/lib/ai/test-agent-prompt.ts` — 测试集创建专用 Agent 提示词
+- `src/app/api/projects/[id]/test-suites/route.ts` — 项目测试集 API
+- `src/app/api/test-suites/[id]/route.ts` — 测试集详情 API
+- `src/app/api/test-suites/[id]/cases/route.ts` — 测试用例 API（含批量）
+- `src/app/api/test-suites/[id]/run/route.ts` — 运行测试 SSE API
+- `src/app/api/test-suites/[id]/runs/route.ts` — 运行历史 API
+- `src/app/api/test-cases/[id]/route.ts` — 测试用例详情 API
+- `src/app/api/test-runs/[id]/route.ts` — 运行详情 API
+- `src/app/api/ai/test-chat/route.ts` — 测试对话 SSE API
+- `src/components/test/test-suite-detail.tsx` — 测试集详情页（用例列表 + 运行 + 报告）
+- `src/components/test/test-case-editor.tsx` — 测试用例编辑器
+- `src/components/test/test-run-config.tsx` — 运行配置弹窗（选择 Prompt + model/key）
+- `src/components/test/test-report.tsx` — 测试报告展示
+- `src/components/test/test-suite-card.tsx` — 对话中的测试集预览卡片
+- `src/components/test/test-suite-list.tsx` — 测试集列表组件
+- `src/types/word-extractor.d.ts` — word-extractor 类型声明（修复已知 build 警告）
+
+### 修改文件
+- `src/lib/db/schema.sql` — 新增 test_suites + test_cases + test_runs 表 + 3 索引
+- `src/types/database.ts` — 新增 TestSuite/TestCase/TestRun/TestCaseResult/TestReport/TestSuiteConfig 接口
+- `src/types/api.ts` — 新增测试相关请求类型
+- `src/types/ai.ts` — 新增 TestRunEvent/TestSuiteGenerationData 类型，StreamEvent 增加 test-suite 事件
+- `src/lib/ai/agent.ts` — 新增 handleTestAgentChat 测试 Agent 入口
+- `src/lib/ai/stream-handler.ts` — parseAgentOutput 支持 test-suite 类型
+- `src/lib/utils/api-client.ts` — 新增 testSuitesApi/testCasesApi/testRunsApi
+- `src/lib/utils/sse-client.ts` — 新增 streamTestChat/streamTestRun
+- `src/components/layout/sidebar.tsx` — 新增测试集分组（CollapsibleGroup）
+- `src/components/chat/chat-area.tsx` — 支持 test-suite 事件 + TestSuiteCard 渲染 + testMode 路由
+- `src/app/(main)/page.tsx` — 测试状态管理 + 视图切换 + 测试集操作 handler
+
 ## v0.1.8 (2026-03-04)
 
 ### 新功能
