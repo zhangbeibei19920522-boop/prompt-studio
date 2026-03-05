@@ -5,7 +5,7 @@ import { createAiProvider } from './provider'
 import { getSettings } from '@/lib/db/repositories/settings'
 import { buildPlanMessages } from './agent-prompt'
 import { buildTestAgentMessages, buildBatchContinuationMessages } from './test-agent-prompt'
-import { parseAgentOutput } from './stream-handler'
+import { parseAgentOutput, detectTruncatedJson } from './stream-handler'
 import { createMessage } from '@/lib/db/repositories/messages'
 import { createMemory, deleteMemory } from '@/lib/db/repositories/memories'
 import { findSessionById } from '@/lib/db/repositories/sessions'
@@ -87,6 +87,34 @@ export async function* handleAgentChat(
       yield { type: 'text', content: chunk }
     }
     console.log('[Agent] Stream complete. Chunks:', chunkCount, 'Total length:', accumulated.length)
+
+    // 5.5 Continuation: detect truncated JSON and auto-continue
+    const MAX_CONTINUATIONS = 3
+    let continuationCount = 0
+
+    while (detectTruncatedJson(accumulated) && continuationCount < MAX_CONTINUATIONS) {
+      continuationCount++
+      console.log('[Agent] Truncated JSON detected, continuation', continuationCount, '/', MAX_CONTINUATIONS)
+
+      yield {
+        type: 'continuation',
+        data: { iteration: continuationCount, maxIterations: MAX_CONTINUATIONS },
+      }
+
+      // Build continuation messages: original messages + assistant output so far + continue instruction
+      const continuationMessages: import('@/types/ai').ChatMessage[] = [
+        ...messages,
+        { role: 'assistant' as const, content: accumulated },
+        { role: 'user' as const, content: '你的输出被截断了，请从断点处继续，只输出剩余内容，不要重复已输出的部分。' },
+      ]
+
+      for await (const chunk of provider.chatStream(continuationMessages)) {
+        accumulated += chunk
+        yield { type: 'text', content: chunk }
+      }
+
+      console.log('[Agent] Continuation', continuationCount, 'complete. Total length:', accumulated.length)
+    }
 
     // 6. Parse structured blocks from accumulated response
     const { jsonBlocks, plainText } = parseAgentOutput(accumulated)

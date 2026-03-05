@@ -104,6 +104,7 @@ export type StreamEvent =
   | { type: 'memory'; data: MemoryCommandData }
   | { type: 'test-suite'; data: TestSuiteGenerationData }
   | { type: 'test-suite-progress'; data: TestSuiteProgressData }
+  | { type: 'continuation'; data: { iteration: number; maxIterations: number } }
   | { type: 'done' }
   | { type: 'error'; message: string }
 

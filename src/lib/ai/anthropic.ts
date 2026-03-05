@@ -48,7 +48,7 @@ export function createAnthropicProvider(config: {
         model,
         system: system || undefined,
         messages: converted,
-        max_tokens: options?.maxTokens ?? 4096,
+        max_tokens: options?.maxTokens ?? 16384,
         temperature: options?.temperature ?? 0.7,
         stream: false,
       }),
@@ -76,7 +76,7 @@ export function createAnthropicProvider(config: {
       messageCount: converted.length,
       systemLength: system.length,
       temperature: options?.temperature ?? 0.7,
-      max_tokens: options?.maxTokens ?? 4096,
+      max_tokens: options?.maxTokens ?? 16384,
     })
 
     let res: Response
@@ -92,7 +92,7 @@ export function createAnthropicProvider(config: {
           model,
           system: system || undefined,
           messages: converted,
-          max_tokens: options?.maxTokens ?? 4096,
+          max_tokens: options?.maxTokens ?? 16384,
           temperature: options?.temperature ?? 0.7,
           stream: true,
         }),

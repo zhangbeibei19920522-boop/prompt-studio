@@ -40,7 +40,7 @@ export function createOpenAiCompatibleProvider(config: {
         model,
         messages,
         temperature: options?.temperature ?? 0.7,
-        ...buildTokenLimit(model, options?.maxTokens ?? 4096),
+        ...buildTokenLimit(model, options?.maxTokens ?? 16384),
         stream: false,
       }),
     })
@@ -66,7 +66,7 @@ export function createOpenAiCompatibleProvider(config: {
       messageCount: messages.length,
       firstMsgRole: messages[0]?.role,
       temperature: options?.temperature ?? 0.7,
-      ...buildTokenLimit(model, options?.maxTokens ?? 4096),
+      ...buildTokenLimit(model, options?.maxTokens ?? 16384),
     })
 
     let res: Response
@@ -81,7 +81,7 @@ export function createOpenAiCompatibleProvider(config: {
           model,
           messages,
           temperature: options?.temperature ?? 0.7,
-          ...buildTokenLimit(model, options?.maxTokens ?? 4096),
+          ...buildTokenLimit(model, options?.maxTokens ?? 16384),
           stream: true,
         }),
       }) as Response

@@ -91,10 +91,11 @@ export function ChatArea({
   const [contextSummary, setContextSummary] = useState<AgentContextSummary | null>(null)
   const [pendingTestSuite, setPendingTestSuite] = useState<TestSuiteGenerationData | null>(null)
   const [batchProgress, setBatchProgress] = useState<TestSuiteProgressData | null>(null)
+  const [continuationInfo, setContinuationInfo] = useState<{ iteration: number; maxIterations: number } | null>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages.length, streamingText, pendingTestSuite, batchProgress])
+  }, [messages.length, streamingText, pendingTestSuite, batchProgress, continuationInfo])
 
   const handleSend = useCallback(
     async (content: string, references: MessageReference[]) => {
@@ -119,6 +120,9 @@ export function ChatArea({
               break
             case "memory":
               onMemoryCommand?.(event.data)
+              break
+            case "continuation":
+              setContinuationInfo(event.data)
               break
             case "test-suite-progress":
               setBatchProgress(event.data)
@@ -152,6 +156,7 @@ export function ChatArea({
         setStreamingText("")
         setContextSummary(null)
         setBatchProgress(null)
+        setContinuationInfo(null)
         onMessagesChange()
       }
     },
@@ -194,7 +199,7 @@ export function ChatArea({
               onViewHistory={onViewHistory}
             />
           ))}
-          {(contextSummary || streamingText || batchProgress) && (
+          {(contextSummary || streamingText || batchProgress || continuationInfo) && (
             <div className="flex w-full justify-start">
               <div className="max-w-[80%]">
                 {contextSummary && <ContextLog summary={contextSummary} />}
@@ -202,6 +207,11 @@ export function ChatArea({
                   <div className="rounded-lg px-3 py-2 text-sm leading-relaxed bg-muted text-foreground">
                     <p className="whitespace-pre-wrap">{streamingText}</p>
                     <span className="inline-block w-1.5 h-4 bg-foreground/60 animate-pulse ml-0.5" />
+                  </div>
+                )}
+                {continuationInfo && (
+                  <div className="rounded-lg px-3 py-1.5 text-xs text-muted-foreground bg-muted/50 mb-1">
+                    内容较长，正在续写 ({continuationInfo.iteration}/{continuationInfo.maxIterations})...
                   </div>
                 )}
                 {batchProgress && !streamingText && (

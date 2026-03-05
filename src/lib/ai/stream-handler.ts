@@ -85,3 +85,26 @@ export function parseAgentOutput(text: string): {
 
   return { jsonBlocks, plainText }
 }
+
+/**
+ * Detect whether streamed AI output contains a truncated JSON code block.
+ * A truncated block has an opening ```json fence but no corresponding closing ```.
+ */
+export function detectTruncatedJson(text: string): boolean {
+  const openRegex = /```json\b/g
+  const closeRegex = /```(?!json)/g
+
+  const opens: number[] = []
+  const closes: number[] = []
+
+  let m: RegExpExecArray | null
+  while ((m = openRegex.exec(text)) !== null) opens.push(m.index)
+  while ((m = closeRegex.exec(text)) !== null) closes.push(m.index)
+
+  for (const openIdx of opens) {
+    const hasClose = closes.some(closeIdx => closeIdx > openIdx)
+    if (!hasClose) return true
+  }
+
+  return false
+}
