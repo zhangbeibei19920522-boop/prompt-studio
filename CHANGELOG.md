@@ -1,5 +1,46 @@
 # Changelog
 
+## v0.1.15 (2026-03-05)
+
+### 改进
+- **测试 Agent 不再询问输出格式**: 移除规划阶段，简化为两阶段（快速理解需求→分批生成）。Agent 交付物明确为平台内测试用例界面，禁止询问 JSON/CSV 等格式问题。用户引用 Prompt 并说明需求后直接生成测试用例
+
+### Bug 修复
+- **批量创建测试用例 SQLite 绑定错误**: `createTestCasesBatch` 中 `title`/`input`/`expectedOutput` 为 `undefined` 时 SQLite 报 `TypeError: can only bind numbers, strings, bigints, buffers, and null`。添加 `?? ''` 兜底
+
+### 修改文件
+- `src/lib/ai/test-agent-prompt.ts` — 系统提示词简化为两阶段，新增交付物声明和格式禁问规则
+- `src/lib/db/repositories/test-cases.ts` — `createTestCasesBatch` 所有字段添加 `?? ''` 防御
+
+## v0.1.14 (2026-03-05)
+
+### 改进
+- **多轮对话测试执行**: 测试用例输入包含 `User: / Assistant:` 多轮对话格式时，执行器逐轮独立调用 LLM，每个空 Assistant 槽位单独生成回复，actualOutput 存储完整交替对话
+- **对话记录结构化展示**: 测试用例展开后，对话记录按轮次拆分，每轮用「用户」（蓝色）/「助手」（绿色）标签 + 分隔线清晰区分；单轮对话自动适配为用户→助手两段；期望输出独立展示
+
+### 修改文件
+- `src/lib/ai/test-runner.ts` — 新增 parseConversationTurns 多轮检测，多轮模式逐轮调用 LLM，单轮保持不变
+- `src/components/test/test-suite-detail.tsx` — 新增 parseConversationOutput 解析函数，对话记录改为角色标签+分隔线结构化布局
+
+## v0.1.13 (2026-03-05)
+
+### 改进
+- **测试报告对话式展示**: 测试用例展开后，输入和实际输出合并为「对话记录」卡片，用「用户」「助手」标签区分，呈现完整对话。未运行时仍显示原有输入/期望输出分栏
+
+### 修改文件
+- `src/components/test/test-suite-detail.tsx` — 有测试结果时用对话式布局替换独立输入/实际输出框
+
+## v0.1.12 (2026-03-05)
+
+### Bug 修复
+- **少量测试用例创建后不跳转**: 确认创建测试集后未自动跳转到测试集详情页。原因是 refreshTestSuites 为异步 fire-and-forget，导致 testSuites 状态未更新时即触发导航，currentSuite 为 null。修复为 await 刷新完成后再导航
+- **测试 Agent 跳过规划步骤**: 无论测试用例数量多少，Agent 均跳过第二阶段（规划）直接生成用例。原因是 handleTestAgentChat 中若 LLM 同时输出 plan 和 test-suite-batch，仅处理 batch 而忽略 plan。修复为 plan 块优先处理，存在 plan 时不处理 batch，强制分轮执行
+
+### 修改文件
+- `src/app/(main)/page.tsx` — handleConfirmTestSuite 改为 await 刷新 testSuites 后再导航
+- `src/lib/ai/agent.ts` — handleTestAgentChat plan 块优先处理，plan 和 batch 不在同一轮处理
+- `src/lib/ai/test-agent-prompt.ts` — 系统提示词强制三阶段分轮执行，规划和生成不得在同一轮输出
+
 ## v0.1.11 (2026-03-04)
 
 ### 改进

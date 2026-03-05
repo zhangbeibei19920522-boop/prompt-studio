@@ -55,6 +55,60 @@ function getStatusLabel(status: string): string {
   }
 }
 
+/**
+ * Parse actualOutput (and fallback to input) into structured conversation turns.
+ * Handles two formats:
+ * - Multi-turn: "User: xxx\nAssistant: xxx\nUser: yyy\nAssistant: yyy"
+ * - Single-turn: plain text (uses input as user turn, output as assistant turn)
+ */
+function parseConversationOutput(
+  actualOutput: string,
+  input: string
+): Array<{ role: "user" | "assistant"; content: string }> {
+  // Try parsing "User: / Assistant:" markers
+  const turns: Array<{ role: "user" | "assistant"; content: string }> = []
+  const lines = actualOutput.split("\n")
+  let currentRole: "user" | "assistant" | null = null
+  let currentContent = ""
+
+  for (const line of lines) {
+    const userMatch = line.match(/^User:\s*(.*)/)
+    const assistantMatch = line.match(/^Assistant:\s*(.*)/)
+
+    if (userMatch) {
+      if (currentRole) {
+        turns.push({ role: currentRole, content: currentContent.trim() })
+      }
+      currentRole = "user"
+      currentContent = userMatch[1]
+    } else if (assistantMatch) {
+      if (currentRole) {
+        turns.push({ role: currentRole, content: currentContent.trim() })
+      }
+      currentRole = "assistant"
+      currentContent = assistantMatch[1]
+    } else if (currentRole) {
+      currentContent += "\n" + line
+    }
+  }
+
+  if (currentRole) {
+    turns.push({ role: currentRole, content: currentContent.trim() })
+  }
+
+  // If we got at least 2 turns with content, use parsed result
+  const nonEmptyTurns = turns.filter((t) => t.content)
+  if (nonEmptyTurns.length >= 2) {
+    return nonEmptyTurns
+  }
+
+  // Fallback: single-turn — show input as user, actualOutput as assistant
+  return [
+    { role: "user", content: input },
+    { role: "assistant", content: actualOutput },
+  ]
+}
+
 function getStatusVariant(status: string): "default" | "secondary" | "outline" {
   switch (status) {
     case "ready": return "default"
@@ -364,28 +418,49 @@ export function TestSuiteDetail({
                       <p className="text-sm whitespace-pre-wrap bg-muted/50 rounded p-2">{tc.context}</p>
                     </div>
                   )}
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">输入</p>
-                    <p className="text-sm whitespace-pre-wrap bg-muted/50 rounded p-2">{tc.input}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">期望输出</p>
-                    <p className="text-sm whitespace-pre-wrap bg-muted/50 rounded p-2">{tc.expectedOutput}</p>
-                  </div>
-                  {result && (
+
+                  {result && result.actualOutput ? (
                     <>
-                      {result.actualOutput && (
-                        <div>
-                          <p className="text-xs font-medium text-muted-foreground mb-1">实际输出</p>
-                          <p className="text-sm whitespace-pre-wrap bg-muted/50 rounded p-2">{result.actualOutput}</p>
+                      {/* Structured conversation transcript */}
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-1">对话记录</p>
+                        <div className="rounded border bg-muted/20 divide-y">
+                          {parseConversationOutput(result.actualOutput, tc.input).map((turn, idx) => (
+                            <div key={idx} className="p-2">
+                              <span className={`inline-block text-xs font-medium rounded px-1.5 py-0.5 mb-1 ${
+                                turn.role === 'user'
+                                  ? 'text-blue-700 bg-blue-100 dark:text-blue-300 dark:bg-blue-900/40'
+                                  : 'text-emerald-700 bg-emerald-100 dark:text-emerald-300 dark:bg-emerald-900/40'
+                              }`}>
+                                {turn.role === 'user' ? '用户' : '助手'}
+                              </span>
+                              <p className="text-sm whitespace-pre-wrap break-words">{turn.content}</p>
+                            </div>
+                          ))}
                         </div>
-                      )}
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-1">期望输出</p>
+                        <p className="text-sm whitespace-pre-wrap break-words bg-muted/50 rounded p-2">{tc.expectedOutput}</p>
+                      </div>
                       {result.reason && (
                         <div>
                           <p className="text-xs font-medium text-muted-foreground mb-1">评估原因</p>
                           <p className="text-sm whitespace-pre-wrap">{result.reason}</p>
                         </div>
                       )}
+                    </>
+                  ) : (
+                    <>
+                      {/* No results yet: show input and expected output separately */}
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-1">输入</p>
+                        <p className="text-sm whitespace-pre-wrap bg-muted/50 rounded p-2">{tc.input}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-1">期望输出</p>
+                        <p className="text-sm whitespace-pre-wrap bg-muted/50 rounded p-2">{tc.expectedOutput}</p>
+                      </div>
                     </>
                   )}
                   <div className="flex gap-2 pt-1">

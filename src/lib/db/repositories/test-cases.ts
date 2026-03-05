@@ -155,7 +155,7 @@ export function createTestCasesBatch(
     for (const c of cases) {
       const id = nanoid()
       const sortOrder = c.sortOrder ?? nextOrder++
-      insert.run(id, testSuiteId, c.title, c.context ?? '', c.input, c.expectedOutput, sortOrder)
+      insert.run(id, testSuiteId, c.title ?? '', c.context ?? '', c.input ?? '', c.expectedOutput ?? '', sortOrder)
       created.push({
         id,
         testSuiteId,

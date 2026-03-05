@@ -439,7 +439,9 @@ export default function MainPage() {
         sessionId: currentSessionId,
       })
       await testCasesApi.createBatch(suite.id, data.cases)
-      refreshTestSuites()
+      // Await refresh so testSuites state includes the new suite before navigation
+      const updatedSuites = await testSuitesApi.listByProject(currentProjectId)
+      setTestSuites(updatedSuites)
       setTestMode(false)
       handleTestSuiteClick(suite.id)
     } catch (e) {

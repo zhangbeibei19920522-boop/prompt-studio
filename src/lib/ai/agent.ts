@@ -233,10 +233,25 @@ export async function* handleTestAgentChat(
     // 6. Parse structured blocks
     const { jsonBlocks, plainText } = parseAgentOutput(accumulated)
 
-    // Check for batch block and handle batch generation loop
+    // Check for plan and batch blocks separately
+    const planBlocks = jsonBlocks.filter(b => b.type === 'plan')
     const batchBlock = jsonBlocks.find(b => b.type === 'test-suite-batch') as unknown as TestSuiteBatchData | undefined
 
-    if (batchBlock) {
+    if (planBlocks.length > 0) {
+      // --- Plan mode: always yield plan first ---
+      // If LLM outputs both plan and batch in the same response, only process plan.
+      // The batch will be generated in the next turn after user confirms the plan.
+      for (const block of planBlocks) {
+        yield {
+          type: 'plan',
+          data: {
+            keyPoints: block.keyPoints as import('@/types/database').PlanData['keyPoints'],
+            status: 'pending',
+          },
+        }
+      }
+      console.log('[TestAgent] Plan yielded, batch generation deferred to next turn')
+    } else if (batchBlock) {
       // --- Batch generation mode ---
       const allCases = [...batchBlock.cases]
       const totalPlanned = batchBlock.totalPlanned || allCases.length
@@ -295,17 +310,9 @@ export async function* handleTestAgentChat(
         data: mergedData,
       }
     } else {
-      // --- Non-batch mode (plan, old-style test-suite, etc.) ---
+      // --- Non-batch mode (old-style test-suite, etc.) ---
       for (const block of jsonBlocks) {
-        if (block.type === 'plan') {
-          yield {
-            type: 'plan',
-            data: {
-              keyPoints: block.keyPoints as import('@/types/database').PlanData['keyPoints'],
-              status: 'pending',
-            },
-          }
-        } else if (block.type === 'test-suite') {
+        if (block.type === 'test-suite') {
           yield {
             type: 'test-suite',
             data: block as unknown as TestSuiteGenerationData,

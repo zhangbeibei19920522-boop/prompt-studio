@@ -7,6 +7,51 @@ import { updateTestSuite } from '@/lib/db/repositories/test-suites'
 import { evaluateTestCase, evaluateOverall } from './test-evaluator'
 
 /**
+ * Parse multi-turn conversation input.
+ * Detects "User: ... / Assistant: ..." pattern and returns turns.
+ * Returns null if the input is not multi-turn format.
+ */
+function parseConversationTurns(
+  input: string
+): Array<{ role: 'user' | 'assistant'; content: string }> | null {
+  const lines = input.split('\n')
+  const turns: Array<{ role: 'user' | 'assistant'; content: string }> = []
+  let currentRole: 'user' | 'assistant' | null = null
+  let currentContent = ''
+
+  for (const line of lines) {
+    const userMatch = line.match(/^User:\s*(.*)/)
+    const assistantMatch = line.match(/^Assistant:\s*(.*)/)
+
+    if (userMatch) {
+      if (currentRole) {
+        turns.push({ role: currentRole, content: currentContent.trim() })
+      }
+      currentRole = 'user'
+      currentContent = userMatch[1]
+    } else if (assistantMatch) {
+      if (currentRole) {
+        turns.push({ role: currentRole, content: currentContent.trim() })
+      }
+      currentRole = 'assistant'
+      currentContent = assistantMatch[1]
+    } else if (currentRole) {
+      currentContent += '\n' + line
+    }
+  }
+
+  if (currentRole) {
+    turns.push({ role: currentRole, content: currentContent.trim() })
+  }
+
+  // Must have at least 2 user turns to count as multi-turn
+  const userTurns = turns.filter((t) => t.role === 'user')
+  if (userTurns.length < 2) return null
+
+  return turns
+}
+
+/**
  * Run a full test suite: execute each case against the LLM, evaluate results,
  * generate an overall report, and persist everything to the database.
  *
@@ -62,23 +107,55 @@ export async function* runTestSuite(
     let actualOutput = ''
 
     try {
-      // Build messages: system prompt + user input (with optional context)
-      const messages: ChatMessage[] = [
-        { role: 'system', content: prompt.content },
-      ]
+      const systemMsg: ChatMessage = { role: 'system', content: prompt.content }
+      const turns = parseConversationTurns(testCase.input)
 
-      let userContent = ''
-      if (testCase.context) {
-        userContent += `${testCase.context}\n\n`
-      }
-      userContent += testCase.input
+      if (turns) {
+        // --- Multi-turn execution: run each user turn sequentially ---
+        const messages: ChatMessage[] = [systemMsg]
+        if (testCase.context) {
+          messages.push({ role: 'system', content: `Context: ${testCase.context}` })
+        }
 
-      messages.push({ role: 'user', content: userContent })
+        const conversationParts: string[] = []
 
-      // Stream the response and accumulate output
-      const stream = testProvider.chatStream(messages, { temperature: 0.7 })
-      for await (const chunk of stream) {
-        actualOutput += chunk
+        for (const turn of turns) {
+          if (turn.role === 'user') {
+            messages.push({ role: 'user', content: turn.content })
+            conversationParts.push(`User: ${turn.content}`)
+          } else if (turn.role === 'assistant' && turn.content) {
+            // Pre-filled assistant content — use as-is
+            messages.push({ role: 'assistant', content: turn.content })
+            conversationParts.push(`Assistant: ${turn.content}`)
+          } else {
+            // Empty assistant slot — generate response from LLM
+            let response = ''
+            const stream = testProvider.chatStream(messages, { temperature: 0.7 })
+            for await (const chunk of stream) {
+              response += chunk
+            }
+            messages.push({ role: 'assistant', content: response })
+            conversationParts.push(`Assistant: ${response}`)
+          }
+        }
+
+        actualOutput = conversationParts.join('\n')
+      } else {
+        // --- Single-turn execution (original behavior) ---
+        const messages: ChatMessage[] = [systemMsg]
+
+        let userContent = ''
+        if (testCase.context) {
+          userContent += `${testCase.context}\n\n`
+        }
+        userContent += testCase.input
+
+        messages.push({ role: 'user', content: userContent })
+
+        const stream = testProvider.chatStream(messages, { temperature: 0.7 })
+        for await (const chunk of stream) {
+          actualOutput += chunk
+        }
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
