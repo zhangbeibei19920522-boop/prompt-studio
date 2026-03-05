@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.1.16 (2026-03-05)
+
+### 改进
+- **长 Prompt 截断自动续写**: max_tokens 默认值从 4096 提高到 16384，减少截断概率。当输出仍被截断时（检测到未闭合的 ```json 块），自动发起续写请求拼接完整内容（最多 3 次），前端显示"正在续写"进度提示
+
+### 修改文件
+- `src/lib/ai/openai-compatible.ts` — max_tokens 默认值 4096 → 16384
+- `src/lib/ai/anthropic.ts` — max_tokens 默认值 4096 → 16384
+- `src/lib/ai/stream-handler.ts` — 新增 detectTruncatedJson 截断检测函数
+- `src/lib/ai/agent.ts` — handleAgentChat 流结束后自动续写循环
+- `src/types/ai.ts` — StreamEvent 新增 continuation 类型
+- `src/components/chat/chat-area.tsx` — 续写进度提示 UI
+
 ## v0.1.15 (2026-03-05)
 
 ### 改进
