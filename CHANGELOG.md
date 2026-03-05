@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.1.17 (2026-03-05)
+
+### 改进
+- **测试 Agent 支持多轮对话用例生成**: 在测试 Agent 提示词中增加多轮对话格式说明和示例，引导大模型对对话类 Prompt（客服、咨询、教学等）自动生成 `User:/Assistant:` 格式的多轮测试用例，与测试 Runner 的多轮执行能力对齐
+
+### Bug 修复
+- **上传 .doc 文件报错**: 安装缺失的 word-extractor 依赖，修复上传老版 Word 文档时 `Module not found: Can't resolve 'word-extractor'` 错误
+
+### 修改文件
+- `src/lib/ai/test-agent-prompt.ts` — 系统提示词新增「多轮对话测试用例」章节，包含格式规则、判断标准和 JSON 示例
+- `package.json` — 版本号 0.1.16 → 0.1.17
+- `package-lock.json` — 安装 word-extractor 依赖
+
 ## v0.1.16 (2026-03-05)
 
 ### 改进
