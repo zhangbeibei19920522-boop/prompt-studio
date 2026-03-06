@@ -1,5 +1,37 @@
 # Changelog
 
+## v0.1.20 (2026-03-06)
+
+### 新功能
+- **会话删除**: 侧边栏会话列表项 hover 时显示 X 删除按钮，点击删除会话及其聊天记录（不影响已创建的 Prompt 和测试集）
+- **会话标题自动总结**: 新会话首次对话完成后，自动调用 LLM 生成简短标题（≤15 字）替换默认的"新对话"，侧边栏实时更新
+
+### 修改文件
+- `src/types/ai.ts` — StreamEvent 新增 `session-title` 事件类型
+- `src/lib/ai/agent.ts` — 新增 `generateSessionTitle` 函数，`handleAgentChat` 和 `handleTestAgentChat` 完成后自动生成标题并 yield 事件
+- `src/components/chat/chat-area.tsx` — 新增 `onSessionTitleUpdate` prop，处理 `session-title` 事件
+- `src/components/layout/sidebar.tsx` — 会话列表项新增 `onDeleteSession` prop 和 hover 删除按钮
+- `src/app/(main)/page.tsx` — 新增 `handleDeleteSession` 处理函数，接收标题更新回调更新 sessions 状态
+- `package.json` — 版本号 0.1.19 → 0.1.20
+
+## v0.1.19 (2026-03-06)
+
+### 改进
+- **测试 Agent 思考链稳定显示**: 思考链（Agent 上下文摘要）每次都会出现，即使无引用内容也显示"已就绪"兜底信息
+- **测试 Agent 提示词优化**: 禁止询问输出格式（JSON/CSV 等无关问题），限制提问最多一轮，用户回复后必须立即生成测试用例，禁止反复确认"是否开始"等过度思考行为
+
+### 修改文件
+- `src/components/chat/chat-area.tsx` — ContextLog 在 items 为空时显示兜底文案，不再隐藏
+- `src/lib/ai/test-agent-prompt.ts` — 系统提示词新增硬性禁令（禁问格式、限一轮提问、禁反复确认），保留第一阶段澄清能力
+
+## v0.1.18 (2026-03-06)
+
+### Bug 修复
+- **创建测试集后未稳定跳转到测试集页面**: `handleConfirmTestSuite` 中 `setTestSuites` 和 `handleTestSuiteClick` 内的状态更新被拆分到不同微任务，React 无法在同一批次处理，导致 `currentSuite` 为 null 时回退显示聊天界面。修复为先 `Promise.all` 一次性获取所有数据，再在同一同步代码块中设置全部状态
+
+### 修改文件
+- `src/app/(main)/page.tsx` — handleConfirmTestSuite 改为 Promise.all 获取数据后同步批量设置状态，不再调用 handleTestSuiteClick
+
 ## v0.1.17 (2026-03-05)
 
 ### 改进

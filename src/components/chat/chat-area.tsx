@@ -28,7 +28,8 @@ function ContextLog({ summary }: { summary: AgentContextSummary }) {
   if (summary.historyMessageCount > 0)
     items.push(`历史消息: ${summary.historyMessageCount} 条`)
 
-  if (items.length === 0) return null
+  // Always show context log — at minimum show mode info
+  if (items.length === 0) items.push("已就绪，正在生成回复")
 
   return (
     <div className="rounded-lg border bg-muted/50 text-xs mb-2">
@@ -67,6 +68,7 @@ interface ChatAreaProps {
   onNewSession?: () => void
   onMemoryCommand?: (data: MemoryCommandData) => void
   onConfirmTestSuite?: (data: TestSuiteGenerationData) => void
+  onSessionTitleUpdate?: (sessionId: string, title: string) => void
   useTestAgent?: boolean
 }
 
@@ -83,6 +85,7 @@ export function ChatArea({
   onNewSession,
   onMemoryCommand,
   onConfirmTestSuite,
+  onSessionTitleUpdate,
   useTestAgent,
 }: ChatAreaProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -133,6 +136,9 @@ export function ChatArea({
               setStreamingText("")
               setBatchProgress(null)
               onMessagesChange()
+              break
+            case "session-title":
+              onSessionTitleUpdate?.(event.data.sessionId, event.data.title)
               break
             case "plan":
             case "preview":

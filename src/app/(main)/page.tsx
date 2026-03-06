@@ -165,6 +165,19 @@ export default function MainPage() {
     }
   }
 
+  const handleDeleteSession = async (id: string) => {
+    try {
+      await sessionsApi.delete(id)
+      const remaining = sessions.filter((s) => s.id !== id)
+      setSessions(remaining)
+      if (currentSessionId === id) {
+        setCurrentSessionId(remaining.length > 0 ? remaining[0].id : null)
+      }
+    } catch (e) {
+      console.error("Delete session failed:", e)
+    }
+  }
+
   const handleNewSession = async () => {
     if (!currentProjectId) return
     try {
@@ -439,11 +452,19 @@ export default function MainPage() {
         sessionId: currentSessionId,
       })
       await testCasesApi.createBatch(suite.id, data.cases)
-      // Await refresh so testSuites state includes the new suite before navigation
-      const updatedSuites = await testSuitesApi.listByProject(currentProjectId)
+      // Fetch all data before setting state, so all updates happen in one batch
+      const [updatedSuites, suiteDetail, runs] = await Promise.all([
+        testSuitesApi.listByProject(currentProjectId),
+        testSuitesApi.get(suite.id),
+        testRunsApi.listBySuite(suite.id),
+      ])
+      // Set all state synchronously in one batch to avoid timing issues
       setTestSuites(updatedSuites)
       setTestMode(false)
-      handleTestSuiteClick(suite.id)
+      setCurrentTestSuiteId(suite.id)
+      setCurrentTestCases(suiteDetail.cases)
+      setCurrentSessionId(null)
+      setCurrentTestRun(runs.length > 0 ? runs[0] : null)
     } catch (e) {
       console.error('Create test suite failed:', e)
     }
@@ -598,6 +619,7 @@ export default function MainPage() {
           onTestSuiteClick={handleTestSuiteClick}
           onNewTestSuite={handleNewTestSuite}
           onDeleteTestSuite={handleDeleteTestSuite}
+          onDeleteSession={handleDeleteSession}
         />
         <main className="flex flex-1 overflow-hidden">
           {currentSuite ? (
@@ -647,6 +669,9 @@ export default function MainPage() {
                 }
               }}
               onConfirmTestSuite={handleConfirmTestSuite}
+              onSessionTitleUpdate={(sid, title) => {
+                setSessions((prev) => prev.map((s) => s.id === sid ? { ...s, title } : s))
+              }}
               useTestAgent={testMode}
             />
           )}

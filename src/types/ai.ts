@@ -105,6 +105,7 @@ export type StreamEvent =
   | { type: 'test-suite'; data: TestSuiteGenerationData }
   | { type: 'test-suite-progress'; data: TestSuiteProgressData }
   | { type: 'continuation'; data: { iteration: number; maxIterations: number } }
+  | { type: 'session-title'; data: { sessionId: string; title: string } }
   | { type: 'done' }
   | { type: 'error'; message: string }
 

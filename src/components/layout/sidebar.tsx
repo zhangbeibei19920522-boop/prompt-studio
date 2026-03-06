@@ -43,6 +43,7 @@ interface SidebarProps {
   onTestSuiteClick?: (id: string) => void
   onNewTestSuite?: () => void
   onDeleteTestSuite?: (id: string) => void
+  onDeleteSession?: (id: string) => void
 }
 
 function getStatusVariant(status: string): "default" | "secondary" | "outline" {
@@ -157,6 +158,7 @@ export function Sidebar({
   onTestSuiteClick,
   onNewTestSuite,
   onDeleteTestSuite,
+  onDeleteSession,
 }: SidebarProps) {
   return (
     <aside className="flex h-full w-60 shrink-0 flex-col border-r bg-white">
@@ -183,22 +185,35 @@ export function Sidebar({
               <p className="px-2 py-3 text-xs text-muted-foreground">暂无对话</p>
             )}
             {sessions.map((session) => (
-              <button
+              <div
                 key={session.id}
-                onClick={() => onSessionSelect(session.id)}
                 className={cn(
-                  "flex w-full flex-col items-start rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent",
+                  "group flex w-full items-center rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent",
                   currentSessionId === session.id && "bg-accent"
                 )}
               >
-                <span className="w-full truncate text-sm">{session.title}</span>
-                <span className="text-xs text-muted-foreground">
-                  {formatDistanceToNow(new Date(session.updatedAt), {
-                    addSuffix: true,
-                    locale: zhCN,
-                  })}
-                </span>
-              </button>
+                <button
+                  onClick={() => onSessionSelect(session.id)}
+                  className="flex flex-1 flex-col min-w-0 text-left"
+                >
+                  <span className="w-full truncate text-sm">{session.title}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {formatDistanceToNow(new Date(session.updatedAt), {
+                      addSuffix: true,
+                      locale: zhCN,
+                    })}
+                  </span>
+                </button>
+                {onDeleteSession && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onDeleteSession(session.id) }}
+                    className="hidden group-hover:block shrink-0 p-0.5 text-muted-foreground hover:text-destructive transition-colors"
+                    title="删除对话"
+                  >
+                    <X className="size-3" />
+                  </button>
+                )}
+              </div>
             ))}
           </div>
         </ScrollArea>

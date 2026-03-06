@@ -8,7 +8,38 @@ import { buildTestAgentMessages, buildBatchContinuationMessages } from './test-a
 import { parseAgentOutput, detectTruncatedJson } from './stream-handler'
 import { createMessage } from '@/lib/db/repositories/messages'
 import { createMemory, deleteMemory } from '@/lib/db/repositories/memories'
-import { findSessionById } from '@/lib/db/repositories/sessions'
+import { findSessionById, updateSession } from '@/lib/db/repositories/sessions'
+
+/**
+ * Generate a short session title from the user message using LLM.
+ * Returns null if the session already has a custom title.
+ */
+async function generateSessionTitle(
+  sessionId: string,
+  userMessage: string,
+  provider: ReturnType<typeof createAiProvider>
+): Promise<string | null> {
+  const session = findSessionById(sessionId)
+  if (!session || session.title !== '新对话') return null
+
+  try {
+    const title = await provider.chat([
+      {
+        role: 'system',
+        content: '根据用户的第一条消息，生成一个简短的会话标题（不超过 15 个字）。只输出标题文本，不要加引号、标点或解释。',
+      },
+      { role: 'user', content: userMessage },
+    ])
+    const trimmed = title.trim().replace(/^["'""'']+|["'""'']+$/g, '')
+    if (trimmed) {
+      updateSession(sessionId, { title: trimmed })
+      return trimmed
+    }
+  } catch (e) {
+    console.error('[Agent] Title generation failed:', e)
+  }
+  return null
+}
 
 /**
  * Main Agent entry point that orchestrates the full chat workflow.
@@ -191,6 +222,13 @@ export async function* handleAgentChat(
       references: [],
       metadata,
     })
+
+    // Auto-generate session title after first exchange
+    const newTitle = await generateSessionTitle(sessionId, content, provider)
+    if (newTitle) {
+      yield { type: 'session-title', data: { sessionId, title: newTitle } }
+    }
+
     console.log('[Agent] === Chat complete ===')
   } catch (error) {
     const message = error instanceof Error ? error.message : '未知错误'
@@ -357,6 +395,12 @@ export async function* handleTestAgentChat(
       references: [],
       metadata: null,
     })
+
+    // Auto-generate session title after first exchange
+    const newTitle = await generateSessionTitle(sessionId, content, provider)
+    if (newTitle) {
+      yield { type: 'session-title', data: { sessionId, title: newTitle } }
+    }
 
     console.log('[TestAgent] === Chat complete ===')
   } catch (error) {
