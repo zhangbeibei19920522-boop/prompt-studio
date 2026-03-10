@@ -151,8 +151,12 @@ export async function exportTestRunPDF(
 
   try {
     const canvas = await html2canvas(container, {
-      scale: 2,
+      scale: 1.5,
       useCORS: true,
+      onclone: (clonedDoc) => {
+        // Remove all stylesheets to avoid html2canvas choking on lab() colors
+        clonedDoc.querySelectorAll('style, link[rel="stylesheet"]').forEach(el => el.remove())
+      },
     })
     const imgWidth = 210
     const pageHeight = 297
@@ -161,15 +165,15 @@ export async function exportTestRunPDF(
 
     let heightLeft = imgHeight
     let position = 0
-    const imgData = canvas.toDataURL("image/png")
+    const imgData = canvas.toDataURL("image/jpeg", 0.75)
 
-    pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight)
+    pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight)
     heightLeft -= pageHeight
 
     while (heightLeft > 0) {
       position -= pageHeight
       pdf.addPage()
-      pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight)
+      pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight)
       heightLeft -= pageHeight
     }
 
