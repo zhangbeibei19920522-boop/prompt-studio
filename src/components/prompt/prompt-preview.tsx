@@ -110,7 +110,7 @@ export function PromptPreview({
 
   return (
     <>
-    <div className="flex flex-col h-full overflow-auto p-6 gap-6">
+    <div className="flex flex-col p-6 gap-6 min-w-0 w-full">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div className="flex flex-col gap-2 min-w-0">
@@ -155,7 +155,7 @@ export function PromptPreview({
       {/* Content */}
       <div className="flex flex-col gap-2">
         <h3 className="text-sm font-medium text-muted-foreground">内容</h3>
-        <pre className="whitespace-pre-wrap break-words font-mono text-sm bg-muted rounded-md p-4 leading-relaxed">
+        <pre className="whitespace-pre-wrap break-words overflow-hidden font-mono text-sm bg-muted rounded-md p-4 leading-relaxed">
           {highlightVariables(prompt.content)}
         </pre>
       </div>

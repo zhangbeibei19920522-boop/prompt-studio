@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.22 (2026-03-10)
+
+### Bug 修复
+- **右侧面板长文本溢出**: Prompt 预览/编辑面板中长文本撑破容器导致按钮消失。根因是 Radix ScrollArea Viewport 内部 `display: table` div 不受宽度约束，强制改为 `block` 布局 + `min-w-0`；同时预览/编辑组件去掉嵌套滚动容器
+
+### 修改文件
+- `src/components/ui/scroll-area.tsx` — Viewport 内部 div 强制 `block` + `min-w-0`
+- `src/components/layout/right-panel.tsx` — 内容容器加 `max-w-full`
+- `src/components/prompt/prompt-preview.tsx` — 去掉 `h-full overflow-auto`，加 `min-w-0 w-full`
+- `src/components/prompt/prompt-editor.tsx` — 同上
+- `package.json` — 版本号 0.1.21 → 0.1.22
+
 ## v0.1.21 (2026-03-10)
 
 ### 新功能

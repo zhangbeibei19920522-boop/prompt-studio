@@ -139,7 +139,7 @@ export function PromptEditor({ prompt, onSave, onCancel }: PromptEditorProps) {
   }
 
   return (
-    <div className="flex flex-col h-full overflow-auto p-6 gap-6">
+    <div className="flex flex-col p-6 gap-6 min-w-0 w-full">
       {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">
