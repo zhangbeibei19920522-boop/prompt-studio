@@ -10,15 +10,19 @@ import {
   XCircle,
   Loader2,
   Settings2,
+  Download,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { TestCaseEditor } from "./test-case-editor"
 import { TestRunConfig } from "./test-run-config"
 import { TestReportView } from "./test-report"
+import { TestRunHistory } from "./test-run-history"
 import { testSuitesApi, testCasesApi } from "@/lib/utils/api-client"
 import { streamTestRun } from "@/lib/utils/sse-client"
+import { exportTestRunPDF } from "@/lib/utils/pdf-export"
 import type {
   TestSuite,
   TestCase,
@@ -132,6 +136,7 @@ export function TestSuiteDetail({
   const [configOpen, setConfigOpen] = useState(false)
   const [isRunning, setIsRunning] = useState(false)
   const [runProgress, setRunProgress] = useState<RunProgress | null>(null)
+  const [exporting, setExporting] = useState(false)
   const actualOutputsRef = useRef<Record<string, string>>({})
 
   const latestResults = runProgress?.results ?? latestRun?.results ?? []
@@ -254,6 +259,19 @@ export function TestSuiteDetail({
     onSuiteUpdate()
   }
 
+  async function handleExportPDF() {
+    const run = latestRun
+    if (!run) return
+    setExporting(true)
+    try {
+      await exportTestRunPDF({ suiteName: suite.name, testRun: run, testCases: cases })
+    } catch (err) {
+      console.error("PDF 导出失败:", err)
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const canConfirm = suite.status === "draft" && cases.length > 0
   const canRun = (suite.status === "ready" || suite.status === "completed") && cases.length > 0 && !isRunning
 
@@ -319,32 +337,52 @@ export function TestSuiteDetail({
       {latestReport && !isRunning && (
         <Card>
           <CardContent className="pt-4">
-            <div className="grid grid-cols-3 gap-4 text-center">
-              <div>
-                <p className="text-2xl font-bold">{latestReport.score}</p>
-                <p className="text-xs text-muted-foreground">总分</p>
+            <div className="flex items-center justify-between">
+              <div className="grid grid-cols-3 gap-4 text-center flex-1">
+                <div>
+                  <p className="text-2xl font-bold">{latestReport.score}</p>
+                  <p className="text-xs text-muted-foreground">总分</p>
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">
+                    {latestReport.passedCases}/{latestReport.totalCases}
+                  </p>
+                  <p className="text-xs text-muted-foreground">通过率</p>
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">
+                    {latestReport.totalCases > 0
+                      ? Math.round((latestReport.passedCases / latestReport.totalCases) * 100)
+                      : 0}%
+                  </p>
+                  <p className="text-xs text-muted-foreground">通过百分比</p>
+                </div>
               </div>
-              <div>
-                <p className="text-2xl font-bold">
-                  {latestReport.passedCases}/{latestReport.totalCases}
-                </p>
-                <p className="text-xs text-muted-foreground">通过率</p>
-              </div>
-              <div>
-                <p className="text-2xl font-bold">
-                  {latestReport.totalCases > 0
-                    ? Math.round((latestReport.passedCases / latestReport.totalCases) * 100)
-                    : 0}%
-                </p>
-                <p className="text-xs text-muted-foreground">通过百分比</p>
-              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0 ml-4"
+                disabled={exporting}
+                onClick={handleExportPDF}
+              >
+                {exporting
+                  ? <Loader2 className="size-4 animate-spin mr-1" />
+                  : <Download className="size-4 mr-1" />}
+                导出 PDF
+              </Button>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Test cases */}
-      <div className="space-y-3">
+      {/* Tabs: current results + history */}
+      <Tabs defaultValue="current" className="flex-1">
+        <TabsList>
+          <TabsTrigger value="current">测试结果</TabsTrigger>
+          <TabsTrigger value="history">历史记录</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="current" className="space-y-3 mt-3">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold">测试用例 ({cases.length})</h3>
           <Button
@@ -493,12 +531,22 @@ export function TestSuiteDetail({
             onCancel={() => setAddingCase(false)}
           />
         )}
-      </div>
 
       {/* Test report */}
       {latestReport && !isRunning && (
         <TestReportView report={latestReport} />
       )}
+        </TabsContent>
+
+
+        <TabsContent value="history" className="mt-3">
+          <TestRunHistory
+            testSuiteId={suite.id}
+            testCases={cases}
+            suiteName={suite.name}
+          />
+        </TabsContent>
+      </Tabs>
 
       {/* Config dialog */}
       <TestRunConfig

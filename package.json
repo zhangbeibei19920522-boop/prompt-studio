@@ -1,6 +1,6 @@
 {
   "name": "prompt-manager",
-  "version": "0.1.20",
+  "version": "0.1.21",
   "description": "Agent 驱动的对话式 Prompt 管理平台",
   "keywords": [
     "prompt",
@@ -42,6 +42,8 @@
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
     "diff": "^8.0.3",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.0",
     "lucide-react": "^0.575.0",
     "mammoth": "^1.11.0",
     "nanoid": "^5.1.6",

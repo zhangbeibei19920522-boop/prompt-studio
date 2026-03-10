@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.1.21 (2026-03-10)
+
+### 新功能
+- **测试记录导出 PDF**: 测试运行结果支持一键导出为 PDF 报告，包含得分概览、用例详情、评估理由和整体报告，浏览器端生成（html2canvas + jsPDF）
+- **历史测试记录**: 测试集详情页新增「历史记录」Tab，可查看所有历史运行记录列表，点击查看详情，每条记录支持导出 PDF
+
+### 新增文件
+- `src/lib/utils/pdf-export.ts` — PDF 导出工具函数
+- `src/components/test/test-run-history.tsx` — 历史记录列表+详情组件
+
+### 修改文件
+- `src/components/test/test-suite-detail.tsx` — 添加 Tabs（测试结果/历史记录）+ 导出 PDF 按钮
+- `package.json` — 版本号 0.1.20 → 0.1.21，新增 html2canvas、jspdf 依赖
+
 ## v0.1.20 (2026-03-06)
 
 ### 新功能
