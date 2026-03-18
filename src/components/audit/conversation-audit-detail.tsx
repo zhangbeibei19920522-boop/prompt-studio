@@ -1,7 +1,8 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
-import { Download, Loader2, Play, RefreshCw, Upload } from "lucide-react"
+import type { ChangeEvent, DragEvent } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { Download, FileText, Loader2, Play, RefreshCw, Upload } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -10,6 +11,7 @@ import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { conversationAuditJobsApi } from "@/lib/utils/api-client"
 import { streamConversationAuditRun } from "@/lib/utils/sse-client"
+import { cn } from "@/lib/utils"
 import type {
   ConversationAuditConversation,
   ConversationAuditJob,
@@ -29,6 +31,147 @@ interface ConversationAuditDetailProps {
   createMode: boolean
   onCreated: (jobId: string) => void
   onRefresh: (jobId: string) => Promise<ConversationAuditDetailData>
+}
+
+const HISTORY_FILE_ACCEPT = [".xls", ".xlsx"]
+const KNOWLEDGE_FILE_ACCEPT = [".doc", ".docx", ".html", ".htm", ".xls", ".xlsx"]
+
+function getFileExtension(fileName: string): string {
+  const extension = fileName.split(".").pop()?.toLowerCase()
+  return extension ? `.${extension}` : ""
+}
+
+function filterAcceptedFiles(incoming: FileList | File[], acceptedExtensions: string[]): {
+  accepted: File[]
+  rejected: string[]
+} {
+  const accepted: File[] = []
+  const rejected: string[] = []
+
+  for (const file of Array.from(incoming)) {
+    if (acceptedExtensions.includes(getFileExtension(file.name))) {
+      accepted.push(file)
+    } else {
+      rejected.push(file.name)
+    }
+  }
+
+  return { accepted, rejected }
+}
+
+interface ConversationAuditUploadCardProps {
+  title: string
+  description: string
+  accept: string[]
+  inputLabel: string
+  files: File[]
+  multiple?: boolean
+  onFilesChange: (files: File[]) => void
+}
+
+function ConversationAuditUploadCard({
+  title,
+  description,
+  accept,
+  inputLabel,
+  files,
+  multiple = false,
+  onFilesChange,
+}: ConversationAuditUploadCardProps) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const [error, setError] = useState("")
+
+  function applyFiles(incoming: FileList | File[]) {
+    const { accepted, rejected } = filterAcceptedFiles(incoming, accept)
+    setError(rejected.length > 0 ? `已忽略不支持的文件：${rejected.join("、")}` : "")
+    onFilesChange(multiple ? accepted : accepted.slice(0, 1))
+  }
+
+  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    if (event.target.files) {
+      applyFiles(event.target.files)
+    }
+    event.target.value = ""
+  }
+
+  function handleDragOver(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault()
+    setIsDragging(true)
+  }
+
+  function handleDragLeave(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault()
+    setIsDragging(false)
+  }
+
+  function handleDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault()
+    setIsDragging(false)
+    if (event.dataTransfer.files) {
+      applyFiles(event.dataTransfer.files)
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label={title}
+        className={cn(
+          "flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed px-6 py-10 text-center transition-colors outline-none",
+          isDragging
+            ? "border-primary bg-primary/5 text-primary"
+            : "border-muted-foreground/30 bg-background hover:border-primary/50 hover:bg-muted/30"
+        )}
+        onClick={() => inputRef.current?.click()}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault()
+            inputRef.current?.click()
+          }
+        }}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        <Upload className="size-10 shrink-0" />
+        <div className="space-y-1">
+          <p className="text-base font-semibold text-foreground">{title}</p>
+          <p className="text-sm font-medium text-foreground">点击上传或拖拽文件到此处</p>
+          <p className="text-xs text-muted-foreground">{description}</p>
+        </div>
+        <input
+          ref={inputRef}
+          type="file"
+          aria-label={inputLabel}
+          accept={accept.join(",")}
+          multiple={multiple}
+          className="sr-only"
+          onChange={handleFileChange}
+        />
+      </div>
+
+      {files.length > 0 ? (
+        <div className="rounded-lg border bg-muted/20 p-3">
+          <p className="text-xs font-medium text-muted-foreground">
+            {multiple ? `已选择 ${files.length} 个文件` : "已选择文件"}
+          </p>
+          <div className="mt-2 space-y-2">
+            {files.map((file) => (
+              <div key={file.name} className="flex items-center gap-2 text-sm">
+                <FileText className="size-4 text-muted-foreground" />
+                <span className="truncate">{file.name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+    </div>
+  )
 }
 
 function getStatusLabel(status: string): string {
@@ -180,27 +323,26 @@ export function ConversationAuditDetail({
               </div>
 
               <div className="space-y-2">
-                <p className="text-sm font-medium">历史对话 Excel</p>
-                <input
-                  type="file"
-                  accept=".xls,.xlsx"
-                  onChange={(event) => setHistoryFile(event.target.files?.[0] ?? null)}
-                  className="block w-full text-sm"
+                <ConversationAuditUploadCard
+                  title="历史对话 Excel"
+                  description="仅支持 Excel，对话按 Conversation ID 解析"
+                  accept={HISTORY_FILE_ACCEPT}
+                  inputLabel="历史对话文件上传"
+                  files={historyFile ? [historyFile] : []}
+                  onFilesChange={(files) => setHistoryFile(files[0] ?? null)}
                 />
               </div>
 
               <div className="space-y-2">
-                <p className="text-sm font-medium">知识库文件</p>
-                <input
-                  type="file"
+                <ConversationAuditUploadCard
+                  title="知识库文件"
+                  description="支持混合上传 Word、HTML、Excel"
+                  accept={KNOWLEDGE_FILE_ACCEPT}
+                  inputLabel="知识库文件上传"
+                  files={knowledgeFiles}
                   multiple
-                  accept=".doc,.docx,.html,.htm,.xls,.xlsx,.csv,.txt,.md"
-                  onChange={(event) => setKnowledgeFiles(Array.from(event.target.files ?? []))}
-                  className="block w-full text-sm"
+                  onFilesChange={setKnowledgeFiles}
                 />
-                <p className="text-xs text-muted-foreground">
-                  支持 Word、HTML、Excel，历史对话文件单独上传。
-                </p>
               </div>
 
               <div className="flex items-center gap-3">
@@ -208,7 +350,6 @@ export function ConversationAuditDetail({
                   {submitting ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Upload className="mr-2 size-4" />}
                   创建任务
                 </Button>
-                {historyFile ? <span className="text-xs text-muted-foreground">{historyFile.name}</span> : null}
               </div>
             </CardContent>
           </Card>
