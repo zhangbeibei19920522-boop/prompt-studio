@@ -19,7 +19,11 @@ import type {
   TestSuite,
   TestCase,
   TestRun,
+  ConversationAuditJob,
+  ConversationAuditConversation,
+  ConversationAuditTurn,
 } from '@/types/database'
+import type { CreateConversationAuditJobRequest } from '@/types/api'
 
 async function fetchApi<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(url, {
@@ -212,4 +216,46 @@ export const testRunsApi = {
     fetchApi<TestRun[]>(`/api/test-suites/${suiteId}/runs`),
   get: (id: string) =>
     fetchApi<TestRun>(`/api/test-runs/${id}`),
+}
+
+export const conversationAuditJobsApi = {
+  listByProject: (projectId: string) =>
+    fetchApi<ConversationAuditJob[]>(`/api/projects/${projectId}/conversation-audit-jobs`),
+  get: (id: string) =>
+    fetchApi<{
+      job: ConversationAuditJob
+      parseSummary: ConversationAuditJob['parseSummary']
+      conversations: ConversationAuditConversation[]
+      turns: ConversationAuditTurn[]
+    }>(`/api/conversation-audit-jobs/${id}`),
+  create: async (
+    projectId: string,
+    data: CreateConversationAuditJobRequest & {
+      historyFile: File
+      knowledgeFiles?: File[]
+    }
+  ) => {
+    const formData = new FormData()
+    formData.set('name', data.name)
+    formData.set('historyFile', data.historyFile)
+
+    for (const file of data.knowledgeFiles ?? []) {
+      formData.append('knowledgeFiles', file)
+    }
+
+    const res = await fetch(`/api/projects/${projectId}/conversation-audit-jobs`, {
+      method: 'POST',
+      body: formData,
+    })
+    const json = await res.json()
+    if (!json.success) {
+      throw new Error(json.error ?? '创建会话质检任务失败')
+    }
+    return json.data as {
+      job: ConversationAuditJob
+      parseSummary: ConversationAuditJob['parseSummary']
+      conversations: ConversationAuditConversation[]
+      turns: ConversationAuditTurn[]
+    }
+  },
 }

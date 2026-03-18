@@ -43,6 +43,10 @@ interface SidebarProps {
   onTestSuiteClick?: (id: string) => void
   onNewTestSuite?: () => void
   onDeleteTestSuite?: (id: string) => void
+  conversationAuditJobs?: Array<{ id: string; name: string; status: string }>
+  currentConversationAuditJobId?: string | null
+  onConversationAuditJobClick?: (id: string) => void
+  onNewConversationAuditJob?: () => void
   onDeleteSession?: (id: string) => void
 }
 
@@ -158,6 +162,10 @@ export function Sidebar({
   onTestSuiteClick,
   onNewTestSuite,
   onDeleteTestSuite,
+  conversationAuditJobs,
+  currentConversationAuditJobId,
+  onConversationAuditJobClick,
+  onNewConversationAuditJob,
   onDeleteSession,
 }: SidebarProps) {
   return (
@@ -361,6 +369,47 @@ export function Sidebar({
                         <X className="size-3" />
                       </button>
                     )}
+                  </div>
+                ))}
+              </CollapsibleGroup>
+            )}
+
+            {conversationAuditJobs && (
+              <CollapsibleGroup
+                label={
+                  <span className="flex items-center gap-1">
+                    <span>🔎</span>
+                    <span>会话质检</span>
+                  </span>
+                }
+                count={conversationAuditJobs.length}
+                actions={onNewConversationAuditJob ? [{ icon: <Plus className="size-3" />, title: "新建会话质检", onClick: onNewConversationAuditJob }] : []}
+              >
+                {conversationAuditJobs.length === 0 && (
+                  <p className="px-6 py-1 text-xs text-muted-foreground">暂无质检任务</p>
+                )}
+                {conversationAuditJobs.map((job) => (
+                  <div
+                    key={job.id}
+                    className={cn(
+                      "group flex w-full items-center gap-1 px-6 py-1 text-left hover:bg-accent transition-colors rounded-sm",
+                      currentConversationAuditJobId === job.id && "bg-accent"
+                    )}
+                  >
+                    <button
+                      onClick={() => onConversationAuditJobClick?.(job.id)}
+                      className="flex flex-1 items-center gap-2 min-w-0"
+                    >
+                      <span className="flex-1 truncate text-xs text-left" title={job.name}>
+                        {truncateText(job.name)}
+                      </span>
+                      <Badge
+                        variant={job.status === 'completed' ? 'default' : job.status === 'failed' ? 'destructive' : job.status === 'running' ? 'secondary' : 'outline'}
+                        className="shrink-0 text-[10px] px-1 py-0"
+                      >
+                        {job.status === 'draft' ? '草稿' : job.status === 'running' ? '运行中' : job.status === 'completed' ? '已完成' : '失败'}
+                      </Badge>
+                    </button>
                   </div>
                 ))}
               </CollapsibleGroup>

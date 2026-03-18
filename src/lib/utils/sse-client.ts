@@ -1,4 +1,4 @@
-import type { StreamEvent, TestRunEvent } from '@/types/ai'
+import type { ConversationAuditRunEvent, StreamEvent, TestRunEvent } from '@/types/ai'
 import type { MessageReference } from '@/types/database'
 
 /**
@@ -175,6 +175,50 @@ export async function* streamTestRun(
         const event: TestRunEvent = JSON.parse(payload)
         yield event
         if (event.type === 'test-complete' || event.type === 'test-error') return
+      } catch {
+        // Skip malformed data
+      }
+    }
+  }
+}
+
+export async function* streamConversationAuditRun(
+  jobId: string
+): AsyncGenerator<ConversationAuditRunEvent> {
+  const res = await fetch(`/api/conversation-audit-jobs/${jobId}/run`, {
+    method: 'POST',
+  })
+
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`会话质检运行请求失败 (${res.status}): ${text}`)
+  }
+
+  const reader = res.body?.getReader()
+  if (!reader) {
+    throw new Error('无法读取响应流')
+  }
+
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() ?? ''
+
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (!trimmed || !trimmed.startsWith('data: ')) continue
+
+      const payload = trimmed.slice(6)
+      try {
+        const event: ConversationAuditRunEvent = JSON.parse(payload)
+        yield event
+        if (event.type === 'audit-complete' || event.type === 'audit-error') return
       } catch {
         // Skip malformed data
       }

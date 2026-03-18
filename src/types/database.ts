@@ -213,3 +213,65 @@ export interface TestRun {
   startedAt: string
   completedAt: string | null
 }
+
+export type ConversationAuditJobStatus = 'draft' | 'running' | 'completed' | 'failed'
+
+export interface ConversationAuditParseSummary {
+  knowledgeFileCount: number
+  conversationCount: number
+  turnCount: number
+  invalidRowCount: number
+}
+
+export interface ConversationAuditRetrievedSource {
+  chunkId: string
+  sourceName: string
+  score: number
+}
+
+export interface ConversationAuditJob {
+  id: string
+  projectId: string
+  name: string
+  status: ConversationAuditJobStatus
+  parseSummary: ConversationAuditParseSummary
+  issueCount: number
+  totalTurns: number
+  errorMessage: string | null
+  createdAt: string
+  updatedAt: string
+  completedAt: string | null
+}
+
+export interface ConversationAuditKnowledgeChunk {
+  id: string
+  jobId: string
+  sourceName: string
+  sourceType: string
+  chunkIndex: number
+  content: string
+  metadata: Record<string, unknown>
+  createdAt: string
+}
+
+export interface ConversationAuditConversation {
+  id: string
+  jobId: string
+  externalConversationId: string
+  turnCount: number
+  createdAt: string
+}
+
+export interface ConversationAuditTurn {
+  id: string
+  jobId: string
+  conversationId: string
+  turnIndex: number
+  userMessage: string
+  botReply: string
+  hasIssue: boolean | null
+  knowledgeAnswer: string | null
+  retrievedSources: ConversationAuditRetrievedSource[]
+  createdAt: string
+  updatedAt: string
+}
