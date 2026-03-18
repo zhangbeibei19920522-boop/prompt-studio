@@ -117,7 +117,7 @@ function ConversationAuditUploadCard({
     <div className="space-y-3">
       <div
         className={cn(
-          "flex h-[22rem] flex-col overflow-hidden rounded-xl border bg-background",
+          "flex h-[18rem] flex-col overflow-hidden rounded-xl border bg-background",
           isDragging ? "border-primary bg-primary/5" : "border-border"
         )}
       >
@@ -126,7 +126,7 @@ function ConversationAuditUploadCard({
           tabIndex={0}
           aria-label={title}
           className={cn(
-            "flex min-h-0 flex-1 cursor-pointer flex-col items-center justify-center gap-3 border-b-2 border-dashed px-6 py-8 text-center transition-colors outline-none",
+            "flex min-h-0 flex-1 cursor-pointer flex-col items-center justify-center gap-2 border-b-2 border-dashed px-5 py-5 text-center transition-colors outline-none",
             isDragging
               ? "border-primary bg-primary/5 text-primary"
               : "border-muted-foreground/30 hover:border-primary/50 hover:bg-muted/20"
@@ -142,9 +142,9 @@ function ConversationAuditUploadCard({
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
-          <Upload className="size-10 shrink-0" />
+          <Upload className="size-8 shrink-0" />
           <div className="space-y-1">
-            <p className="text-base font-semibold text-foreground">{title}</p>
+            <p className="text-sm font-semibold text-foreground">{title}</p>
             <p className="text-sm font-medium text-foreground">点击上传或拖拽文件到此处</p>
             <p className="text-xs text-muted-foreground">{description}</p>
           </div>
@@ -159,13 +159,13 @@ function ConversationAuditUploadCard({
           />
         </div>
 
-        <div className="flex h-32 flex-col p-3">
+        <div className="flex h-24 flex-col p-2.5">
           <p className="text-xs font-medium text-muted-foreground">
             {files.length > 0 ? (multiple ? `已选择 ${files.length} 个文件` : "已选择文件") : "文件列表"}
           </p>
-          <div className="mt-2 min-h-0 flex-1 overflow-y-auto">
+          <div className="mt-1.5 min-h-0 flex-1 overflow-y-auto">
             {files.length > 0 ? (
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 {files.map((file) => (
                   <div key={file.name} className="flex items-center gap-2 text-sm">
                     <FileText className="size-4 shrink-0 text-muted-foreground" />

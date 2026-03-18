@@ -41,7 +41,8 @@ describe("ConversationAuditDetail create mode", () => {
     )
 
     expect(html).toContain("尚未选择文件")
-    expect(html).toContain("h-[22rem]")
+    expect(html).toContain("h-[18rem]")
+    expect(html).not.toContain("h-[22rem]")
     expect(html).toContain("overflow-y-auto")
   })
 })
