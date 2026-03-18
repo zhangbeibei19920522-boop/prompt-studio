@@ -40,7 +40,11 @@ function mapRowToConversationAuditJob(row: ConversationAuditJobRow): Conversatio
 export function findConversationAuditJobsByProject(projectId: string): ConversationAuditJob[] {
   const db = getDb()
   const rows = db
-    .prepare('SELECT * FROM conversation_audit_jobs WHERE project_id = ? ORDER BY created_at DESC')
+    .prepare(`
+      SELECT * FROM conversation_audit_jobs
+      WHERE project_id = ?
+      ORDER BY created_at DESC, rowid DESC
+    `)
     .all(projectId) as ConversationAuditJobRow[]
 
   return rows.map(mapRowToConversationAuditJob)
