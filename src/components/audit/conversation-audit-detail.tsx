@@ -116,58 +116,69 @@ function ConversationAuditUploadCard({
   return (
     <div className="space-y-3">
       <div
-        role="button"
-        tabIndex={0}
-        aria-label={title}
         className={cn(
-          "flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed px-6 py-10 text-center transition-colors outline-none",
-          isDragging
-            ? "border-primary bg-primary/5 text-primary"
-            : "border-muted-foreground/30 bg-background hover:border-primary/50 hover:bg-muted/30"
+          "flex h-[22rem] flex-col overflow-hidden rounded-xl border bg-background",
+          isDragging ? "border-primary bg-primary/5" : "border-border"
         )}
-        onClick={() => inputRef.current?.click()}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault()
-            inputRef.current?.click()
-          }
-        }}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
       >
-        <Upload className="size-10 shrink-0" />
-        <div className="space-y-1">
-          <p className="text-base font-semibold text-foreground">{title}</p>
-          <p className="text-sm font-medium text-foreground">点击上传或拖拽文件到此处</p>
-          <p className="text-xs text-muted-foreground">{description}</p>
+        <div
+          role="button"
+          tabIndex={0}
+          aria-label={title}
+          className={cn(
+            "flex min-h-0 flex-1 cursor-pointer flex-col items-center justify-center gap-3 border-b-2 border-dashed px-6 py-8 text-center transition-colors outline-none",
+            isDragging
+              ? "border-primary bg-primary/5 text-primary"
+              : "border-muted-foreground/30 hover:border-primary/50 hover:bg-muted/20"
+          )}
+          onClick={() => inputRef.current?.click()}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault()
+              inputRef.current?.click()
+            }
+          }}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          <Upload className="size-10 shrink-0" />
+          <div className="space-y-1">
+            <p className="text-base font-semibold text-foreground">{title}</p>
+            <p className="text-sm font-medium text-foreground">点击上传或拖拽文件到此处</p>
+            <p className="text-xs text-muted-foreground">{description}</p>
+          </div>
+          <input
+            ref={inputRef}
+            type="file"
+            aria-label={inputLabel}
+            accept={accept.join(",")}
+            multiple={multiple}
+            className="sr-only"
+            onChange={handleFileChange}
+          />
         </div>
-        <input
-          ref={inputRef}
-          type="file"
-          aria-label={inputLabel}
-          accept={accept.join(",")}
-          multiple={multiple}
-          className="sr-only"
-          onChange={handleFileChange}
-        />
-      </div>
 
-      {files.length > 0 ? (
-        <div className="rounded-lg border bg-muted/20 p-3">
+        <div className="flex h-32 flex-col p-3">
           <p className="text-xs font-medium text-muted-foreground">
-            {multiple ? `已选择 ${files.length} 个文件` : "已选择文件"}
+            {files.length > 0 ? (multiple ? `已选择 ${files.length} 个文件` : "已选择文件") : "文件列表"}
           </p>
-          <div className="mt-2 space-y-2">
-            {files.map((file) => (
-              <div key={file.name} className="flex items-center gap-2 text-sm">
-                <FileText className="size-4 text-muted-foreground" />
-                <span className="truncate">{file.name}</span>
+          <div className="mt-2 min-h-0 flex-1 overflow-y-auto">
+            {files.length > 0 ? (
+              <div className="space-y-2">
+                {files.map((file) => (
+                  <div key={file.name} className="flex items-center gap-2 text-sm">
+                    <FileText className="size-4 shrink-0 text-muted-foreground" />
+                    <span className="truncate">{file.name}</span>
+                  </div>
+                ))}
               </div>
-            ))}
+            ) : (
+              <p className="text-sm text-muted-foreground">尚未选择文件</p>
+            )}
           </div>
         </div>
-      ) : null}
+      </div>
 
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
     </div>
