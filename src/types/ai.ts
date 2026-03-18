@@ -120,6 +120,13 @@ export type TestRunEvent =
   | { type: 'test-complete'; data: { runId: string; score: number } }
   | { type: 'test-error'; data: { error: string } }
 
+export type ConversationAuditRunEvent =
+  | { type: 'audit-start'; data: { jobId: string; totalTurns: number } }
+  | { type: 'audit-turn-start'; data: { turnId: string; index: number } }
+  | { type: 'audit-turn-done'; data: { turnId: string; hasIssue: boolean | null } }
+  | { type: 'audit-complete'; data: { jobId: string; issueCount: number; totalTurns: number } }
+  | { type: 'audit-error'; data: { error: string } }
+
 // 测试集生成进度
 export interface TestSuiteProgressData {
   generated: number
