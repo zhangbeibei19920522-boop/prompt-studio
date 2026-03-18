@@ -6,6 +6,7 @@ import { TopBar } from "@/components/layout/top-bar"
 import { Sidebar } from "@/components/layout/sidebar"
 import { RightPanel } from "@/components/layout/right-panel"
 import { ChatArea } from "@/components/chat/chat-area"
+import { ConversationAuditDetail } from "@/components/audit/conversation-audit-detail"
 import { TestSuiteDetail } from "@/components/test/test-suite-detail"
 import { CreateProjectDialog } from "@/components/project/create-project-dialog"
 import { ProjectSettings } from "@/components/project/project-settings"
@@ -25,8 +26,25 @@ import {
   testSuitesApi,
   testCasesApi,
   testRunsApi,
+  conversationAuditJobsApi,
 } from "@/lib/utils/api-client"
-import type { Project, Prompt, Document, Session, Message, Memory, PromptVersion, PreviewData, DiffData, TestSuite, TestCase, TestRun } from "@/types/database"
+import type {
+  Project,
+  Prompt,
+  Document,
+  Session,
+  Message,
+  Memory,
+  PromptVersion,
+  PreviewData,
+  DiffData,
+  TestSuite,
+  TestCase,
+  TestRun,
+  ConversationAuditJob,
+  ConversationAuditConversation,
+  ConversationAuditTurn,
+} from "@/types/database"
 import type { TestSuiteGenerationData } from "@/types/ai"
 import { applyPrompt } from "@/lib/utils/sse-client"
 
@@ -61,6 +79,15 @@ export default function MainPage() {
   const [currentTestCases, setCurrentTestCases] = useState<TestCase[]>([])
   const [currentTestRun, setCurrentTestRun] = useState<TestRun | null>(null)
   const [testMode, setTestMode] = useState(false)
+  const [conversationAuditJobs, setConversationAuditJobs] = useState<ConversationAuditJob[]>([])
+  const [currentConversationAuditJobId, setCurrentConversationAuditJobId] = useState<string | null>(null)
+  const [conversationAuditCreateMode, setConversationAuditCreateMode] = useState(false)
+  const [currentConversationAuditData, setCurrentConversationAuditData] = useState<{
+    job: ConversationAuditJob
+    parseSummary: ConversationAuditJob["parseSummary"]
+    conversations: ConversationAuditConversation[]
+    turns: ConversationAuditTurn[]
+  } | null>(null)
 
   // Memory extraction tracking
   const prevSessionIdRef = useRef<string | null>(null)
@@ -81,8 +108,8 @@ export default function MainPage() {
   useEffect(() => {
     projectsApi.list().then((data) => {
       setProjects(data)
-      if (data.length > 0 && !currentProjectId) {
-        setCurrentProjectId(data[0].id)
+      if (data.length > 0) {
+        setCurrentProjectId((prev) => prev ?? data[0].id)
       }
     }).catch(console.error)
   }, [])
@@ -104,6 +131,7 @@ export default function MainPage() {
       else setCurrentSessionId(null)
     }).catch(console.error)
     testSuitesApi.listByProject(currentProjectId).then(setTestSuites).catch(console.error)
+    conversationAuditJobsApi.listByProject(currentProjectId).then(setConversationAuditJobs).catch(console.error)
   }, [currentProjectId])
 
   // Trigger memory extraction when switching sessions
@@ -136,10 +164,7 @@ export default function MainPage() {
 
   // Load messages when session changes
   useEffect(() => {
-    if (!currentSessionId) {
-      setMessages([])
-      return
-    }
+    if (!currentSessionId) return
     messagesApi.listBySession(currentSessionId).then(setMessages).catch(console.error)
   }, [currentSessionId])
 
@@ -184,6 +209,9 @@ export default function MainPage() {
       const session = await sessionsApi.create(currentProjectId)
       setSessions((prev) => [session, ...prev])
       setCurrentSessionId(session.id)
+      setCurrentConversationAuditJobId(null)
+      setCurrentConversationAuditData(null)
+      setConversationAuditCreateMode(false)
     } catch (e) {
       console.error("Create session failed:", e)
     }
@@ -405,6 +433,11 @@ export default function MainPage() {
     testSuitesApi.listByProject(currentProjectId).then(setTestSuites).catch(console.error)
   }, [currentProjectId])
 
+  const refreshConversationAuditJobs = useCallback(() => {
+    if (!currentProjectId) return
+    conversationAuditJobsApi.listByProject(currentProjectId).then(setConversationAuditJobs).catch(console.error)
+  }, [currentProjectId])
+
   const handleNewTestSuite = async () => {
     if (!currentProjectId) return
     try {
@@ -412,9 +445,36 @@ export default function MainPage() {
       setSessions((prev) => [session, ...prev])
       setCurrentSessionId(session.id)
       setCurrentTestSuiteId(null)
+      setCurrentConversationAuditJobId(null)
+      setCurrentConversationAuditData(null)
+      setConversationAuditCreateMode(false)
       setTestMode(true)
     } catch (e) {
       console.error("Create test session failed:", e)
+    }
+  }
+
+  const handleNewConversationAuditJob = () => {
+    setCurrentConversationAuditJobId(null)
+    setCurrentConversationAuditData(null)
+    setConversationAuditCreateMode(true)
+    setCurrentTestSuiteId(null)
+    setCurrentSessionId(null)
+    setTestMode(false)
+    setRightPanelView(null)
+  }
+
+  const handleConversationAuditJobClick = async (id: string) => {
+    try {
+      const data = await conversationAuditJobsApi.get(id)
+      setCurrentConversationAuditJobId(id)
+      setCurrentConversationAuditData(data)
+      setConversationAuditCreateMode(false)
+      setCurrentTestSuiteId(null)
+      setCurrentSessionId(null)
+      setTestMode(false)
+    } catch (error) {
+      console.error(error)
     }
   }
 
@@ -424,6 +484,9 @@ export default function MainPage() {
       setCurrentTestSuiteId(id)
       setCurrentTestCases(data.cases)
       setCurrentSessionId(null)
+      setCurrentConversationAuditJobId(null)
+      setCurrentConversationAuditData(null)
+      setConversationAuditCreateMode(false)
       const runs = await testRunsApi.listBySuite(id)
       setCurrentTestRun(runs.length > 0 ? runs[0] : null)
     } catch (e) {
@@ -588,6 +651,9 @@ export default function MainPage() {
         onProjectChange={(id) => {
           setCurrentProjectId(id)
           setCurrentSessionId(null)
+          setCurrentConversationAuditJobId(null)
+          setCurrentConversationAuditData(null)
+          setConversationAuditCreateMode(false)
           setRightPanelView(null)
         }}
         onNewProject={() => setCreateProjectOpen(true)}
@@ -597,7 +663,14 @@ export default function MainPage() {
         <Sidebar
           sessions={sessions}
           currentSessionId={currentSessionId}
-          onSessionSelect={(id) => { setCurrentSessionId(id); setCurrentTestSuiteId(null); setTestMode(false) }}
+          onSessionSelect={(id) => {
+            setCurrentSessionId(id)
+            setCurrentTestSuiteId(null)
+            setCurrentConversationAuditJobId(null)
+            setCurrentConversationAuditData(null)
+            setConversationAuditCreateMode(false)
+            setTestMode(false)
+          }}
           onNewSession={handleNewSession}
           prompts={prompts.map((p) => ({ id: p.id, title: p.title, status: p.status }))}
           onPromptClick={handlePromptClick}
@@ -619,6 +692,10 @@ export default function MainPage() {
           onTestSuiteClick={handleTestSuiteClick}
           onNewTestSuite={handleNewTestSuite}
           onDeleteTestSuite={handleDeleteTestSuite}
+          conversationAuditJobs={conversationAuditJobs.map((job) => ({ id: job.id, name: job.name, status: job.status }))}
+          currentConversationAuditJobId={currentConversationAuditJobId}
+          onConversationAuditJobClick={handleConversationAuditJobClick}
+          onNewConversationAuditJob={handleNewConversationAuditJob}
           onDeleteSession={handleDeleteSession}
         />
         <main className="flex flex-1 overflow-hidden">
@@ -647,9 +724,28 @@ export default function MainPage() {
                 }}
               />
             </div>
+          ) : currentProjectId && (conversationAuditCreateMode || currentConversationAuditData) ? (
+            <ConversationAuditDetail
+              projectId={currentProjectId}
+              data={currentConversationAuditData}
+              createMode={conversationAuditCreateMode}
+              onCreated={async (jobId) => {
+                refreshConversationAuditJobs()
+                setConversationAuditCreateMode(false)
+                setCurrentConversationAuditJobId(jobId)
+                const detail = await conversationAuditJobsApi.get(jobId)
+                setCurrentConversationAuditData(detail)
+              }}
+              onRefresh={async (jobId) => {
+                refreshConversationAuditJobs()
+                const detail = await conversationAuditJobsApi.get(jobId)
+                setCurrentConversationAuditData(detail)
+                return detail
+              }}
+            />
           ) : (
             <ChatArea
-              messages={messages}
+              messages={currentSessionId ? messages : []}
               sessionId={currentSessionId}
               prompts={prompts.map((p) => ({ id: p.id, title: p.title }))}
               documents={documents.map((d) => ({ id: d.id, name: d.name }))}
