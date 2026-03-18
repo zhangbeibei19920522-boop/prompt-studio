@@ -1,5 +1,40 @@
 # Changelog
 
+## Unreleased (2026-03-18)
+
+### 新功能
+- **会话质检模块**: 新增项目级“会话质检”入口，支持上传知识库文件（Word / HTML / Excel）和历史对话 Excel，按 `Conversation ID` 聚合并切分为逐轮 `user -> bot` 问答，基于知识库召回结果和全局模型配置逐轮评估 bot 回答是否有问题，并输出“是否有问题 / 原知识库回答”
+- **历史对话离线评估工作流**: 支持创建质检任务、查看解析摘要、SSE 流式运行进度、筛选“仅看有问题”轮次，以及导出 Excel 结果
+- **知识库扩展解析**: 文档解析新增 `HTML` 正文抽取和 `Excel/CSV` 工作簿文本化能力，为会话质检和后续检索复用
+
+### 新增文件
+- `src/lib/audit/history-parser.ts` — 历史对话 Excel 解析与逐轮切分
+- `src/lib/audit/knowledge-chunker.ts` — 知识库文本切块
+- `src/lib/audit/retriever.ts` — 轻量知识召回
+- `src/lib/audit/evaluator.ts` — 逐轮质检评估器
+- `src/lib/audit/runner.ts` — 质检任务执行器
+- `src/lib/db/repositories/conversation-audit-*.ts` — 会话质检任务、知识块、会话、轮次仓储
+- `src/app/api/projects/[id]/conversation-audit-jobs/route.ts` — 质检任务创建/列表 API
+- `src/app/api/conversation-audit-jobs/[id]/route.ts` — 质检任务详情 API
+- `src/app/api/conversation-audit-jobs/[id]/run/route.ts` — 质检运行 SSE API
+- `src/app/api/conversation-audit-jobs/[id]/export/route.ts` — 质检结果导出 API
+- `src/components/audit/conversation-audit-detail.tsx` — 会话质检主界面
+- `src/lib/utils/parse-html.ts` — HTML 正文抽取工具
+- `src/lib/utils/parse-workbook.ts` — Excel/CSV 工作簿解析工具
+
+### 修改文件
+- `src/lib/db/schema.sql` — 新增 conversation audit 相关表和索引
+- `src/types/database.ts` — 新增会话质检数据结构
+- `src/types/api.ts` — 新增会话质检请求/响应类型
+- `src/types/ai.ts` — 新增 `ConversationAuditRunEvent`
+- `src/lib/utils/parse-document.ts` — 接入 HTML / Excel / CSV 解析分流
+- `src/lib/utils/api-client.ts` — 新增 `conversationAuditJobsApi`
+- `src/lib/utils/sse-client.ts` — 新增 `streamConversationAuditRun`
+- `src/components/layout/sidebar.tsx` — 新增“会话质检”分组入口
+- `src/app/(main)/page.tsx` — 新增会话质检模块状态与视图切换
+- `package.json` — 新增 `vitest`、`xlsx` 依赖和测试脚本
+- `vitest.config.ts` / `src/test/setup.ts` — 新增测试基础设施
+
 ## v0.1.22 (2026-03-10)
 
 ### Bug 修复
