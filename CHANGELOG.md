@@ -1,11 +1,14 @@
 # Changelog
 
-## Unreleased (2026-03-18)
+## v0.1.24 (2026-03-18)
 
 ### 新功能
 - **会话质检模块**: 新增项目级“会话质检”入口，支持上传知识库文件（Word / HTML / Excel）和历史对话 Excel，按 `Conversation ID` 聚合并切分为逐轮 `user -> bot` 问答，基于知识库召回结果和全局模型配置逐轮评估 bot 回答是否有问题，并输出“是否有问题 / 原知识库回答”
 - **历史对话离线评估工作流**: 支持创建质检任务、查看解析摘要、SSE 流式运行进度、筛选“仅看有问题”轮次，以及导出 Excel 结果
 - **知识库扩展解析**: 文档解析新增 `HTML` 正文抽取和 `Excel/CSV` 工作簿文本化能力，为会话质检和后续检索复用
+
+### 改进
+- **会话质检上传体验优化**: 新建任务页的“历史对话 Excel”和“知识库文件”入口改为更明显的拖拽上传区；知识库支持一次混合上传 `Word / HTML / Excel`，历史对话入口明确限制为 `xls/xlsx`
 
 ### 新增文件
 - `src/lib/audit/history-parser.ts` — 历史对话 Excel 解析与逐轮切分
@@ -19,6 +22,7 @@
 - `src/app/api/conversation-audit-jobs/[id]/run/route.ts` — 质检运行 SSE API
 - `src/app/api/conversation-audit-jobs/[id]/export/route.ts` — 质检结果导出 API
 - `src/components/audit/conversation-audit-detail.tsx` — 会话质检主界面
+- `src/components/audit/__tests__/conversation-audit-detail.test.tsx` — 会话质检创建页上传区测试
 - `src/lib/utils/parse-html.ts` — HTML 正文抽取工具
 - `src/lib/utils/parse-workbook.ts` — Excel/CSV 工作簿解析工具
 
@@ -32,6 +36,7 @@
 - `src/lib/utils/sse-client.ts` — 新增 `streamConversationAuditRun`
 - `src/components/layout/sidebar.tsx` — 新增“会话质检”分组入口
 - `src/app/(main)/page.tsx` — 新增会话质检模块状态与视图切换
+- `src/components/audit/conversation-audit-detail.tsx` — 创建页上传入口改为拖拽卡片，知识库接收格式收敛为 `Word / HTML / Excel`
 - `package.json` — 新增 `vitest`、`xlsx` 依赖和测试脚本
 - `vitest.config.ts` / `src/test/setup.ts` — 新增测试基础设施
 
