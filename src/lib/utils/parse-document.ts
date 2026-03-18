@@ -3,6 +3,8 @@
  * Extracts plain text from PDF, DOCX, DOC, and text-based files.
  * Uses magic bytes to detect actual file format, not just extension.
  */
+import { extractTextFromHtml } from '@/lib/utils/parse-html'
+import { parseWorkbookBuffer } from '@/lib/utils/parse-workbook'
 
 // OLE2 Compound Document magic bytes (used by .doc)
 const OLE2_MAGIC = [0xd0, 0xcf, 0x11, 0xe0]
@@ -15,22 +17,6 @@ function isOle2(buffer: Buffer): boolean {
 
 function isZip(buffer: Buffer): boolean {
   return buffer.length >= 2 && ZIP_MAGIC.every((b, i) => buffer[i] === b)
-}
-
-/** Strip HTML tags and decode common entities (for HTML-as-.doc files) */
-function stripHtmlTags(html: string): string {
-  return html
-    .replace(/<style[\s\S]*?<\/style>/gi, '')
-    .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
 }
 
 async function parseWithMammoth(buffer: Buffer): Promise<string> {
@@ -71,7 +57,16 @@ export async function parseDocumentBuffer(
         return parseWithMammoth(buffer)
       }
       // Neither OLE2 nor ZIP — likely HTML/RTF saved as .doc (common)
-      return stripHtmlTags(buffer.toString('utf-8'))
+      return extractTextFromHtml(buffer.toString('utf-8'))
+    }
+    case 'htm':
+    case 'html': {
+      return extractTextFromHtml(buffer.toString('utf-8'))
+    }
+    case 'csv':
+    case 'xls':
+    case 'xlsx': {
+      return parseWorkbookBuffer(buffer)
     }
     case 'md':
     case 'txt':
