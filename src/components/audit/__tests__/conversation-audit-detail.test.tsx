@@ -26,4 +26,22 @@ describe("ConversationAuditDetail create mode", () => {
     expect(html).not.toContain(".txt")
     expect(html).not.toContain(".md")
   })
+
+  it("reserves fixed upload-card height and internal scroll space for selected files", () => {
+    const html = renderToStaticMarkup(
+      <ConversationAuditDetail
+        projectId="project-1"
+        data={null}
+        createMode
+        onCreated={() => {}}
+        onRefresh={async () => {
+          throw new Error("unused in create mode")
+        }}
+      />
+    )
+
+    expect(html).toContain("尚未选择文件")
+    expect(html).toContain("h-[22rem]")
+    expect(html).toContain("overflow-y-auto")
+  })
 })
