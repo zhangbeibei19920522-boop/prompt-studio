@@ -77,3 +77,19 @@ export interface UpdateTestCaseRequest {
 export interface RunTestRequest {
   promptId: string
 }
+
+export interface ConversationAuditParseSummary {
+  knowledgeFileCount: number
+  conversationCount: number
+  turnCount: number
+  invalidRowCount: number
+}
+
+export interface CreateConversationAuditJobRequest {
+  name: string
+}
+
+export interface RunConversationAuditResponse {
+  jobId: string
+  status: 'running'
+}

@@ -147,3 +147,57 @@ CREATE TABLE IF NOT EXISTS test_runs (
 CREATE INDEX IF NOT EXISTS idx_test_suites_project ON test_suites(project_id);
 CREATE INDEX IF NOT EXISTS idx_test_cases_suite ON test_cases(test_suite_id);
 CREATE INDEX IF NOT EXISTS idx_test_runs_suite ON test_runs(test_suite_id);
+
+-- 会话质检
+CREATE TABLE IF NOT EXISTS conversation_audit_jobs (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft', 'running', 'completed', 'failed')),
+  parse_summary TEXT NOT NULL DEFAULT '{"knowledgeFileCount":0,"conversationCount":0,"turnCount":0,"invalidRowCount":0}',
+  issue_count INTEGER NOT NULL DEFAULT 0,
+  total_turns INTEGER NOT NULL DEFAULT 0,
+  error_message TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  completed_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS conversation_audit_knowledge_chunks (
+  id TEXT PRIMARY KEY,
+  job_id TEXT NOT NULL REFERENCES conversation_audit_jobs(id) ON DELETE CASCADE,
+  source_name TEXT NOT NULL,
+  source_type TEXT NOT NULL,
+  chunk_index INTEGER NOT NULL,
+  content TEXT NOT NULL,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS conversation_audit_conversations (
+  id TEXT PRIMARY KEY,
+  job_id TEXT NOT NULL REFERENCES conversation_audit_jobs(id) ON DELETE CASCADE,
+  external_conversation_id TEXT NOT NULL,
+  turn_count INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS conversation_audit_turns (
+  id TEXT PRIMARY KEY,
+  job_id TEXT NOT NULL REFERENCES conversation_audit_jobs(id) ON DELETE CASCADE,
+  conversation_id TEXT NOT NULL REFERENCES conversation_audit_conversations(id) ON DELETE CASCADE,
+  turn_index INTEGER NOT NULL,
+  user_message TEXT NOT NULL,
+  bot_reply TEXT NOT NULL DEFAULT '',
+  has_issue INTEGER,
+  knowledge_answer TEXT,
+  retrieved_sources_json TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_jobs_project ON conversation_audit_jobs(project_id);
+CREATE INDEX IF NOT EXISTS idx_audit_chunks_job ON conversation_audit_knowledge_chunks(job_id);
+CREATE INDEX IF NOT EXISTS idx_audit_conversations_job ON conversation_audit_conversations(job_id);
+CREATE INDEX IF NOT EXISTS idx_audit_turns_job ON conversation_audit_turns(job_id);
+CREATE INDEX IF NOT EXISTS idx_audit_turns_conversation ON conversation_audit_turns(conversation_id);
