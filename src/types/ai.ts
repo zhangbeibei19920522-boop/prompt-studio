@@ -6,6 +6,8 @@ import type {
   PreviewData,
   Prompt,
   Document,
+  TestCaseRoutingStep,
+  TestSuiteRoutingConfig,
 } from './database'
 
 // AI Provider 配置
@@ -102,6 +104,7 @@ export type StreamEvent =
   | { type: 'preview'; data: PreviewData }
   | { type: 'diff'; data: DiffData }
   | { type: 'memory'; data: MemoryCommandData }
+  | { type: 'test-flow-config'; data: TestFlowConfigRequestData }
   | { type: 'test-suite'; data: TestSuiteGenerationData }
   | { type: 'test-suite-progress'; data: TestSuiteProgressData }
   | { type: 'continuation'; data: { iteration: number; maxIterations: number } }
@@ -113,9 +116,33 @@ export type StreamEvent =
 export type TestRunEvent =
   | { type: 'test-start'; data: { totalCases: number } }
   | { type: 'test-case-start'; data: { caseId: string; index: number; title: string } }
-  | { type: 'test-case-done'; data: { caseId: string; actualOutput: string } }
+  | {
+      type: 'test-case-done'
+      data: {
+        caseId: string
+        actualOutput: string
+        actualIntent?: string | null
+        matchedPromptId?: string | null
+        matchedPromptTitle?: string | null
+        routingSteps?: TestCaseRoutingStep[]
+      }
+    }
   | { type: 'eval-start' }
-  | { type: 'eval-case-done'; data: { caseId: string; passed: boolean; score: number; reason: string } }
+  | {
+      type: 'eval-case-done'
+      data: {
+        caseId: string
+        passed: boolean
+        score: number
+        reason: string
+        intentPassed?: boolean | null
+        intentScore?: number | null
+        intentReason?: string
+        replyPassed?: boolean | null
+        replyScore?: number | null
+        replyReason?: string
+      }
+    }
   | { type: 'eval-report'; data: import('./database').TestReport }
   | { type: 'test-complete'; data: { runId: string; score: number } }
   | { type: 'test-error'; data: { error: string } }
@@ -133,15 +160,23 @@ export interface TestSuiteProgressData {
   total: number
 }
 
+export interface TestFlowConfigRequestData {
+  mode: 'routing'
+  summary: string
+}
+
 // 测试集生成数据（Agent 对话中生成）
 export interface TestSuiteGenerationData {
   name: string
   description: string
+  workflowMode?: 'single' | 'routing'
+  routingConfig?: TestSuiteRoutingConfig | null
   cases: Array<{
     title: string
     context: string
     input: string
     expectedOutput: string
+    expectedIntent?: string | null
   }>
 }
 
@@ -150,10 +185,13 @@ export interface TestSuiteBatchData {
   name: string
   description: string
   totalPlanned: number
+  workflowMode?: 'single' | 'routing'
+  routingConfig?: TestSuiteRoutingConfig | null
   cases: Array<{
     title: string
     context: string
     input: string
     expectedOutput: string
+    expectedIntent?: string | null
   }>
 }

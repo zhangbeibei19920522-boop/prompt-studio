@@ -116,6 +116,7 @@ async function setupRunnerTest() {
 describe('runConversationAudit', () => {
   it('updates job state, persists turn results, and uses global settings to create the provider', async () => {
     const testContext = await setupRunnerTest()
+    const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => {})
 
     try {
       const providerConfigs: Array<{ provider: string; model: string; apiKey: string; baseUrl: string }> = []
@@ -126,7 +127,9 @@ describe('runConversationAudit', () => {
         async *chatStream() {},
       }
 
-      const { runConversationAudit } = await import('@/lib/audit/runner')
+      const {
+        runConversationAudit,
+      } = await import('@/lib/audit/runner')
 
       const events = []
       for await (const event of runConversationAudit(testContext.jobId, {
@@ -152,12 +155,28 @@ describe('runConversationAudit', () => {
             knowledgeAnswer: 'Open your profile settings.',
           })
         },
+        evaluateConversation() {
+          return Promise.resolve({
+            processStatus: 'failed',
+            summary: '缺少身份核验步骤',
+            processSteps: [
+              {
+                name: '身份核验',
+                status: 'failed',
+                reason: '未执行身份核验',
+                sourceNames: ['faq.docx'],
+              },
+            ],
+          })
+        },
       })) {
         events.push(event)
       }
 
       const job = testContext.findConversationAuditJobById(testContext.jobId)
       const turns = testContext.findAuditTurnsByJob(testContext.jobId)
+      const conversations = (await import('@/lib/db/repositories/conversation-audit-conversations'))
+        .findAuditConversationsByJob(testContext.jobId)
 
       expect(providerConfigs).toEqual([
         {
@@ -182,6 +201,13 @@ describe('runConversationAudit', () => {
         hasIssue: false,
         knowledgeAnswer: 'Open your profile settings.',
       })
+      expect(conversations[0]).toMatchObject({
+        processStatus: 'failed',
+        knowledgeStatus: 'failed',
+        overallStatus: 'failed',
+        riskLevel: 'high',
+        summary: '缺少身份核验步骤',
+      })
       expect(events.map((event) => event.type)).toEqual([
         'audit-start',
         'audit-turn-start',
@@ -190,6 +216,27 @@ describe('runConversationAudit', () => {
         'audit-turn-done',
         'audit-complete',
       ])
+      expect(consoleLog).toHaveBeenCalledWith(
+        '[ConversationAudit] Starting turn',
+        expect.objectContaining({
+          jobId: testContext.jobId,
+          turnId: turns[0]?.id,
+          turnIndex: 0,
+          userMessage: 'How do I reset my password?',
+          botReply: 'Wrong answer',
+        })
+      )
+      expect(consoleLog).toHaveBeenCalledWith(
+        '[ConversationAudit] Completed turn',
+        expect.objectContaining({
+          jobId: testContext.jobId,
+          turnId: turns[0]?.id,
+          turnIndex: 0,
+          hasIssue: true,
+          knowledgeAnswer: 'Use the reset link.',
+          retrievedSourceCount: 1,
+        })
+      )
     } finally {
       testContext.cleanup()
     }

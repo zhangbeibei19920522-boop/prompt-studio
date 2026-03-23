@@ -18,6 +18,20 @@ export async function POST(
       )
     }
 
+    if (job.status === 'parsing') {
+      return NextResponse.json(
+        { success: false, data: null, error: 'Conversation audit job is still parsing uploads' },
+        { status: 409 }
+      )
+    }
+
+    if (job.status === 'running') {
+      return NextResponse.json(
+        { success: false, data: null, error: 'Conversation audit job is already running' },
+        { status: 409 }
+      )
+    }
+
     const encoder = new TextEncoder()
     const stream = new ReadableStream({
       async start(controller) {

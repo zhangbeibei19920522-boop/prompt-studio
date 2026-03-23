@@ -1,5 +1,5 @@
 import type { ConversationAuditRunEvent, StreamEvent, TestRunEvent } from '@/types/ai'
-import type { MessageReference } from '@/types/database'
+import type { MessageReference, TestSuiteRoutingConfig } from '@/types/database'
 
 /**
  * Stream chat with the Agent API via SSE.
@@ -86,6 +86,7 @@ export async function* streamTestChat(request: {
   sessionId: string
   content: string
   references: MessageReference[]
+  routingConfig?: TestSuiteRoutingConfig | null
 }): AsyncGenerator<StreamEvent> {
   const res = await fetch('/api/ai/test-chat', {
     method: 'POST',

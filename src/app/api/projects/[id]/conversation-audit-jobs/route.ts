@@ -1,16 +1,11 @@
 import { NextResponse } from 'next/server'
 
-import { parseConversationHistoryWorkbook } from '@/lib/audit/history-parser'
-import { buildKnowledgeChunks } from '@/lib/audit/knowledge-chunker'
-import { findAuditConversationsByJob, replaceAuditConversations } from '@/lib/db/repositories/conversation-audit-conversations'
-import { replaceKnowledgeChunks } from '@/lib/db/repositories/conversation-audit-knowledge-chunks'
+import { persistConversationAuditUploads } from '@/lib/audit/job-upload-storage'
+import { scheduleConversationAuditJobParsing } from '@/lib/audit/job-parser'
 import {
   createConversationAuditJob,
   findConversationAuditJobsByProject,
-  findConversationAuditJobById,
 } from '@/lib/db/repositories/conversation-audit-jobs'
-import { findAuditTurnsByJob, replaceAuditTurns } from '@/lib/db/repositories/conversation-audit-turns'
-import { parseDocumentBuffer } from '@/lib/utils/parse-document'
 
 export async function GET(
   _request: Request,
@@ -55,77 +50,53 @@ export async function POST(
       )
     }
 
-    const parsedKnowledgeChunks = []
-    for (const file of knowledgeFiles) {
-      const buffer = Buffer.from(await file.arrayBuffer())
-      const ext = file.name.split('.').pop() ?? 'txt'
-      const content = await parseDocumentBuffer(buffer, ext)
-      const chunks = buildKnowledgeChunks({
-        sourceName: file.name,
-        sourceType: ext,
-        content,
-      })
+    console.log('[ConversationAudit] Creating job request', {
+      projectId,
+      name,
+      historyFileName: historyFile.name,
+      historyFileSize: historyFile.size,
+      knowledgeFileCount: knowledgeFiles.length,
+      knowledgeFiles: knowledgeFiles.map((file) => ({
+        name: file.name,
+        size: file.size,
+      })),
+    })
 
-      parsedKnowledgeChunks.push(...chunks)
-    }
-
-    const historyBuffer = Buffer.from(await historyFile.arrayBuffer())
-    const history = parseConversationHistoryWorkbook(historyBuffer)
     const job = createConversationAuditJob({
       projectId,
       name,
+      status: 'parsing',
       parseSummary: {
-        knowledgeFileCount: knowledgeFiles.length,
-        conversationCount: history.summary.conversationCount,
-        turnCount: history.summary.turnCount,
-        invalidRowCount: history.summary.invalidRows,
+        knowledgeFileCount: 0,
+        conversationCount: 0,
+        turnCount: 0,
+        invalidRowCount: 0,
       },
     })
 
-    replaceKnowledgeChunks(
-      job.id,
-      parsedKnowledgeChunks.map((chunk) => ({
-        sourceName: chunk.sourceName,
-        sourceType: chunk.sourceType,
-        chunkIndex: chunk.chunkIndex,
-        content: chunk.content,
-        metadata: {
-          sheetName: chunk.sheetName,
-        },
-      }))
-    )
-
-    replaceAuditConversations(job.id, history.conversations)
-
-    const storedConversations = findAuditConversationsByJob(job.id)
-    const conversationIdMap = new Map(
-      storedConversations.map((conversation) => [conversation.externalConversationId, conversation.id])
-    )
-
-    replaceAuditTurns(
-      job.id,
-      history.turns.map((turn) => ({
-        conversationId: conversationIdMap.get(turn.externalConversationId)!,
-        turnIndex: turn.turnIndex,
-        userMessage: turn.userMessage,
-        botReply: turn.botReply,
-        hasIssue: null,
-        knowledgeAnswer: null,
-        retrievedSources: [],
-      }))
-    )
-
-    const storedJob = findConversationAuditJobById(job.id)!
-    const storedTurns = findAuditTurnsByJob(job.id)
+    await persistConversationAuditUploads(job.id, {
+      historyFile,
+      knowledgeFiles,
+    })
+    console.log('[ConversationAudit] Job uploads persisted', {
+      jobId: job.id,
+      projectId,
+      historyFileName: historyFile.name,
+      knowledgeFileCount: knowledgeFiles.length,
+    })
+    scheduleConversationAuditJobParsing(job.id)
+    console.log('[ConversationAudit] Job parsing scheduled', {
+      jobId: job.id,
+    })
 
     return NextResponse.json(
       {
         success: true,
         data: {
-          job: storedJob,
-          parseSummary: storedJob.parseSummary,
-          conversations: storedConversations,
-          turns: storedTurns,
+          job,
+          parseSummary: job.parseSummary,
+          conversations: [],
+          turns: [],
         },
         error: null,
       },

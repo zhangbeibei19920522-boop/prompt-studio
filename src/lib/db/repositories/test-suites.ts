@@ -1,6 +1,11 @@
 import { getDb } from '@/lib/db'
 import { nanoid } from 'nanoid'
-import type { TestSuite, TestSuiteConfig } from '@/types/database'
+import type {
+  TestSuite,
+  TestSuiteConfig,
+  TestSuiteRoutingConfig,
+  TestSuiteWorkflowMode,
+} from '@/types/database'
 
 interface TestSuiteRow {
   id: string
@@ -10,6 +15,8 @@ interface TestSuiteRow {
   description: string
   prompt_id: string | null
   prompt_version_id: string | null
+  workflow_mode: TestSuiteWorkflowMode | null
+  routing_config: string | null
   config: string
   status: 'draft' | 'ready' | 'running' | 'completed'
   created_at: string
@@ -25,6 +32,10 @@ function mapRowToTestSuite(row: TestSuiteRow): TestSuite {
     description: row.description,
     promptId: row.prompt_id,
     promptVersionId: row.prompt_version_id,
+    workflowMode: row.workflow_mode ?? 'single',
+    routingConfig: row.routing_config
+      ? (JSON.parse(row.routing_config) as TestSuiteRoutingConfig)
+      : null,
     config: JSON.parse(row.config) as TestSuiteConfig,
     status: row.status,
     createdAt: row.created_at,
@@ -51,21 +62,39 @@ export function createTestSuite(data: {
   sessionId?: string
   name: string
   description?: string
+  workflowMode?: TestSuiteWorkflowMode
+  routingConfig?: TestSuiteRoutingConfig | null
 }): TestSuite {
   const db = getDb()
   const id = nanoid()
   const now = new Date().toISOString()
   const defaultConfig: TestSuiteConfig = { provider: '', model: '', apiKey: '', baseUrl: '' }
+  const workflowMode = data.workflowMode ?? 'single'
+  const routingConfig = data.routingConfig ?? null
 
   db.prepare(`
-    INSERT INTO test_suites (id, project_id, session_id, name, description, config, status, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO test_suites (
+      id,
+      project_id,
+      session_id,
+      name,
+      description,
+      workflow_mode,
+      routing_config,
+      config,
+      status,
+      created_at,
+      updated_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     data.projectId,
     data.sessionId ?? null,
     data.name,
     data.description ?? '',
+    workflowMode,
+    routingConfig ? JSON.stringify(routingConfig) : null,
     JSON.stringify(defaultConfig),
     'draft',
     now,
@@ -80,6 +109,8 @@ export function createTestSuite(data: {
     description: data.description ?? '',
     promptId: null,
     promptVersionId: null,
+    workflowMode,
+    routingConfig,
     config: defaultConfig,
     status: 'draft',
     createdAt: now,
@@ -94,6 +125,8 @@ export function updateTestSuite(
     description?: string
     promptId?: string | null
     promptVersionId?: string | null
+    workflowMode?: TestSuiteWorkflowMode
+    routingConfig?: TestSuiteRoutingConfig | null
     config?: TestSuiteConfig
     status?: 'draft' | 'ready' | 'running' | 'completed'
   }
@@ -121,6 +154,14 @@ export function updateTestSuite(
   if (data.promptVersionId !== undefined) {
     fields.push('prompt_version_id = ?')
     values.push(data.promptVersionId)
+  }
+  if (data.workflowMode !== undefined) {
+    fields.push('workflow_mode = ?')
+    values.push(data.workflowMode)
+  }
+  if (data.routingConfig !== undefined) {
+    fields.push('routing_config = ?')
+    values.push(data.routingConfig ? JSON.stringify(data.routingConfig) : null)
   }
   if (data.config !== undefined) {
     fields.push('config = ?')

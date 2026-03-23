@@ -55,10 +55,79 @@ interface EvaluateTestCaseInput {
   actualOutput: string
 }
 
-interface SingleEvalResult {
+export interface SingleEvalResult {
   passed: boolean
   score: number
   reason: string
+}
+
+export function evaluateIntentMatch(
+  expectedIntent: string | null | undefined,
+  actualIntent: string | null | undefined
+): SingleEvalResult {
+  const normalizedExpected = expectedIntent?.trim() ?? ''
+  const normalizedActual = actualIntent?.trim() ?? ''
+  const expectedLines = normalizedExpected
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+  const actualLines = normalizedActual
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+
+  if (!normalizedExpected) {
+    return {
+      passed: true,
+      score: 100,
+      reason: '未配置期望 intent，跳过路由评估',
+    }
+  }
+
+  if (!normalizedActual) {
+    return {
+      passed: false,
+      score: 0,
+      reason: '入口 Prompt 未返回可识别的 intent',
+    }
+  }
+
+  if (expectedLines.length === 1 && actualLines.length > 1) {
+    return {
+      passed: true,
+      score: 100,
+      reason: '多轮对话暂未配置逐轮期望 intent，跳过路由评估',
+    }
+  }
+
+  if (expectedLines.length !== actualLines.length) {
+    return {
+      passed: false,
+      score: 0,
+      reason: `intent 轮次数量不匹配，期望 ${expectedLines.length} 轮，实际 ${actualLines.length} 轮`,
+    }
+  }
+
+  const mismatchIndex = expectedLines.findIndex(
+    (expected, index) => expected !== actualLines[index]
+  )
+
+  if (mismatchIndex === -1) {
+    return {
+      passed: true,
+      score: 100,
+      reason:
+        actualLines.length > 1
+          ? `intent 全部命中：${actualLines.join(' -> ')}`
+          : `intent 命中：${normalizedActual}`,
+    }
+  }
+
+  return {
+    passed: false,
+    score: 0,
+    reason: `第 ${mismatchIndex + 1} 轮 intent 不匹配，期望 ${expectedLines[mismatchIndex]}，实际 ${actualLines[mismatchIndex]}`,
+  }
 }
 
 /**

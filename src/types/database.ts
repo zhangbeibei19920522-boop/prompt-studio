@@ -157,6 +157,30 @@ export interface TestSuiteConfig {
   baseUrl: string
 }
 
+export type TestSuiteWorkflowMode = 'single' | 'routing'
+
+export interface TestSuiteRoute {
+  intent: string
+  promptId: string
+}
+
+export interface TestSuiteRoutingConfig {
+  entryPromptId: string
+  routes: TestSuiteRoute[]
+}
+
+export interface TestCaseRoutingStep {
+  turnIndex: number
+  userInput: string
+  rawIntent?: string | null
+  rawIntentOutput?: string | null
+  actualIntent: string | null
+  matchedPromptId: string | null
+  matchedPromptTitle: string | null
+  actualReply: string
+  routingError?: string | null
+}
+
 // 测试集
 export interface TestSuite {
   id: string
@@ -166,6 +190,8 @@ export interface TestSuite {
   description: string
   promptId: string | null
   promptVersionId: string | null
+  workflowMode: TestSuiteWorkflowMode
+  routingConfig: TestSuiteRoutingConfig | null
   config: TestSuiteConfig
   status: 'draft' | 'ready' | 'running' | 'completed'
   createdAt: string
@@ -180,6 +206,8 @@ export interface TestCase {
   context: string
   input: string
   expectedOutput: string
+  expectedOutputDiagnostics?: TestCaseRoutingStep[] | null
+  expectedIntent: string | null
   sortOrder: number
 }
 
@@ -187,6 +215,16 @@ export interface TestCase {
 export interface TestCaseResult {
   testCaseId: string
   actualOutput: string
+  actualIntent?: string | null
+  matchedPromptId?: string | null
+  matchedPromptTitle?: string | null
+  routingSteps?: TestCaseRoutingStep[]
+  intentPassed?: boolean | null
+  intentScore?: number | null
+  intentReason?: string
+  replyPassed?: boolean | null
+  replyScore?: number | null
+  replyReason?: string
   passed: boolean
   score: number
   reason: string
@@ -214,7 +252,7 @@ export interface TestRun {
   completedAt: string | null
 }
 
-export type ConversationAuditJobStatus = 'draft' | 'running' | 'completed' | 'failed'
+export type ConversationAuditJobStatus = 'parsing' | 'draft' | 'running' | 'completed' | 'failed'
 
 export interface ConversationAuditParseSummary {
   knowledgeFileCount: number
@@ -227,6 +265,18 @@ export interface ConversationAuditRetrievedSource {
   chunkId: string
   sourceName: string
   score: number
+}
+
+export type ConversationAuditOverallStatus = 'passed' | 'failed' | 'unknown'
+export type ConversationAuditProcessStatus = 'passed' | 'failed' | 'unknown'
+export type ConversationAuditKnowledgeStatus = 'passed' | 'failed' | 'unknown'
+export type ConversationAuditRiskLevel = 'low' | 'medium' | 'high'
+
+export interface ConversationAuditProcessStep {
+  name: string
+  status: 'passed' | 'failed' | 'out_of_order'
+  reason: string
+  sourceNames: string[]
 }
 
 export interface ConversationAuditJob {
@@ -259,6 +309,12 @@ export interface ConversationAuditConversation {
   jobId: string
   externalConversationId: string
   turnCount: number
+  overallStatus: ConversationAuditOverallStatus
+  processStatus: ConversationAuditProcessStatus
+  knowledgeStatus: ConversationAuditKnowledgeStatus
+  riskLevel: ConversationAuditRiskLevel
+  summary: string
+  processSteps: ConversationAuditProcessStep[]
   createdAt: string
 }
 

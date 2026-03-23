@@ -20,15 +20,46 @@ function normalizeBlockContent(block: string): string {
     .join('\n')
 }
 
+function isLikelyHeadingBlock(block: string): boolean {
+  return (
+    block.length > 0
+    && block.length <= 24
+    && !block.includes('|')
+    && !/[.!?。！？:：;；]/.test(block)
+  )
+}
+
+function mergeNarrativeBlocks(blocks: string[]): string[] {
+  const merged: string[] = []
+
+  for (let index = 0; index < blocks.length; index += 1) {
+    const current = blocks[index]!
+    const next = blocks[index + 1]
+
+    if (next && isLikelyHeadingBlock(current) && next.length > current.length) {
+      merged.push(`${current}\n${next}`)
+      index += 1
+      continue
+    }
+
+    merged.push(current)
+  }
+
+  return merged
+}
+
 export function buildKnowledgeChunks(input: BuildKnowledgeChunksInput): KnowledgeChunk[] {
   const lines = input.content.split('\n')
   const hasSheetMarkers = lines.some((line) => line.trim().startsWith('Sheet: '))
 
   if (!hasSheetMarkers) {
-    return input.content
+    const blocks = input.content
       .split(/\n\s*\n/g)
       .map(normalizeBlockContent)
       .filter(Boolean)
+    const mergedBlocks = mergeNarrativeBlocks(blocks)
+
+    return mergedBlocks
       .map((content, index) => ({
         sourceName: input.sourceName,
         sourceType: input.sourceType,

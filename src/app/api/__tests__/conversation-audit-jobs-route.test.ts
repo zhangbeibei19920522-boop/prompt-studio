@@ -48,6 +48,26 @@ function buildHistoryWorkbookBuffer(): Buffer {
   return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer
 }
 
+async function waitForJobParsingToFinish(
+  getDetail: typeof import('@/app/api/conversation-audit-jobs/[id]/route').GET,
+  jobId: string
+) {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const response = await getDetail(new Request('http://localhost'), {
+      params: Promise.resolve({ id: jobId }),
+    })
+    const payload = await response.json()
+
+    if (payload.data.job.status !== 'parsing') {
+      return payload
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+
+  throw new Error(`Timed out waiting for conversation audit job ${jobId} to finish parsing`)
+}
+
 describe('conversation audit job routes', () => {
   it('requires a history file when creating a job', async () => {
     const testContext = await setupRouteTest()
@@ -71,8 +91,9 @@ describe('conversation audit job routes', () => {
     }
   })
 
-  it('creates a job by parsing knowledge files and history workbook', async () => {
+  it('creates a job in parsing state before background parsing finishes', async () => {
     const testContext = await setupRouteTest()
+    const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => {})
 
     try {
       const { POST } = await import('@/app/api/projects/[id]/conversation-audit-jobs/route')
@@ -97,14 +118,24 @@ describe('conversation audit job routes', () => {
       expect(payload.data.job).toMatchObject({
         name: 'Audit Job',
         projectId: 'project-1',
+        status: 'parsing',
       })
       expect(payload.data.parseSummary).toMatchObject({
-        knowledgeFileCount: 1,
-        conversationCount: 1,
-        turnCount: 1,
+        knowledgeFileCount: 0,
+        conversationCount: 0,
+        turnCount: 0,
       })
-      expect(payload.data.conversations).toHaveLength(1)
-      expect(payload.data.turns).toHaveLength(1)
+      expect(payload.data.conversations).toHaveLength(0)
+      expect(payload.data.turns).toHaveLength(0)
+      expect(consoleLog).toHaveBeenCalledWith(
+        '[ConversationAudit] Creating job request',
+        expect.objectContaining({
+          projectId: 'project-1',
+          name: 'Audit Job',
+          historyFileName: 'history.xlsx',
+          knowledgeFileCount: 1,
+        })
+      )
     } finally {
       testContext.cleanup()
     }
@@ -131,14 +162,11 @@ describe('conversation audit job routes', () => {
       )
       const created = await createResponse.json()
 
-      const detailResponse = await detailRoute.GET(new Request('http://localhost'), {
-        params: Promise.resolve({ id: created.data.job.id }),
-      })
-
-      const payload = await detailResponse.json()
+      const payload = await waitForJobParsingToFinish(detailRoute.GET, created.data.job.id)
 
       expect(payload.success).toBe(true)
       expect(payload.data.job.id).toBe(created.data.job.id)
+      expect(payload.data.job.status).toBe('draft')
       expect(payload.data.conversations).toHaveLength(1)
       expect(payload.data.turns).toHaveLength(1)
       expect(payload.data.parseSummary.turnCount).toBe(1)
@@ -186,6 +214,55 @@ describe('conversation audit job routes', () => {
       expect(payload.data).toHaveLength(2)
       expect(payload.data[0].name).toBe('Audit Job B')
       expect(payload.data[1].name).toBe('Audit Job A')
+    } finally {
+      testContext.cleanup()
+    }
+  })
+
+  it('deletes a job and cascades related audit data', async () => {
+    const testContext = await setupRouteTest()
+
+    try {
+      const projectRoute = await import('@/app/api/projects/[id]/conversation-audit-jobs/route')
+      const detailRoute = await import('@/app/api/conversation-audit-jobs/[id]/route')
+      const { getDb } = await import('@/lib/db')
+      const db = getDb()
+      const formData = new FormData()
+      formData.set('name', 'Audit Job')
+      formData.set(
+        'historyFile',
+        new File([buildHistoryWorkbookBuffer()], 'history.xlsx', {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        })
+      )
+
+      const createResponse = await projectRoute.POST(
+        new Request('http://localhost', { method: 'POST', body: formData }),
+        { params: Promise.resolve({ id: 'project-1' }) }
+      )
+      const created = await createResponse.json()
+      const jobId = created.data.job.id as string
+      await waitForJobParsingToFinish(detailRoute.GET, jobId)
+
+      const deleteResponse = await detailRoute.DELETE(new Request('http://localhost', { method: 'DELETE' }), {
+        params: Promise.resolve({ id: jobId }),
+      })
+
+      expect(deleteResponse.status).toBe(200)
+      expect(await deleteResponse.json()).toMatchObject({
+        success: true,
+        data: null,
+      })
+
+      const jobCount = db.prepare('SELECT COUNT(*) AS count FROM conversation_audit_jobs WHERE id = ?').get(jobId) as { count: number }
+      const conversationCount = db.prepare('SELECT COUNT(*) AS count FROM conversation_audit_conversations WHERE job_id = ?').get(jobId) as { count: number }
+      const turnCount = db.prepare('SELECT COUNT(*) AS count FROM conversation_audit_turns WHERE job_id = ?').get(jobId) as { count: number }
+      const chunkCount = db.prepare('SELECT COUNT(*) AS count FROM conversation_audit_knowledge_chunks WHERE job_id = ?').get(jobId) as { count: number }
+
+      expect(jobCount.count).toBe(0)
+      expect(conversationCount.count).toBe(0)
+      expect(turnCount.count).toBe(0)
+      expect(chunkCount.count).toBe(0)
     } finally {
       testContext.cleanup()
     }

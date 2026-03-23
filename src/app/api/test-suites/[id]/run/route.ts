@@ -12,14 +12,7 @@ export async function POST(
   try {
     const { id } = await params
     const body = await request.json()
-    const { promptId } = body
-
-    if (!promptId) {
-      return NextResponse.json(
-        { success: false, data: null, error: 'Field "promptId" is required' },
-        { status: 400 }
-      )
-    }
+    const requestedPromptId = body.promptId
 
     // Validate suite exists
     const suite = findTestSuiteById(id)
@@ -39,8 +32,19 @@ export async function POST(
       )
     }
 
-    // Validate prompt exists
-    const prompt = findPromptById(promptId)
+    const entryPromptId =
+      suite.workflowMode === 'routing'
+        ? suite.routingConfig?.entryPromptId ?? null
+        : requestedPromptId
+
+    if (!entryPromptId) {
+      return NextResponse.json(
+        { success: false, data: null, error: 'Field "promptId" is required' },
+        { status: 400 }
+      )
+    }
+
+    const prompt = findPromptById(entryPromptId)
     if (!prompt) {
       return NextResponse.json(
         { success: false, data: null, error: 'Prompt not found' },
@@ -48,8 +52,20 @@ export async function POST(
       )
     }
 
+    const routePrompts =
+      suite.workflowMode === 'routing' && suite.routingConfig
+        ? Object.fromEntries(
+            suite.routingConfig.routes
+              .map((route) => {
+                const routePrompt = findPromptById(route.promptId)
+                return routePrompt ? [route.promptId, routePrompt] : null
+              })
+              .filter((entry): entry is [string, NonNullable<ReturnType<typeof findPromptById>>] => entry !== null)
+          )
+        : undefined
+
     // Update suite status to running and set promptId
-    updateTestSuite(id, { status: 'running', promptId })
+    updateTestSuite(id, { status: 'running', promptId: entryPromptId })
 
     // Create test run record
     const run = createTestRun(id)
@@ -59,7 +75,9 @@ export async function POST(
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          const generator = runTestSuite(run.id, suite, cases, prompt)
+          const generator = runTestSuite(run.id, suite, cases, prompt, {
+            routePrompts,
+          })
           for await (const event of generator) {
             const data = `data: ${JSON.stringify(event)}\n\n`
             controller.enqueue(encoder.encode(data))

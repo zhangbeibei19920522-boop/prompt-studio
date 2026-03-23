@@ -117,6 +117,8 @@ CREATE TABLE IF NOT EXISTS test_suites (
   description TEXT NOT NULL DEFAULT '',
   prompt_id TEXT REFERENCES prompts(id) ON DELETE SET NULL,
   prompt_version_id TEXT REFERENCES prompt_versions(id) ON DELETE SET NULL,
+  workflow_mode TEXT NOT NULL DEFAULT 'single' CHECK(workflow_mode IN ('single', 'routing')),
+  routing_config TEXT,
   config TEXT NOT NULL DEFAULT '{}',
   status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft', 'ready', 'running', 'completed')),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -130,6 +132,8 @@ CREATE TABLE IF NOT EXISTS test_cases (
   context TEXT NOT NULL DEFAULT '',
   input TEXT NOT NULL,
   expected_output TEXT NOT NULL,
+  expected_output_diagnostics TEXT,
+  expected_intent TEXT,
   sort_order INTEGER NOT NULL DEFAULT 0
 );
 
@@ -153,7 +157,7 @@ CREATE TABLE IF NOT EXISTS conversation_audit_jobs (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft', 'running', 'completed', 'failed')),
+  status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('parsing', 'draft', 'running', 'completed', 'failed')),
   parse_summary TEXT NOT NULL DEFAULT '{"knowledgeFileCount":0,"conversationCount":0,"turnCount":0,"invalidRowCount":0}',
   issue_count INTEGER NOT NULL DEFAULT 0,
   total_turns INTEGER NOT NULL DEFAULT 0,
@@ -179,6 +183,12 @@ CREATE TABLE IF NOT EXISTS conversation_audit_conversations (
   job_id TEXT NOT NULL REFERENCES conversation_audit_jobs(id) ON DELETE CASCADE,
   external_conversation_id TEXT NOT NULL,
   turn_count INTEGER NOT NULL DEFAULT 0,
+  overall_status TEXT NOT NULL DEFAULT 'unknown' CHECK(overall_status IN ('passed', 'failed', 'unknown')),
+  process_status TEXT NOT NULL DEFAULT 'unknown' CHECK(process_status IN ('passed', 'failed', 'unknown')),
+  knowledge_status TEXT NOT NULL DEFAULT 'unknown' CHECK(knowledge_status IN ('passed', 'failed', 'unknown')),
+  risk_level TEXT NOT NULL DEFAULT 'low' CHECK(risk_level IN ('low', 'medium', 'high')),
+  summary TEXT NOT NULL DEFAULT '',
+  process_steps_json TEXT NOT NULL DEFAULT '[]',
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

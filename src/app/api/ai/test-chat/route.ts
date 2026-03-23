@@ -1,14 +1,15 @@
 import { NextRequest } from 'next/server'
 import { handleTestAgentChat } from '@/lib/ai/agent'
 import { createSSEStream } from '@/lib/ai/stream-handler'
-import type { MessageReference } from '@/types/database'
+import type { MessageReference, TestSuiteRoutingConfig } from '@/types/database'
 
 export async function POST(request: NextRequest) {
   const body = await request.json()
-  const { sessionId, content, references = [] } = body as {
+  const { sessionId, content, references = [], routingConfig } = body as {
     sessionId?: string
     content?: string
     references?: MessageReference[]
+    routingConfig?: TestSuiteRoutingConfig | null
   }
 
   if (!sessionId || typeof sessionId !== 'string') {
@@ -18,7 +19,9 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const generator = handleTestAgentChat(sessionId, content || '', references)
+  const generator = handleTestAgentChat(sessionId, content || '', references, {
+    routingConfig: routingConfig ?? null,
+  })
   const stream = createSSEStream(generator)
 
   return new Response(stream, {

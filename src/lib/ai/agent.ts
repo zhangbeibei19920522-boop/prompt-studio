@@ -1,5 +1,5 @@
 import type { StreamEvent, MemoryCommandData, TestSuiteGenerationData, TestSuiteBatchData } from '@/types/ai'
-import type { MessageReference } from '@/types/database'
+import type { MessageReference, TestSuiteRoutingConfig } from '@/types/database'
 import { collectAgentContext } from './context-collector'
 import { createAiProvider } from './provider'
 import { getSettings } from '@/lib/db/repositories/settings'
@@ -253,27 +253,41 @@ export async function* handleAgentChat(
 export async function* handleTestAgentChat(
   sessionId: string,
   content: string,
-  references: MessageReference[] = []
+  references: MessageReference[] = [],
+  options: {
+    routingConfig?: TestSuiteRoutingConfig | null
+    persistUserMessage?: boolean
+  } = {}
 ): AsyncGenerator<StreamEvent> {
   try {
     console.log('[TestAgent] === Chat started ===', { sessionId, refCount: references.length })
 
-    // 1. Save user message
-    createMessage({
-      sessionId,
-      role: 'user',
-      content,
-      references,
-      metadata: null,
-    })
+    const shouldPersistUserMessage = options.persistUserMessage ?? content.trim().length > 0
+    const effectiveUserMessage = options.routingConfig
+      ? `用户已完成多 Prompt 路由配置。请基于已有需求继续生成测试集。\n入口 Prompt: ${options.routingConfig.entryPromptId}\n路由规则:\n${options.routingConfig.routes
+          .map((route) => `- ${route.intent} -> ${route.promptId}`)
+          .join('\n')}`
+      : content
+
+    if (shouldPersistUserMessage && content.trim().length > 0) {
+      createMessage({
+        sessionId,
+        role: 'user',
+        content,
+        references,
+        metadata: null,
+      })
+    }
 
     // 2. Prepare AI provider (use global settings)
     const settings = getSettings()
     const provider = createAiProvider(settings)
 
     // 3. Collect context (references, business info) and build messages
-    const context = collectAgentContext(sessionId, content, references)
-    const messages = buildTestAgentMessages(context)
+    const context = collectAgentContext(sessionId, effectiveUserMessage, references)
+    const messages = buildTestAgentMessages(context, {
+      routingConfig: options.routingConfig,
+    })
 
     // 4. Yield context summary for thinking-chain display
     yield {
@@ -301,7 +315,9 @@ export async function* handleTestAgentChat(
 
     // Check for plan and batch blocks separately
     const planBlocks = jsonBlocks.filter(b => b.type === 'plan')
+    const flowConfigBlock = jsonBlocks.find(b => b.type === 'test-flow-config')
     const batchBlock = jsonBlocks.find(b => b.type === 'test-suite-batch') as unknown as TestSuiteBatchData | undefined
+    let assistantContent = plainText || accumulated
 
     if (planBlocks.length > 0) {
       // --- Plan mode: always yield plan first ---
@@ -317,6 +333,13 @@ export async function* handleTestAgentChat(
         }
       }
       console.log('[TestAgent] Plan yielded, batch generation deferred to next turn')
+      assistantContent = plainText || '已整理测试方案，请确认后继续生成测试集。'
+    } else if (flowConfigBlock) {
+      yield {
+        type: 'test-flow-config',
+        data: flowConfigBlock as unknown as import('@/types/ai').TestFlowConfigRequestData,
+      }
+      assistantContent = plainText || '已识别为多 Prompt 业务流程，请先配置入口 Prompt 和 intent 路由。'
     } else if (batchBlock) {
       // --- Batch generation mode ---
       const allCases = [...batchBlock.cases]
@@ -336,7 +359,9 @@ export async function* handleTestAgentChat(
         iteration++
         console.log('[TestAgent] Batch iteration', iteration, '- generating more cases...')
 
-        const continuationMessages = buildBatchContinuationMessages(context, batchBlock, allCases)
+        const continuationMessages = buildBatchContinuationMessages(context, batchBlock, allCases, {
+          routingConfig: options.routingConfig,
+        })
 
         let batchAccumulated = ''
         for await (const chunk of provider.chatStream(continuationMessages)) {
@@ -366,6 +391,8 @@ export async function* handleTestAgentChat(
       const mergedData: TestSuiteGenerationData = {
         name: batchBlock.name,
         description: batchBlock.description,
+        workflowMode: options.routingConfig ? 'routing' : (batchBlock.workflowMode ?? 'single'),
+        routingConfig: options.routingConfig ?? batchBlock.routingConfig ?? null,
         cases: allCases.slice(0, totalPlanned), // trim to planned count
       }
 
@@ -375,6 +402,7 @@ export async function* handleTestAgentChat(
         type: 'test-suite',
         data: mergedData,
       }
+      assistantContent = plainText || '已生成测试集草案，请确认后创建。'
     } else {
       // --- Non-batch mode (old-style test-suite, etc.) ---
       for (const block of jsonBlocks) {
@@ -391,13 +419,15 @@ export async function* handleTestAgentChat(
     createMessage({
       sessionId,
       role: 'assistant',
-      content: plainText || accumulated,
+      content: assistantContent,
       references: [],
       metadata: null,
     })
 
     // Auto-generate session title after first exchange
-    const newTitle = await generateSessionTitle(sessionId, content, provider)
+    const newTitle = content.trim().length > 0
+      ? await generateSessionTitle(sessionId, content, provider)
+      : null
     if (newTitle) {
       yield { type: 'session-title', data: { sessionId, title: newTitle } }
     }

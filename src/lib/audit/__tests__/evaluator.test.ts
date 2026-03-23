@@ -37,6 +37,7 @@ describe('evaluateConversationAuditTurn', () => {
   })
 
   it('falls back when the model response is malformed', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
     const provider: AiProvider = {
       async chat() {
         return 'not valid json'
@@ -56,5 +57,44 @@ describe('evaluateConversationAuditTurn', () => {
       hasIssue: null,
       knowledgeAnswer: '',
     })
+    expect(consoleError).toHaveBeenCalledWith(
+      '[ConversationAudit] Failed to parse evaluation response',
+      expect.objectContaining({
+        userMessage: 'Question',
+        botReply: 'Answer',
+        rawResponsePreview: 'not valid json',
+      })
+    )
+  })
+
+  it('logs provider failures before falling back', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const provider: AiProvider = {
+      async chat() {
+        throw new Error('boom')
+      },
+      async *chatStream() {},
+    }
+
+    const { evaluateConversationAuditTurn } = await import('@/lib/audit/evaluator')
+
+    const result = await evaluateConversationAuditTurn(provider, {
+      userMessage: 'Question',
+      botReply: 'Answer',
+      knowledge: [],
+    })
+
+    expect(result).toEqual({
+      hasIssue: null,
+      knowledgeAnswer: '',
+    })
+    expect(consoleError).toHaveBeenCalledWith(
+      '[ConversationAudit] Evaluation request failed',
+      expect.objectContaining({
+        userMessage: 'Question',
+        botReply: 'Answer',
+        error: 'boom',
+      })
+    )
   })
 })

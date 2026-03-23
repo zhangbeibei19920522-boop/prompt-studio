@@ -1,55 +1,25 @@
-import type { TestRunEvent, ChatMessage } from '@/types/ai'
-import type { TestSuite, TestCase, TestCaseResult, Prompt } from '@/types/database'
+import type { TestRunEvent } from '@/types/ai'
+import type {
+  TestSuite,
+  TestCase,
+  TestCaseResult,
+  Prompt,
+  TestCaseRoutingStep,
+} from '@/types/database'
 import { createAiProvider } from './provider'
 import { getSettings } from '@/lib/db/repositories/settings'
 import { updateTestRun } from '@/lib/db/repositories/test-runs'
 import { updateTestSuite } from '@/lib/db/repositories/test-suites'
-import { evaluateTestCase, evaluateOverall } from './test-evaluator'
+import { evaluateIntentMatch, evaluateTestCase, evaluateOverall } from './test-evaluator'
+import {
+  executePromptForCase as executeCasePrompt,
+  executeRoutingPromptForCase,
+} from './routing-executor'
 
-/**
- * Parse multi-turn conversation input.
- * Detects "User: ... / Assistant: ..." pattern and returns turns.
- * Returns null if the input is not multi-turn format.
- */
-function parseConversationTurns(
-  input: string
-): Array<{ role: 'user' | 'assistant'; content: string }> | null {
-  const lines = input.split('\n')
-  const turns: Array<{ role: 'user' | 'assistant'; content: string }> = []
-  let currentRole: 'user' | 'assistant' | null = null
-  let currentContent = ''
-
-  for (const line of lines) {
-    const userMatch = line.match(/^User:\s*(.*)/)
-    const assistantMatch = line.match(/^Assistant:\s*(.*)/)
-
-    if (userMatch) {
-      if (currentRole) {
-        turns.push({ role: currentRole, content: currentContent.trim() })
-      }
-      currentRole = 'user'
-      currentContent = userMatch[1]
-    } else if (assistantMatch) {
-      if (currentRole) {
-        turns.push({ role: currentRole, content: currentContent.trim() })
-      }
-      currentRole = 'assistant'
-      currentContent = assistantMatch[1]
-    } else if (currentRole) {
-      currentContent += '\n' + line
-    }
-  }
-
-  if (currentRole) {
-    turns.push({ role: currentRole, content: currentContent.trim() })
-  }
-
-  // Must have at least 2 user turns to count as multi-turn
-  const userTurns = turns.filter((t) => t.role === 'user')
-  if (userTurns.length < 2) return null
-
-  return turns
+interface RoutingRunOptions {
+  routePrompts?: Record<string, Prompt>
 }
+
 
 /**
  * Run a full test suite: execute each case against the LLM, evaluate results,
@@ -61,7 +31,8 @@ export async function* runTestSuite(
   runId: string,
   suite: TestSuite,
   cases: TestCase[],
-  prompt: Prompt
+  prompt: Prompt,
+  options: RoutingRunOptions = {}
 ): AsyncGenerator<TestRunEvent> {
   // 1. Yield test-start
   yield { type: 'test-start', data: { totalCases: cases.length } }
@@ -105,57 +76,40 @@ export async function* runTestSuite(
     }
 
     let actualOutput = ''
+    let actualIntent: string | null = null
+    let matchedPromptId: string | null = null
+    let matchedPromptTitle: string | null = null
+    let routingSteps: TestCaseRoutingStep[] = []
 
     try {
-      const systemMsg: ChatMessage = { role: 'system', content: prompt.content }
-      const turns = parseConversationTurns(testCase.input)
-
-      if (turns) {
-        // --- Multi-turn execution: run each user turn sequentially ---
-        const messages: ChatMessage[] = [systemMsg]
-        if (testCase.context) {
-          messages.push({ role: 'system', content: `Context: ${testCase.context}` })
-        }
-
-        const conversationParts: string[] = []
-
-        for (const turn of turns) {
-          if (turn.role === 'user') {
-            messages.push({ role: 'user', content: turn.content })
-            conversationParts.push(`User: ${turn.content}`)
-          } else if (turn.role === 'assistant' && turn.content) {
-            // Pre-filled assistant content — use as-is
-            messages.push({ role: 'assistant', content: turn.content })
-            conversationParts.push(`Assistant: ${turn.content}`)
-          } else {
-            // Empty assistant slot — generate response from LLM
-            let response = ''
-            const stream = testProvider.chatStream(messages, { temperature: 0.7 })
-            for await (const chunk of stream) {
-              response += chunk
-            }
-            messages.push({ role: 'assistant', content: response })
-            conversationParts.push(`Assistant: ${response}`)
+      if (suite.workflowMode === 'routing' && suite.routingConfig) {
+        const routingResult = await executeRoutingPromptForCase(
+          testProvider,
+          prompt,
+          testCase,
+          suite,
+          options,
+          {
+            workflowMode: "routing",
+            provider: config.provider,
+            model: config.model,
+            caseId: testCase.id,
+            caseTitle: testCase.title,
           }
-        }
-
-        actualOutput = conversationParts.join('\n')
+        )
+        actualOutput = routingResult.actualOutput
+        actualIntent = routingResult.actualIntent
+        matchedPromptId = routingResult.matchedPromptId
+        matchedPromptTitle = routingResult.matchedPromptTitle
+        routingSteps = routingResult.routingSteps
       } else {
-        // --- Single-turn execution (original behavior) ---
-        const messages: ChatMessage[] = [systemMsg]
-
-        let userContent = ''
-        if (testCase.context) {
-          userContent += `${testCase.context}\n\n`
-        }
-        userContent += testCase.input
-
-        messages.push({ role: 'user', content: userContent })
-
-        const stream = testProvider.chatStream(messages, { temperature: 0.7 })
-        for await (const chunk of stream) {
-          actualOutput += chunk
-        }
+        actualOutput = await executeCasePrompt(testProvider, prompt, testCase, {
+          workflowMode: "single",
+          provider: config.provider,
+          model: config.model,
+          caseId: testCase.id,
+          caseTitle: testCase.title,
+        })
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -165,6 +119,10 @@ export async function* runTestSuite(
     caseResults.push({
       testCaseId: testCase.id,
       actualOutput,
+      actualIntent,
+      matchedPromptId,
+      matchedPromptTitle,
+      routingSteps,
       passed: false,
       score: 0,
       reason: '',
@@ -172,7 +130,14 @@ export async function* runTestSuite(
 
     yield {
       type: 'test-case-done',
-      data: { caseId: testCase.id, actualOutput },
+      data: {
+        caseId: testCase.id,
+        actualOutput,
+        actualIntent,
+        matchedPromptId,
+        matchedPromptTitle,
+        routingSteps,
+      },
     }
   }
 
@@ -221,29 +186,68 @@ export async function* runTestSuite(
     const testCase = cases[i]
 
     try {
-      const evalResult = await evaluateTestCase(evalProvider, {
-        title: testCase.title,
-        context: testCase.context,
-        input: testCase.input,
-        expectedOutput: testCase.expectedOutput,
-        actualOutput: caseResult.actualOutput,
-      })
+      const intentEval =
+        suite.workflowMode === 'routing'
+          ? evaluateIntentMatch(testCase.expectedIntent, caseResult.actualIntent)
+          : null
 
-      const evaluatedResult: TestCaseResult = {
+      const hasRoutingError =
+        suite.workflowMode === 'routing' &&
+        Boolean(caseResult.routingSteps?.some((step) => step.routingError))
+
+      const replyEval =
+        hasRoutingError
+          ? {
+              passed: false,
+              score: 0,
+              reason: '路由未命中目标 Prompt，无法生成最终回复',
+            }
+          : await evaluateTestCase(evalProvider, {
+              title: testCase.title,
+              context: testCase.context,
+              input: testCase.input,
+              expectedOutput: testCase.expectedOutput,
+              actualOutput: caseResult.actualOutput,
+            })
+
+      const passed = intentEval
+        ? intentEval.passed && replyEval.passed
+        : replyEval.passed
+      const score = intentEval
+        ? Math.round((intentEval.score + replyEval.score) / 2)
+        : replyEval.score
+      const reason = intentEval
+        ? `路由评估：${intentEval.reason}\n回复评估：${replyEval.reason}`
+        : replyEval.reason
+
+      const evalResult: TestCaseResult = {
         ...caseResult,
-        passed: evalResult.passed,
-        score: evalResult.score,
-        reason: evalResult.reason,
+        intentPassed: intentEval?.passed ?? null,
+        intentScore: intentEval?.score ?? null,
+        intentReason: intentEval?.reason ?? '',
+        replyPassed: replyEval.passed,
+        replyScore: replyEval.score,
+        replyReason: replyEval.reason,
+        passed,
+        score,
+        reason,
       }
-      evalResults.push(evaluatedResult)
+
+      evalResults.push(evalResult)
 
       yield {
         type: 'eval-case-done',
         data: {
           caseId: testCase.id,
-          passed: evalResult.passed,
-          score: evalResult.score,
-          reason: evalResult.reason,
+          passed,
+          score,
+          reason,
+          intentPassed: intentEval?.passed ?? null,
+          intentScore: intentEval?.score ?? null,
+          intentReason: intentEval?.reason ?? '',
+          replyPassed: replyEval.passed,
+          replyScore: replyEval.score,
+          replyReason: replyEval.reason,
         },
       }
     } catch {

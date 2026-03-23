@@ -49,7 +49,7 @@ function buildOverviewHtml(report: TestReport): string {
     </div>`
 }
 
-function buildCaseRowHtml(
+export function buildCaseRowHtml(
   index: number,
   tc: TestCase,
   result: TestCaseResult | undefined
@@ -75,11 +75,37 @@ function buildCaseRowHtml(
           <div style="font-size:12px;background:#f9fafb;padding:8px;border-radius:4px;white-space:pre-wrap;word-break:break-all;">${escapeHtml(truncate(tc.expectedOutput))}</div>
         </div>
       </div>
+      ${(tc.expectedIntent || result?.actualIntent || result?.matchedPromptTitle || result?.matchedPromptId) ? `
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:8px;">
+        <div>
+          <div style="font-size:11px;color:#6b7280;margin-bottom:2px;">期望 intent</div>
+          <div style="font-size:12px;background:#f9fafb;padding:8px;border-radius:4px;white-space:pre-wrap;word-break:break-all;">${escapeHtml(tc.expectedIntent ?? "未配置")}</div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:#6b7280;margin-bottom:2px;">实际 intent</div>
+          <div style="font-size:12px;background:#f9fafb;padding:8px;border-radius:4px;white-space:pre-wrap;word-break:break-all;">${escapeHtml(result?.actualIntent ?? "未识别")}</div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:#6b7280;margin-bottom:2px;">命中 Prompt</div>
+          <div style="font-size:12px;background:#f9fafb;padding:8px;border-radius:4px;white-space:pre-wrap;word-break:break-all;">${escapeHtml(result?.matchedPromptTitle ?? result?.matchedPromptId ?? "未命中")}</div>
+        </div>
+      </div>` : ""}
       ${result ? `
       <div style="margin-bottom:8px;">
         <div style="font-size:11px;color:#6b7280;margin-bottom:2px;">实际输出</div>
         <div style="font-size:12px;background:#f0fdf4;padding:8px;border-radius:4px;white-space:pre-wrap;word-break:break-all;">${escapeHtml(truncate(result.actualOutput))}</div>
       </div>
+      ${(result.intentReason || result.replyReason) ? `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:8px;">
+        <div>
+          <div style="font-size:11px;color:#6b7280;margin-bottom:2px;">路由评估</div>
+          <div style="font-size:12px;color:#374151;white-space:pre-wrap;">${escapeHtml(result.intentReason ?? "无")}</div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:#6b7280;margin-bottom:2px;">回复评估</div>
+          <div style="font-size:12px;color:#374151;white-space:pre-wrap;">${escapeHtml(result.replyReason ?? "无")}</div>
+        </div>
+      </div>` : ""}
       ${result.reason ? `
       <div>
         <div style="font-size:11px;color:#6b7280;margin-bottom:2px;">评估理由</div>

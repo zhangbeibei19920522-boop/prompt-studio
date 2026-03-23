@@ -183,6 +183,10 @@ export const testSuitesApi = {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
+  regenerateExpectedOutputs: (id: string) =>
+    fetchApi<{ updatedCount: number; totalCount: number }>(`/api/test-suites/${id}/regenerate-expected-outputs`, {
+      method: 'POST',
+    }),
   delete: (id: string) =>
     fetchApi<null>(`/api/test-suites/${id}`, { method: 'DELETE' }),
 }
@@ -258,4 +262,6 @@ export const conversationAuditJobsApi = {
       turns: ConversationAuditTurn[]
     }
   },
+  delete: (id: string) =>
+    fetchApi<null>(`/api/conversation-audit-jobs/${id}`, { method: 'DELETE' }),
 }

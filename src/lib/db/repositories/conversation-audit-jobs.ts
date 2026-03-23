@@ -134,6 +134,10 @@ export function updateConversationAuditJob(
       fields.push('completed_at = ?')
       values.push(new Date().toISOString())
     }
+    if ((data.status === 'parsing' || data.status === 'draft' || data.status === 'running') && data.completedAt === undefined) {
+      fields.push('completed_at = ?')
+      values.push(null)
+    }
   }
   if (data.parseSummary !== undefined) {
     fields.push('parse_summary = ?')
@@ -160,4 +164,10 @@ export function updateConversationAuditJob(
   db.prepare(`UPDATE conversation_audit_jobs SET ${fields.join(', ')} WHERE id = ?`).run(...values)
 
   return findConversationAuditJobById(id)
+}
+
+export function deleteConversationAuditJob(id: string): boolean {
+  const db = getDb()
+  const result = db.prepare('DELETE FROM conversation_audit_jobs WHERE id = ?').run(id)
+  return result.changes > 0
 }

@@ -1,4 +1,39 @@
 describe('conversation audit retrieval', () => {
+  it('merges a short title block with the following body block', async () => {
+    const { buildKnowledgeChunks } = await import('@/lib/audit/knowledge-chunker')
+
+    const chunks = buildKnowledgeChunks({
+      sourceName: 'faq.docx',
+      sourceType: 'docx',
+      content: [
+        '密码重置',
+        '',
+        '请在登录页点击忘记密码，然后按照短信验证码提示完成重置。',
+        '',
+        '修改手机号',
+        '',
+        '请在个人设置中更新手机号。',
+      ].join('\n'),
+    })
+
+    expect(chunks).toEqual([
+      {
+        sourceName: 'faq.docx',
+        sourceType: 'docx',
+        sheetName: null,
+        chunkIndex: 0,
+        content: '密码重置\n请在登录页点击忘记密码，然后按照短信验证码提示完成重置。',
+      },
+      {
+        sourceName: 'faq.docx',
+        sourceType: 'docx',
+        sheetName: null,
+        chunkIndex: 1,
+        content: '修改手机号\n请在个人设置中更新手机号。',
+      },
+    ])
+  })
+
   it('splits paragraph content into multiple knowledge chunks', async () => {
     const { buildKnowledgeChunks } = await import('@/lib/audit/knowledge-chunker')
 
@@ -120,6 +155,35 @@ describe('conversation audit retrieval', () => {
     expect(results[0]!.score).toBeGreaterThan(results[1]!.score)
   })
 
+  it('retrieves Chinese knowledge content for Chinese questions', async () => {
+    const { retrieveRelevantKnowledge } = await import('@/lib/audit/retriever')
+
+    const results = retrieveRelevantKnowledge(
+      [
+        {
+          sourceName: 'faq.docx',
+          sourceType: 'docx',
+          sheetName: null,
+          chunkIndex: 0,
+          content: '密码重置\n请在登录页点击忘记密码，然后按照短信验证码提示完成重置。',
+        },
+        {
+          sourceName: 'invoice.docx',
+          sourceType: 'docx',
+          sheetName: null,
+          chunkIndex: 1,
+          content: '发票申请\n请在订单页提交开票信息。',
+        },
+      ],
+      '用户问怎么重置密码',
+      1
+    )
+
+    expect(results).toHaveLength(1)
+    expect(results[0]?.chunk.content).toContain('请在登录页点击忘记密码')
+    expect(results[0]!.score).toBeGreaterThan(0)
+  })
+
   it('caps retrieval to the requested top N results', async () => {
     const { retrieveRelevantKnowledge } = await import('@/lib/audit/retriever')
 
@@ -152,5 +216,41 @@ describe('conversation audit retrieval', () => {
     )
 
     expect(results).toHaveLength(2)
+  })
+
+  it('drops zero-score chunks instead of returning arbitrary leading documents', async () => {
+    const { retrieveRelevantKnowledge } = await import('@/lib/audit/retriever')
+
+    const results = retrieveRelevantKnowledge(
+      [
+        {
+          sourceName: 'title.docx',
+          sourceType: 'docx',
+          sheetName: null,
+          chunkIndex: 0,
+          content: '互动桌面壁纸黑屏',
+        },
+        {
+          sourceName: 'member.docx',
+          sourceType: 'docx',
+          sheetName: null,
+          chunkIndex: 1,
+          content: 'OPPO会员分为4个等级',
+        },
+        {
+          sourceName: 'answer.docx',
+          sourceType: 'docx',
+          sheetName: null,
+          chunkIndex: 2,
+          content: '互动桌面壁纸出现黑屏时，请先重启主题商店并重新应用壁纸。',
+        },
+      ],
+      '互动桌面壁纸黑屏怎么办',
+      5
+    )
+
+    expect(results).toHaveLength(2)
+    expect(results.every((result) => result.score > 0)).toBe(true)
+    expect(results[0]?.chunk.sourceName).toBe('answer.docx')
   })
 })

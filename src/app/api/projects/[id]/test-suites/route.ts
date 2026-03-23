@@ -38,6 +38,8 @@ export async function POST(
       name: body.name,
       description: body.description,
       sessionId: body.sessionId,
+      workflowMode: body.workflowMode,
+      routingConfig: body.routingConfig,
     })
     return NextResponse.json({ success: true, data, error: null }, { status: 201 })
   } catch (err) {

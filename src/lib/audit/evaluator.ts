@@ -18,6 +18,14 @@ interface RawEvaluationResult {
   knowledgeAnswer: string
 }
 
+function previewText(text: string, maxLength = 240): string {
+  if (text.length <= maxLength) {
+    return text
+  }
+
+  return `${text.slice(0, maxLength)}...`
+}
+
 function formatKnowledge(knowledge: KnowledgeChunk[]): string {
   if (knowledge.length === 0) {
     return 'No relevant knowledge retrieved.'
@@ -35,6 +43,18 @@ export async function evaluateConversationAuditTurn(
   provider: AiProvider,
   input: ConversationAuditEvaluationInput
 ): Promise<ConversationAuditEvaluationResult> {
+  console.log('[ConversationAudit] Evaluating turn', {
+    userMessage: input.userMessage,
+    botReply: input.botReply,
+    knowledgeCount: input.knowledge.length,
+    knowledge: input.knowledge.map((chunk) => ({
+      sourceName: chunk.sourceName,
+      chunkIndex: chunk.chunkIndex,
+      sheetName: chunk.sheetName,
+      contentPreview: previewText(chunk.content),
+    })),
+  })
+
   const messages: ChatMessage[] = [
     {
       role: 'system',
@@ -62,16 +82,37 @@ ${formatKnowledge(input.knowledge)}`,
 
   try {
     const response = await provider.chat(messages, { temperature: 0 })
+    console.log('[ConversationAudit] Received evaluation response', {
+      userMessage: input.userMessage,
+      rawResponsePreview: previewText(response, 500),
+    })
     const result = extractJson<RawEvaluationResult>(response)
 
     if (result && typeof result.hasIssue === 'boolean' && typeof result.knowledgeAnswer === 'string') {
+      console.log('[ConversationAudit] Parsed evaluation result', {
+        userMessage: input.userMessage,
+        hasIssue: result.hasIssue,
+        knowledgeAnswer: result.knowledgeAnswer,
+      })
       return {
         hasIssue: result.hasIssue,
         knowledgeAnswer: result.knowledgeAnswer,
       }
     }
-  } catch {
-    // fall through to parse fallback
+
+    console.error('[ConversationAudit] Failed to parse evaluation response', {
+      userMessage: input.userMessage,
+      botReply: input.botReply,
+      knowledgeCount: input.knowledge.length,
+      rawResponsePreview: previewText(response, 500),
+    })
+  } catch (error) {
+    console.error('[ConversationAudit] Evaluation request failed', {
+      userMessage: input.userMessage,
+      botReply: input.botReply,
+      knowledgeCount: input.knowledge.length,
+      error: error instanceof Error ? error.message : String(error),
+    })
   }
 
   return {

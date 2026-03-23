@@ -180,6 +180,28 @@ describe('conversation audit run routes', () => {
     }
   })
 
+  it('rejects duplicate runs when the job is already running', async () => {
+    const testContext = await setupRunRouteTest({ withSettings: true })
+
+    try {
+      const { updateConversationAuditJob } = await import('@/lib/db/repositories/conversation-audit-jobs')
+      updateConversationAuditJob(testContext.jobId, { status: 'running' })
+
+      const { POST } = await import('@/app/api/conversation-audit-jobs/[id]/run/route')
+      const response = await POST(new Request('http://localhost', { method: 'POST' }), {
+        params: Promise.resolve({ id: testContext.jobId }),
+      })
+
+      expect(response.status).toBe(409)
+      await expect(response.json()).resolves.toMatchObject({
+        success: false,
+        error: 'Conversation audit job is already running',
+      })
+    } finally {
+      testContext.cleanup()
+    }
+  })
+
   it('exports audit results as an excel file with headers', async () => {
     const testContext = await setupRunRouteTest({ withSettings: true, withResult: true })
 

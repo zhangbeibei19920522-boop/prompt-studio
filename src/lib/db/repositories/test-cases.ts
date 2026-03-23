@@ -9,6 +9,8 @@ interface TestCaseRow {
   context: string
   input: string
   expected_output: string
+  expected_output_diagnostics: string | null
+  expected_intent: string | null
   sort_order: number
 }
 
@@ -20,6 +22,15 @@ function mapRowToTestCase(row: TestCaseRow): TestCase {
     context: row.context,
     input: row.input,
     expectedOutput: row.expected_output,
+    expectedOutputDiagnostics: (() => {
+      if (!row.expected_output_diagnostics) return null
+      try {
+        return JSON.parse(row.expected_output_diagnostics) as TestCase['expectedOutputDiagnostics']
+      } catch {
+        return null
+      }
+    })(),
+    expectedIntent: row.expected_intent,
     sortOrder: row.sort_order,
   }
 }
@@ -44,6 +55,8 @@ export function createTestCase(data: {
   context?: string
   input: string
   expectedOutput: string
+  expectedOutputDiagnostics?: TestCase['expectedOutputDiagnostics']
+  expectedIntent?: string | null
   sortOrder?: number
 }): TestCase {
   const db = getDb()
@@ -58,8 +71,18 @@ export function createTestCase(data: {
   }
 
   db.prepare(`
-    INSERT INTO test_cases (id, test_suite_id, title, context, input, expected_output, sort_order)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO test_cases (
+      id,
+      test_suite_id,
+      title,
+      context,
+      input,
+      expected_output,
+      expected_output_diagnostics,
+      expected_intent,
+      sort_order
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     data.testSuiteId,
@@ -67,6 +90,8 @@ export function createTestCase(data: {
     data.context ?? '',
     data.input,
     data.expectedOutput,
+    data.expectedOutputDiagnostics ? JSON.stringify(data.expectedOutputDiagnostics) : null,
+    data.expectedIntent ?? null,
     sortOrder
   )
 
@@ -77,6 +102,8 @@ export function createTestCase(data: {
     context: data.context ?? '',
     input: data.input,
     expectedOutput: data.expectedOutput,
+    expectedOutputDiagnostics: data.expectedOutputDiagnostics ?? null,
+    expectedIntent: data.expectedIntent ?? null,
     sortOrder,
   }
 }
@@ -88,6 +115,8 @@ export function updateTestCase(
     context?: string
     input?: string
     expectedOutput?: string
+    expectedOutputDiagnostics?: TestCase['expectedOutputDiagnostics']
+    expectedIntent?: string | null
     sortOrder?: number
   }
 ): TestCase | null {
@@ -114,6 +143,16 @@ export function updateTestCase(
     fields.push('expected_output = ?')
     values.push(data.expectedOutput)
   }
+  if (data.expectedOutputDiagnostics !== undefined) {
+    fields.push('expected_output_diagnostics = ?')
+    values.push(
+      data.expectedOutputDiagnostics ? JSON.stringify(data.expectedOutputDiagnostics) : null
+    )
+  }
+  if (data.expectedIntent !== undefined) {
+    fields.push('expected_intent = ?')
+    values.push(data.expectedIntent)
+  }
   if (data.sortOrder !== undefined) {
     fields.push('sort_order = ?')
     values.push(data.sortOrder)
@@ -135,7 +174,15 @@ export function deleteTestCase(id: string): boolean {
 
 export function createTestCasesBatch(
   testSuiteId: string,
-  cases: { title: string; context?: string; input: string; expectedOutput: string; sortOrder?: number }[]
+  cases: {
+    title: string
+    context?: string
+    input: string
+    expectedOutput: string
+    expectedOutputDiagnostics?: TestCase['expectedOutputDiagnostics']
+    expectedIntent?: string | null
+    sortOrder?: number
+  }[]
 ): TestCase[] {
   const db = getDb()
 
@@ -145,8 +192,18 @@ export function createTestCasesBatch(
   let nextOrder = (result.max_order ?? -1) + 1
 
   const insert = db.prepare(`
-    INSERT INTO test_cases (id, test_suite_id, title, context, input, expected_output, sort_order)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO test_cases (
+      id,
+      test_suite_id,
+      title,
+      context,
+      input,
+      expected_output,
+      expected_output_diagnostics,
+      expected_intent,
+      sort_order
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
 
   const created: TestCase[] = []
@@ -155,7 +212,17 @@ export function createTestCasesBatch(
     for (const c of cases) {
       const id = nanoid()
       const sortOrder = c.sortOrder ?? nextOrder++
-      insert.run(id, testSuiteId, c.title ?? '', c.context ?? '', c.input ?? '', c.expectedOutput ?? '', sortOrder)
+      insert.run(
+        id,
+        testSuiteId,
+        c.title ?? '',
+        c.context ?? '',
+        c.input ?? '',
+        c.expectedOutput ?? '',
+        c.expectedOutputDiagnostics ? JSON.stringify(c.expectedOutputDiagnostics) : null,
+        c.expectedIntent ?? null,
+        sortOrder
+      )
       created.push({
         id,
         testSuiteId,
@@ -163,6 +230,8 @@ export function createTestCasesBatch(
         context: c.context ?? '',
         input: c.input,
         expectedOutput: c.expectedOutput,
+        expectedOutputDiagnostics: c.expectedOutputDiagnostics ?? null,
+        expectedIntent: c.expectedIntent ?? null,
         sortOrder,
       })
     }

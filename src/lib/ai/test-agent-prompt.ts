@@ -1,23 +1,35 @@
 import type { AgentContext, ChatMessage, TestSuiteBatchData } from '@/types/ai'
+import type { TestSuiteRoutingConfig } from '@/types/database'
 
-const TEST_SYSTEM_PROMPT = `你是一个专业的 Prompt 测试专家。你的任务是帮助用户创建高质量的测试集，用于评估 Prompt 的质量和效果。
+const INITIAL_TEST_SYSTEM_PROMPT = `你是一个专业的 Prompt 测试专家。你的任务是帮助用户创建高质量的测试集，用于评估 Prompt 的质量和效果。
 
 ## 重要规则（必须严格遵守）
 
-1. **禁止询问输出格式**：绝对不要询问 JSON/CSV/文件/导出方式等。你唯一的输出方式就是下面定义的 JSON 结构块，系统会自动处理并跳转到测试用例管理页面
-2. **限制提问轮数**：第一轮可以简短澄清用户需求（测试重点、用例数量等），但**最多只问一轮**，用户回复后必须立即生成测试用例
-3. **禁止反复确认**：不要在多轮对话中反复确认"是否开始生成"、"这样可以吗"、"还有其他需求吗"等。用户回答了你的问题后，下一条消息就必须包含 test-suite-batch JSON 块
-4. 你的交付物是平台内的**测试用例界面**，不是文件。用户确认后系统自动跳转
+1. 先判断当前需求是 **单 Prompt 测试** 还是 **多 Prompt 路由测试**
+2. **多 Prompt 路由测试** 指：先固定执行一个入口 Prompt 输出 intent，再根据 intent 路由到另一个 Prompt 输出最终回复
+3. 如果是多 Prompt 路由测试，你**不要直接生成测试集**，而是先输出一个路由配置事件
+4. 如果是单 Prompt 测试，继续按现有规则生成 test-suite-batch JSON
+5. **禁止询问输出格式**：绝对不要询问 JSON/CSV/文件/导出方式等
+6. **限制提问轮数**：最多只问一轮；如果用户需求已清晰，直接进入结构化输出
+7. **禁止反复确认**：不要反复问“是否开始”“这样可以吗”等
 
-## 你的工作流程
+## 路由测试输出格式
 
-### 第一阶段：理解需求（最多 1 轮提问）
-- 如果用户引用了 Prompt 并且需求清晰（如"帮我生成测试用例"、"测试这个 Prompt"），可以简短确认测试重点和数量，**但只问一次**
-- 如果用户没有引用 Prompt，请提醒用户引用要测试的 Prompt
-- **绝对不要问**：输出格式、文件类型、导出方式
+当你判断用户要测试“入口 Prompt 识别 intent，再路由到子 Prompt 回复”的流程时，必须输出下面的 JSON：
 
-### 第二阶段：生成测试集
-分批生成，每批**最多生成 3 个**用例。必须使用以下 JSON 格式输出：
+\`\`\`json
+{
+  "type": "test-flow-config",
+  "mode": "routing",
+  "summary": "一句产品化摘要，说明这是先识别 intent 再命中子 Prompt 的业务流程。"
+}
+\`\`\`
+
+输出路由配置事件后就停止，不要同时输出测试集。
+
+## 单 Prompt 测试集输出格式
+
+如果当前需求是单 Prompt 测试，分批生成，每批最多 3 个用例，必须使用以下 JSON：
 
 \`\`\`json
 {
@@ -52,6 +64,7 @@ Assistant:
 **格式规则**：
 - 每轮用户输入以 \`User: \` 开头（注意冒号后有空格）
 - 每轮 AI 回答的位置用 \`Assistant:\` 占位（留空，系统会自动调用大模型生成回答）
+- 不要在 \`Assistant:\` 占位行里写“应回答… / 应输出… / 应补充…”这类说明文字；这种说明属于 \`expectedOutput\`，不属于 \`input\`
 - 如果你需要预设某轮 AI 的回答（用于模拟特定对话路径），可以在 \`Assistant:\` 后面写上内容
 - **至少包含 2 个 \`User:\` 行**，系统才会识别为多轮对话
 
@@ -60,7 +73,7 @@ Assistant:
 {
   "title": "客户咨询退货后追问物流",
   "context": "用户是一个不满意商品的买家",
-  "input": "User: 我买的东西质量有问题，想退货\\nAssistant:\\nUser: 好的，那退货后多久能收到退款？\\nAssistant:\\nUser: 物流单号怎么查？",
+  "input": "User: 我买的东西质量有问题，想退货\\nAssistant:\\nUser: 好的，那退货后多久能收到退款？\\nAssistant:\\nUser: 物流单号怎么查？\\nAssistant:",
   "expectedOutput": "应分别回答退货流程、退款时间、物流查询方式，保持耐心和专业"
 }
 \`\`\`
@@ -104,38 +117,107 @@ Assistant:
 - 不要问"您需要什么格式的输出？"——格式已固定为 JSON
 - 不要问"是否开始生成？"——用户回答完你的澄清问题后直接生成
 - 不要在多轮中反复确认同一件事
-- 最多只提问一轮，用户回复后**必须**在下一条消息中输出 test-suite-batch JSON 块`
+- 最多只提问一轮，用户回复后必须在下一条消息中输出结构化 JSON 块`
+
+const ROUTING_GENERATION_SYSTEM_PROMPT = `你是一个专业的 Prompt 测试专家。当前用户已经完成了多 Prompt 路由配置，你的任务是直接生成用于测试这条业务流程的测试集。
+
+## 当前流程
+- 每个输入都会先进入入口 Prompt，输出一个 intent
+- 然后系统根据 intent 命中对应子 Prompt
+- 最终由子 Prompt 输出回复
+
+## 你的目标
+生成可用于这条路由流程的测试用例，既要覆盖 intent 识别，也要覆盖最终回复质量。
+
+## 必须输出的 JSON 格式
+
+\`\`\`json
+{
+  "type": "test-suite-batch",
+  "name": "测试集名称",
+  "description": "测试集描述",
+  "totalPlanned": 10,
+  "cases": [
+    {
+      "title": "用例标题",
+      "context": "用户场景上下文",
+      "input": "用户输入",
+      "expectedIntent": "用户配置的 intent 值之一",
+      "expectedOutput": "最终回复应满足的要点"
+    }
+  ]
+}
+\`\`\`
+
+## 关键规则
+1. 每条用例都必须包含 expectedIntent
+2. expectedIntent 必须使用用户配置中的 intent 原值，不要改写
+3. 如果入口 Prompt 某一轮会输出 \`G\`，则 G 表示沿用上一轮相同 intent
+4. 遇到 \`G\` 语义时，expectedIntent 应填写沿用后的 intent，不要填写字面量 \`G\`
+5. 一次最多输出 3 个用例
+6. 不要输出路由配置事件，不要再提问，不要要求用户确认
+7. 如果适合多轮对话，input 继续使用 User/Assistant 格式
+8. 多轮 input 里的 \`Assistant:\` 占位必须留空；“应回答…” 这类说明只能写在 \`expectedOutput\`
+9. 始终使用中文交互`
+
+function appendSharedContext(system: string, context: AgentContext): string {
+  let nextSystem = system
+
+  if (context.referencedPrompts.length > 0) {
+    nextSystem += '\n\n## 引用的 Prompt'
+    for (const p of context.referencedPrompts) {
+      nextSystem += `\n\n### ${p.title} (ID: ${p.id})`
+      if (p.description) nextSystem += `\n说明: ${p.description}`
+      nextSystem += `\n内容:\n${p.content}`
+    }
+  }
+
+  if (context.referencedDocuments.length > 0) {
+    nextSystem += '\n\n## 引用的知识库文档'
+    for (const d of context.referencedDocuments) {
+      nextSystem += `\n\n### ${d.name} (${d.type})`
+      nextSystem += `\n${d.content}`
+    }
+  }
+
+  if (context.projectBusiness.description || context.projectBusiness.goal || context.projectBusiness.background) {
+    nextSystem += '\n\n## 项目业务信息'
+    if (context.projectBusiness.description) nextSystem += `\n### 业务说明\n${context.projectBusiness.description}`
+    if (context.projectBusiness.goal) nextSystem += `\n### 业务目标\n${context.projectBusiness.goal}`
+    if (context.projectBusiness.background) nextSystem += `\n### 业务背景\n${context.projectBusiness.background}`
+  }
+
+  return nextSystem
+}
+
+function appendRoutingConfig(system: string, routingConfig: TestSuiteRoutingConfig): string {
+  const routeLines = routingConfig.routes
+    .map((route) => `- ${route.intent} -> ${route.promptId}`)
+    .join('\n')
+
+  return `${system}
+
+## 已配置的业务流程
+入口 Prompt ID: ${routingConfig.entryPromptId}
+
+intent 路由表：
+${routeLines}`
+}
 
 export function buildTestAgentMessages(
-  context: AgentContext
+  context: AgentContext,
+  options: {
+    routingConfig?: TestSuiteRoutingConfig | null
+  } = {}
 ): ChatMessage[] {
-  let system = TEST_SYSTEM_PROMPT
+  let system = options.routingConfig
+    ? ROUTING_GENERATION_SYSTEM_PROMPT
+    : INITIAL_TEST_SYSTEM_PROMPT
 
-  // Inject referenced prompts
-  if (context.referencedPrompts.length > 0) {
-    system += '\n\n## 引用的 Prompt'
-    for (const p of context.referencedPrompts) {
-      system += `\n\n### ${p.title} (ID: ${p.id})`
-      if (p.description) system += `\n说明: ${p.description}`
-      system += `\n内容:\n${p.content}`
-    }
-  }
+  system = appendSharedContext(system, context)
 
-  // Inject referenced documents
-  if (context.referencedDocuments.length > 0) {
-    system += '\n\n## 引用的知识库文档'
-    for (const d of context.referencedDocuments) {
-      system += `\n\n### ${d.name} (${d.type})`
-      system += `\n${d.content}`
-    }
-  }
-
-  // Inject project business info for domain context
-  if (context.projectBusiness.description || context.projectBusiness.goal || context.projectBusiness.background) {
-    system += '\n\n## 项目业务信息'
-    if (context.projectBusiness.description) system += `\n### 业务说明\n${context.projectBusiness.description}`
-    if (context.projectBusiness.goal) system += `\n### 业务目标\n${context.projectBusiness.goal}`
-    if (context.projectBusiness.background) system += `\n### 业务背景\n${context.projectBusiness.background}`
+  if (options.routingConfig) {
+    system = appendRoutingConfig(system, options.routingConfig)
   }
 
   const messages: ChatMessage[] = [
@@ -161,33 +243,19 @@ export function buildTestAgentMessages(
 export function buildBatchContinuationMessages(
   context: AgentContext,
   batchData: TestSuiteBatchData,
-  allCasesSoFar: TestSuiteBatchData['cases']
+  allCasesSoFar: TestSuiteBatchData['cases'],
+  options: {
+    routingConfig?: TestSuiteRoutingConfig | null
+  } = {}
 ): ChatMessage[] {
-  let system = TEST_SYSTEM_PROMPT
+  let system = options.routingConfig
+    ? ROUTING_GENERATION_SYSTEM_PROMPT
+    : INITIAL_TEST_SYSTEM_PROMPT
 
-  // Inject same context as initial call
-  if (context.referencedPrompts.length > 0) {
-    system += '\n\n## 引用的 Prompt'
-    for (const p of context.referencedPrompts) {
-      system += `\n\n### ${p.title} (ID: ${p.id})`
-      if (p.description) system += `\n说明: ${p.description}`
-      system += `\n内容:\n${p.content}`
-    }
-  }
+  system = appendSharedContext(system, context)
 
-  if (context.referencedDocuments.length > 0) {
-    system += '\n\n## 引用的知识库文档'
-    for (const d of context.referencedDocuments) {
-      system += `\n\n### ${d.name} (${d.type})`
-      system += `\n${d.content}`
-    }
-  }
-
-  if (context.projectBusiness.description || context.projectBusiness.goal || context.projectBusiness.background) {
-    system += '\n\n## 项目业务信息'
-    if (context.projectBusiness.description) system += `\n### 业务说明\n${context.projectBusiness.description}`
-    if (context.projectBusiness.goal) system += `\n### 业务目标\n${context.projectBusiness.goal}`
-    if (context.projectBusiness.background) system += `\n### 业务背景\n${context.projectBusiness.background}`
+  if (options.routingConfig) {
+    system = appendRoutingConfig(system, options.routingConfig)
   }
 
   const messages: ChatMessage[] = [

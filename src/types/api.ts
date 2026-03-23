@@ -1,4 +1,12 @@
-import type { Memory, MessageReference, Project, Prompt } from './database'
+import type {
+  Memory,
+  MessageReference,
+  Project,
+  Prompt,
+  TestSuiteConfig,
+  TestSuiteRoutingConfig,
+  TestSuiteWorkflowMode,
+} from './database'
 
 // 通用 API 响应
 export interface ApiResponse<T> {
@@ -47,6 +55,8 @@ export interface CreateTestSuiteRequest {
   name: string
   description?: string
   sessionId?: string
+  workflowMode?: TestSuiteWorkflowMode
+  routingConfig?: TestSuiteRoutingConfig | null
 }
 
 export interface UpdateTestSuiteRequest {
@@ -54,7 +64,9 @@ export interface UpdateTestSuiteRequest {
   description?: string
   promptId?: string
   promptVersionId?: string
-  config?: import('./database').TestSuiteConfig
+  workflowMode?: TestSuiteWorkflowMode
+  routingConfig?: TestSuiteRoutingConfig | null
+  config?: TestSuiteConfig
   status?: 'draft' | 'ready' | 'running' | 'completed'
 }
 
@@ -63,6 +75,8 @@ export interface CreateTestCaseRequest {
   context?: string
   input: string
   expectedOutput: string
+  expectedOutputDiagnostics?: import('./database').TestCaseRoutingStep[] | null
+  expectedIntent?: string | null
   sortOrder?: number
 }
 
@@ -71,6 +85,8 @@ export interface UpdateTestCaseRequest {
   context?: string
   input?: string
   expectedOutput?: string
+  expectedOutputDiagnostics?: import('./database').TestCaseRoutingStep[] | null
+  expectedIntent?: string | null
   sortOrder?: number
 }
 

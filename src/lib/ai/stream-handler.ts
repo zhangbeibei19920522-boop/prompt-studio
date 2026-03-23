@@ -68,12 +68,20 @@ export function parseAgentOutput(text: string): {
 
   // Fallback: if no ```json blocks found, try to find bare JSON objects with "type" field
   if (jsonBlocks.length === 0) {
-    const bareJsonRegex = /\{[\s\n]*"type"\s*:\s*"(?:plan|preview|diff|memory|test-suite|test-suite-batch)"[\s\S]*?\}(?:\s*\})?/g
+    const bareJsonRegex = /\{[\s\n]*"type"\s*:\s*"(?:plan|preview|diff|memory|test-flow-config|test-suite|test-suite-batch)"[\s\S]*?\}(?:\s*\})?/g
     let bareMatch: RegExpExecArray | null
     while ((bareMatch = bareJsonRegex.exec(text)) !== null) {
       try {
         const parsed = JSON.parse(bareMatch[0])
-        if (parsed.type === 'plan' || parsed.type === 'preview' || parsed.type === 'diff' || parsed.type === 'memory' || parsed.type === 'test-suite' || parsed.type === 'test-suite-batch') {
+        if (
+          parsed.type === 'plan' ||
+          parsed.type === 'preview' ||
+          parsed.type === 'diff' ||
+          parsed.type === 'memory' ||
+          parsed.type === 'test-flow-config' ||
+          parsed.type === 'test-suite' ||
+          parsed.type === 'test-suite-batch'
+        ) {
           jsonBlocks.push(parsed)
           plainText = plainText.replace(bareMatch[0], '').trim()
         }
