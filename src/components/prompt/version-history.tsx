@@ -4,7 +4,6 @@ import { useState } from "react"
 import { format } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Separator } from "@/components/ui/separator"
 
 interface Version {
   id: string
@@ -42,7 +41,7 @@ export function VersionHistory({
   }
 
   return (
-    <div className="flex flex-col h-full overflow-auto p-6 gap-4">
+    <div className="flex h-full flex-col gap-4 overflow-auto p-5">
       {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">版本历史</h2>
@@ -50,8 +49,6 @@ export function VersionHistory({
           共 {versions.length} 个版本
         </Badge>
       </div>
-
-      <Separator />
 
       {/* Version list */}
       {sorted.length === 0 ? (
@@ -67,18 +64,24 @@ export function VersionHistory({
             return (
               <div
                 key={v.id}
-                className="rounded-md border bg-background overflow-hidden"
+                className="overflow-hidden rounded-md border border-zinc-200 bg-white"
               >
                 {/* Version header row */}
                 <button
-                  className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-muted/50 transition-colors"
+                  className="prompt-version-item flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-zinc-50"
                   onClick={() => toggleExpand(v.id)}
                   aria-expanded={isExpanded}
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <span className="text-sm font-mono font-medium shrink-0">
-                      v{v.version}
-                    </span>
+                    <span className={`prompt-version-dot inline-block size-2 shrink-0 rounded-full ${isCurrent ? "bg-blue-500" : "bg-zinc-300"}`} />
+                    <div className="prompt-version-info min-w-0 flex-1">
+                      <div className="prompt-version-label truncate text-sm font-medium text-zinc-900">
+                        {`v${v.version} — ${v.changeNote || "无变更说明"}`}
+                      </div>
+                      <div className="prompt-version-time mt-1 text-xs text-zinc-500">
+                        {formatTimestamp(v.createdAt)}
+                      </div>
+                    </div>
                     {isCurrent && (
                       <Badge variant="default" className="text-xs shrink-0">
                         当前版本
@@ -89,14 +92,8 @@ export function VersionHistory({
                         最新
                       </Badge>
                     )}
-                    <span className="text-sm text-muted-foreground truncate">
-                      {v.changeNote || "无变更说明"}
-                    </span>
                   </div>
-                  <div className="flex items-center gap-3 shrink-0 ml-2">
-                    <span className="text-xs text-muted-foreground">
-                      {formatTimestamp(v.createdAt)}
-                    </span>
+                  <div className="ml-2 flex items-center gap-3 shrink-0">
                     <span className="text-muted-foreground text-xs">
                       {isExpanded ? "▲" : "▼"}
                     </span>
@@ -106,13 +103,12 @@ export function VersionHistory({
                 {/* Expanded content */}
                 {isExpanded && (
                   <>
-                    <Separator />
-                    <div className="px-4 py-3 flex flex-col gap-3">
+                    <div className="flex flex-col gap-3 border-t border-zinc-200 px-4 py-3">
                       <div className="flex flex-col gap-1">
                         <span className="text-xs font-medium text-muted-foreground">
                           内容
                         </span>
-                        <pre className="whitespace-pre-wrap font-mono text-xs bg-muted rounded p-3 max-h-60 overflow-auto leading-relaxed">
+                        <pre className="max-h-60 overflow-auto whitespace-pre-wrap rounded bg-zinc-50 p-3 font-mono text-xs leading-relaxed">
                           {v.content}
                         </pre>
                       </div>

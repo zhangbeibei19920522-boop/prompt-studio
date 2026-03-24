@@ -14,12 +14,19 @@ import {
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { TestCaseEditor } from "./test-case-editor"
 import { TestRunConfig } from "./test-run-config"
 import { TestReportView } from "./test-report"
 import { TestRunHistory } from "./test-run-history"
+import { RoutingStepDiagnosticsDetails, TestRoutingResultDetails } from "./test-routing-result-details"
+import { TestRoutingConfigDialog } from "./test-routing-config-dialog"
+import { ConversationPanel } from "./conversation-panel"
+import {
+  parseConversationOutput,
+  parseExpectedConversationOutput,
+} from "./conversation-output"
 import { testSuitesApi, testCasesApi } from "@/lib/utils/api-client"
 import { streamTestRun } from "@/lib/utils/sse-client"
 import { exportTestRunPDF } from "@/lib/utils/pdf-export"
@@ -30,6 +37,7 @@ import type {
   TestCaseResult,
   TestReport,
   TestSuiteConfig,
+  TestSuiteRoutingConfig,
 } from "@/types/database"
 
 interface TestSuiteDetailProps {
@@ -59,60 +67,6 @@ function getStatusLabel(status: string): string {
   }
 }
 
-/**
- * Parse actualOutput (and fallback to input) into structured conversation turns.
- * Handles two formats:
- * - Multi-turn: "User: xxx\nAssistant: xxx\nUser: yyy\nAssistant: yyy"
- * - Single-turn: plain text (uses input as user turn, output as assistant turn)
- */
-function parseConversationOutput(
-  actualOutput: string,
-  input: string
-): Array<{ role: "user" | "assistant"; content: string }> {
-  // Try parsing "User: / Assistant:" markers
-  const turns: Array<{ role: "user" | "assistant"; content: string }> = []
-  const lines = actualOutput.split("\n")
-  let currentRole: "user" | "assistant" | null = null
-  let currentContent = ""
-
-  for (const line of lines) {
-    const userMatch = line.match(/^User:\s*(.*)/)
-    const assistantMatch = line.match(/^Assistant:\s*(.*)/)
-
-    if (userMatch) {
-      if (currentRole) {
-        turns.push({ role: currentRole, content: currentContent.trim() })
-      }
-      currentRole = "user"
-      currentContent = userMatch[1]
-    } else if (assistantMatch) {
-      if (currentRole) {
-        turns.push({ role: currentRole, content: currentContent.trim() })
-      }
-      currentRole = "assistant"
-      currentContent = assistantMatch[1]
-    } else if (currentRole) {
-      currentContent += "\n" + line
-    }
-  }
-
-  if (currentRole) {
-    turns.push({ role: currentRole, content: currentContent.trim() })
-  }
-
-  // If we got at least 2 turns with content, use parsed result
-  const nonEmptyTurns = turns.filter((t) => t.content)
-  if (nonEmptyTurns.length >= 2) {
-    return nonEmptyTurns
-  }
-
-  // Fallback: single-turn — show input as user, actualOutput as assistant
-  return [
-    { role: "user", content: input },
-    { role: "assistant", content: actualOutput },
-  ]
-}
-
 function getStatusVariant(status: string): "default" | "secondary" | "outline" {
   switch (status) {
     case "ready": return "default"
@@ -120,6 +74,19 @@ function getStatusVariant(status: string): "default" | "secondary" | "outline" {
     case "running": return "secondary"
     default: return "outline"
   }
+}
+
+function getIntentMatchLabel(results: TestCaseResult[]): string {
+  const comparableResults = results.filter(
+    (result) => result.intentPassed !== null && result.intentPassed !== undefined
+  )
+
+  if (comparableResults.length === 0) {
+    return "暂无"
+  }
+
+  const passedCount = comparableResults.filter((result) => result.intentPassed).length
+  return `${Math.round((passedCount / comparableResults.length) * 100)}%`
 }
 
 export function TestSuiteDetail({
@@ -134,10 +101,23 @@ export function TestSuiteDetail({
   const [editingCaseId, setEditingCaseId] = useState<string | null>(null)
   const [addingCase, setAddingCase] = useState(false)
   const [configOpen, setConfigOpen] = useState(false)
+  const [routingConfigOpen, setRoutingConfigOpen] = useState(false)
   const [isRunning, setIsRunning] = useState(false)
   const [runProgress, setRunProgress] = useState<RunProgress | null>(null)
   const [exporting, setExporting] = useState(false)
+  const [regeneratingExpectedOutputs, setRegeneratingExpectedOutputs] = useState(false)
   const actualOutputsRef = useRef<Record<string, string>>({})
+  const routingMetadataRef = useRef<
+    Record<
+      string,
+      {
+        actualIntent?: string | null
+        matchedPromptId?: string | null
+        matchedPromptTitle?: string | null
+        routingSteps?: TestCaseResult["routingSteps"]
+      }
+    >
+  >({})
 
   const latestResults = runProgress?.results ?? latestRun?.results ?? []
   const latestReport = runProgress?.report ?? latestRun?.report ?? null
@@ -153,6 +133,7 @@ export function TestSuiteDetail({
     setIsRunning(true)
     setRunProgress({ phase: "running", current: 0, total: cases.length, results: [], report: null })
     actualOutputsRef.current = {}
+    routingMetadataRef.current = {}
 
     try {
       for await (const event of streamTestRun(suite.id, promptId)) {
@@ -170,6 +151,12 @@ export function TestSuiteDetail({
           case "test-case-done":
             // Store actual output for use in eval-case-done
             actualOutputsRef.current[event.data.caseId] = event.data.actualOutput
+            routingMetadataRef.current[event.data.caseId] = {
+              actualIntent: event.data.actualIntent,
+              matchedPromptId: event.data.matchedPromptId,
+              matchedPromptTitle: event.data.matchedPromptTitle,
+              routingSteps: event.data.routingSteps,
+            }
             break
           case "eval-start":
             setRunProgress((prev) =>
@@ -182,9 +169,19 @@ export function TestSuiteDetail({
               const newResult: TestCaseResult = {
                 testCaseId: event.data.caseId,
                 actualOutput: actualOutputsRef.current[event.data.caseId] ?? "",
+                actualIntent: routingMetadataRef.current[event.data.caseId]?.actualIntent,
+                matchedPromptId: routingMetadataRef.current[event.data.caseId]?.matchedPromptId,
+                matchedPromptTitle: routingMetadataRef.current[event.data.caseId]?.matchedPromptTitle,
+                routingSteps: routingMetadataRef.current[event.data.caseId]?.routingSteps,
                 passed: event.data.passed,
                 score: event.data.score,
                 reason: event.data.reason,
+                intentPassed: event.data.intentPassed,
+                intentScore: event.data.intentScore,
+                intentReason: event.data.intentReason,
+                replyPassed: event.data.replyPassed,
+                replyScore: event.data.replyScore,
+                replyReason: event.data.replyReason,
               }
               return {
                 ...prev,
@@ -216,11 +213,18 @@ export function TestSuiteDetail({
     }
   }
 
-  async function handleAddCase(data: { title: string; context: string; input: string; expectedOutput: string }) {
+  async function handleAddCase(data: {
+    title: string
+    context: string
+    input: string
+    expectedIntent?: string | null
+    expectedOutput: string
+  }) {
     await testCasesApi.create(suite.id, {
       title: data.title,
       context: data.context,
       input: data.input,
+      expectedIntent: data.expectedIntent,
       expectedOutput: data.expectedOutput,
       sortOrder: cases.length,
     })
@@ -230,12 +234,19 @@ export function TestSuiteDetail({
 
   async function handleUpdateCase(
     caseId: string,
-    data: { title: string; context: string; input: string; expectedOutput: string }
+    data: {
+      title: string
+      context: string
+      input: string
+      expectedIntent?: string | null
+      expectedOutput: string
+    }
   ) {
     await testCasesApi.update(caseId, {
       title: data.title,
       context: data.context,
       input: data.input,
+      expectedIntent: data.expectedIntent,
       expectedOutput: data.expectedOutput,
     })
     setEditingCaseId(null)
@@ -259,6 +270,15 @@ export function TestSuiteDetail({
     onSuiteUpdate()
   }
 
+  async function handleRoutingConfigSave(routingConfig: TestSuiteRoutingConfig): Promise<void> {
+    await testSuitesApi.update(suite.id, {
+      workflowMode: "routing",
+      routingConfig,
+    })
+    setRoutingConfigOpen(false)
+    onSuiteUpdate()
+  }
+
   async function handleExportPDF() {
     const run = latestRun
     if (!run) return
@@ -272,8 +292,34 @@ export function TestSuiteDetail({
     }
   }
 
+  async function handleRegenerateExpectedOutputs() {
+    setRegeneratingExpectedOutputs(true)
+    try {
+      const result = await testSuitesApi.regenerateExpectedOutputs(suite.id)
+      alert(`已更新 ${result.updatedCount}/${result.totalCount} 条预期结果`)
+      onCaseUpdate()
+      onSuiteUpdate()
+    } catch (err) {
+      alert(`重生成失败: ${err instanceof Error ? err.message : "未知错误"}`)
+    } finally {
+      setRegeneratingExpectedOutputs(false)
+    }
+  }
+
   const canConfirm = suite.status === "draft" && cases.length > 0
   const canRun = (suite.status === "ready" || suite.status === "completed") && cases.length > 0 && !isRunning
+  const canRegenerateExpectedOutputs = cases.length > 0 && !isRunning && !regeneratingExpectedOutputs
+  const activePromptId =
+    suite.workflowMode === "routing"
+      ? suite.routingConfig?.entryPromptId ?? null
+      : suite.promptId
+  const historyCount = latestRun ? 1 : 0
+  const latestScore = latestReport?.score ?? latestRun?.score
+  const latestPassRate =
+    latestReport && latestReport.totalCases > 0
+      ? `${latestReport.passedCases}/${latestReport.totalCases}`
+      : `${latestResults.filter((result) => result.passed).length}/${cases.length}`
+  const intentMatchRate = getIntentMatchLabel(latestResults)
 
   return (
     <div className="flex flex-col h-full overflow-auto p-6 gap-6">
@@ -290,17 +336,40 @@ export function TestSuiteDetail({
             <Settings2 className="size-4 mr-1" />
             配置
           </Button>
+          {suite.workflowMode === "routing" && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setRoutingConfigOpen(true)}
+            >
+              路由配置
+            </Button>
+          )}
           {canConfirm && (
             <Button size="sm" onClick={handleConfirmSuite}>
               确认测试集
+            </Button>
+          )}
+          {canRegenerateExpectedOutputs && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRegenerateExpectedOutputs}
+            >
+              {regeneratingExpectedOutputs ? (
+                <Loader2 className="size-4 animate-spin mr-1" />
+              ) : null}
+              重生成预期结果
             </Button>
           )}
           {canRun && (
             <Button
               size="sm"
               onClick={() => {
-                if (suite.promptId) {
-                  handleRun(suite.promptId)
+                if (activePromptId) {
+                  handleRun(activePromptId)
+                } else if (suite.workflowMode === "routing") {
+                  setRoutingConfigOpen(true)
                 } else {
                   setConfigOpen(true)
                 }
@@ -335,51 +404,37 @@ export function TestSuiteDetail({
 
       {/* Score summary */}
       {latestReport && !isRunning && (
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center justify-between">
-              <div className="grid grid-cols-3 gap-4 text-center flex-1">
-                <div>
-                  <p className="text-2xl font-bold">{latestReport.score}</p>
-                  <p className="text-xs text-muted-foreground">总分</p>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">
-                    {latestReport.passedCases}/{latestReport.totalCases}
-                  </p>
-                  <p className="text-xs text-muted-foreground">通过率</p>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">
-                    {latestReport.totalCases > 0
-                      ? Math.round((latestReport.passedCases / latestReport.totalCases) * 100)
-                      : 0}%
-                  </p>
-                  <p className="text-xs text-muted-foreground">通过百分比</p>
-                </div>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="shrink-0 ml-4"
-                disabled={exporting}
-                onClick={handleExportPDF}
-              >
-                {exporting
-                  ? <Loader2 className="size-4 animate-spin mr-1" />
-                  : <Download className="size-4 mr-1" />}
-                导出 PDF
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-lg border border-zinc-200 bg-white px-4 py-3 text-center">
+            <p className="text-2xl font-semibold text-emerald-600">{latestScore ?? "-"}</p>
+            <p className="mt-1 text-xs text-zinc-500">总评分</p>
+          </div>
+          <div className="rounded-lg border border-zinc-200 bg-white px-4 py-3 text-center">
+            <p className="text-2xl font-semibold text-zinc-950">{latestPassRate}</p>
+            <p className="mt-1 text-xs text-zinc-500">通过率</p>
+          </div>
+          <div className="rounded-lg border border-zinc-200 bg-white px-4 py-3 text-center">
+            <p className="text-2xl font-semibold text-blue-600">{intentMatchRate}</p>
+            <p className="mt-1 text-xs text-zinc-500">意图匹配</p>
+          </div>
+        </div>
       )}
 
       {/* Tabs: current results + history */}
       <Tabs defaultValue="current" className="flex-1">
-        <TabsList>
-          <TabsTrigger value="current">测试结果</TabsTrigger>
-          <TabsTrigger value="history">历史记录</TabsTrigger>
+        <TabsList className="h-auto gap-0 rounded-none border-b border-zinc-200 bg-transparent p-0">
+          <TabsTrigger
+            value="current"
+            className="rounded-none border-b-2 border-transparent px-4 py-2 text-sm font-medium text-zinc-500 data-[state=active]:border-zinc-950 data-[state=active]:bg-transparent data-[state=active]:text-zinc-950 data-[state=active]:shadow-none"
+          >
+            测试结果
+          </TabsTrigger>
+          <TabsTrigger
+            value="history"
+            className="rounded-none border-b-2 border-transparent px-4 py-2 text-sm font-medium text-zinc-500 data-[state=active]:border-zinc-950 data-[state=active]:bg-transparent data-[state=active]:text-zinc-950 data-[state=active]:shadow-none"
+          >
+            {`历史记录 (${historyCount})`}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="current" className="space-y-3 mt-3">
@@ -409,13 +464,20 @@ export function TestSuiteDetail({
                   title: tc.title,
                   context: tc.context,
                   input: tc.input,
+                  expectedIntent: tc.expectedIntent,
                   expectedOutput: tc.expectedOutput,
                 }}
+                showExpectedIntent={suite.workflowMode === "routing"}
                 onSave={(data) => handleUpdateCase(tc.id, data)}
                 onCancel={() => setEditingCaseId(null)}
               />
             )
           }
+
+          const hasRoutingDiagnostics =
+            Boolean(result?.routingSteps?.length) &&
+            suite.workflowMode === "routing"
+          const hasConversationOutput = Boolean(result?.actualOutput)
 
           return (
             <Card key={tc.id}>
@@ -457,35 +519,32 @@ export function TestSuiteDetail({
                     </div>
                   )}
 
-                  {result && result.actualOutput ? (
+                  {result && (hasConversationOutput || hasRoutingDiagnostics) ? (
                     <>
-                      {/* Structured conversation transcript */}
-                      <div>
-                        <p className="text-xs font-medium text-muted-foreground mb-1">对话记录</p>
-                        <div className="rounded border bg-muted/20 divide-y">
-                          {parseConversationOutput(result.actualOutput, tc.input).map((turn, idx) => (
-                            <div key={idx} className="p-2">
-                              <span className={`inline-block text-xs font-medium rounded px-1.5 py-0.5 mb-1 ${
-                                turn.role === 'user'
-                                  ? 'text-blue-700 bg-blue-100 dark:text-blue-300 dark:bg-blue-900/40'
-                                  : 'text-emerald-700 bg-emerald-100 dark:text-emerald-300 dark:bg-emerald-900/40'
-                              }`}>
-                                {turn.role === 'user' ? '用户' : '助手'}
-                              </span>
-                              <p className="text-sm whitespace-pre-wrap break-words">{turn.content}</p>
-                            </div>
-                          ))}
+                      {hasConversationOutput && (
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <ConversationPanel
+                            title="预期输出"
+                            turns={parseExpectedConversationOutput(tc.input, tc.expectedOutput)}
+                            showIntentBadges
+                          />
+                          <ConversationPanel
+                            title="对话记录"
+                            turns={parseConversationOutput(result.actualOutput, tc.input, result)}
+                            showIntentBadges
+                          />
                         </div>
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium text-muted-foreground mb-1">期望输出</p>
-                        <p className="text-sm whitespace-pre-wrap break-words bg-muted/50 rounded p-2">{tc.expectedOutput}</p>
-                      </div>
-                      {result.reason && (
-                        <div>
-                          <p className="text-xs font-medium text-muted-foreground mb-1">评估原因</p>
-                          <p className="text-sm whitespace-pre-wrap">{result.reason}</p>
-                        </div>
+                      )}
+                      {suite.workflowMode === "routing" && (
+                        <>
+                          <TestRoutingResultDetails testCase={tc} result={result} />
+                          {tc.expectedOutputDiagnostics?.length ? (
+                            <RoutingStepDiagnosticsDetails
+                              title="预期结果生成诊断"
+                              routingSteps={tc.expectedOutputDiagnostics}
+                            />
+                          ) : null}
+                        </>
                       )}
                     </>
                   ) : (
@@ -499,6 +558,18 @@ export function TestSuiteDetail({
                         <p className="text-xs font-medium text-muted-foreground mb-1">期望输出</p>
                         <p className="text-sm whitespace-pre-wrap bg-muted/50 rounded p-2">{tc.expectedOutput}</p>
                       </div>
+                      {suite.workflowMode === "routing" && tc.expectedOutputDiagnostics?.length ? (
+                        <RoutingStepDiagnosticsDetails
+                          title="预期结果生成诊断"
+                          routingSteps={tc.expectedOutputDiagnostics}
+                        />
+                      ) : null}
+                      {suite.workflowMode === "routing" && tc.expectedIntent && (
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-1">期望 intent</p>
+                          <p className="text-sm whitespace-pre-wrap bg-muted/50 rounded p-2">{tc.expectedIntent}</p>
+                        </div>
+                      )}
                     </>
                   )}
                   <div className="flex gap-2 pt-1">
@@ -527,6 +598,7 @@ export function TestSuiteDetail({
 
         {addingCase && (
           <TestCaseEditor
+            showExpectedIntent={suite.workflowMode === "routing"}
             onSave={handleAddCase}
             onCancel={() => setAddingCase(false)}
           />
@@ -540,11 +612,36 @@ export function TestSuiteDetail({
 
 
         <TabsContent value="history" className="mt-3">
-          <TestRunHistory
-            testSuiteId={suite.id}
-            testCases={cases}
-            suiteName={suite.name}
-          />
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                disabled={exporting || !latestRun}
+                onClick={handleExportPDF}
+              >
+                {exporting
+                  ? <Loader2 className="size-4 animate-spin mr-1" />
+                  : <Download className="size-4 mr-1" />}
+                导出 PDF
+              </Button>
+            </div>
+            <TestRunHistory
+              testSuiteId={suite.id}
+              testCases={cases}
+              suiteName={suite.name}
+            />
+            <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
+              <div className="mb-3 text-xs font-semibold text-zinc-600">趋势</div>
+              <div className="flex h-16 items-end gap-2">
+                <div className="flex flex-1 flex-col items-center gap-1">
+                  <div className="w-full rounded bg-rose-100" style={{ height: latestScore ? `${Math.max(20, Math.round(latestScore * 0.35))}px` : "22px" }} />
+                  <span className="text-[10px] text-zinc-400">#1</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </TabsContent>
       </Tabs>
 
@@ -553,11 +650,27 @@ export function TestSuiteDetail({
         open={configOpen}
         onOpenChange={setConfigOpen}
         config={suite.config}
-        promptId={suite.promptId}
+        promptId={activePromptId}
         prompts={prompts}
+        promptSelectionLocked={suite.workflowMode === "routing"}
         onSave={handleConfigSave}
         onRunWithPrompt={handleRun}
       />
+
+      {suite.workflowMode === "routing" && (
+        <TestRoutingConfigDialog
+          open={routingConfigOpen}
+          onOpenChange={setRoutingConfigOpen}
+          prompts={prompts}
+          value={
+            suite.routingConfig ?? {
+              entryPromptId: "",
+              routes: [],
+            }
+          }
+          onSave={handleRoutingConfigSave}
+        />
+      )}
     </div>
   )
 }

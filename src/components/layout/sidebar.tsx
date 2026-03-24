@@ -404,10 +404,10 @@ export function Sidebar({
                         {truncateText(job.name)}
                       </span>
                       <Badge
-                        variant={job.status === 'completed' ? 'default' : job.status === 'failed' ? 'destructive' : job.status === 'running' ? 'secondary' : 'outline'}
+                        variant={job.status === 'completed' ? 'default' : job.status === 'failed' ? 'destructive' : job.status === 'running' || job.status === 'parsing' ? 'secondary' : 'outline'}
                         className="shrink-0 text-[10px] px-1 py-0"
                       >
-                        {job.status === 'draft' ? '草稿' : job.status === 'running' ? '运行中' : job.status === 'completed' ? '已完成' : '失败'}
+                        {job.status === 'parsing' ? '解析中' : job.status === 'draft' ? '草稿' : job.status === 'running' ? '运行中' : job.status === 'completed' ? '已完成' : '失败'}
                       </Badge>
                     </button>
                   </div>

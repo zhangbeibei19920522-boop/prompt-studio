@@ -7,6 +7,12 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { TestReportView } from "./test-report"
+import { TestRoutingResultDetails } from "./test-routing-result-details"
+import { ConversationPanel } from "./conversation-panel"
+import {
+  parseConversationOutput,
+  parseExpectedConversationOutput,
+} from "./conversation-output"
 import { testRunsApi } from "@/lib/utils/api-client"
 import { exportTestRunPDF } from "@/lib/utils/pdf-export"
 import type { TestRun, TestCase, TestCaseResult } from "@/types/database"
@@ -34,38 +40,51 @@ function getRunStatusVariant(status: string): "default" | "secondary" | "outline
   }
 }
 
-function parseConversationOutput(
-  actualOutput: string,
-  input: string
-): Array<{ role: "user" | "assistant"; content: string }> {
-  const turns: Array<{ role: "user" | "assistant"; content: string }> = []
-  const lines = actualOutput.split("\n")
-  let currentRole: "user" | "assistant" | null = null
-  let currentContent = ""
+interface TestRunCaseResultCardProps {
+  index: number
+  testCase: TestCase
+  result?: TestCaseResult
+}
 
-  for (const line of lines) {
-    const userMatch = line.match(/^User:\s*(.*)/)
-    const assistantMatch = line.match(/^Assistant:\s*(.*)/)
-    if (userMatch) {
-      if (currentRole) turns.push({ role: currentRole, content: currentContent.trim() })
-      currentRole = "user"
-      currentContent = userMatch[1]
-    } else if (assistantMatch) {
-      if (currentRole) turns.push({ role: currentRole, content: currentContent.trim() })
-      currentRole = "assistant"
-      currentContent = assistantMatch[1]
-    } else if (currentRole) {
-      currentContent += "\n" + line
-    }
-  }
-  if (currentRole) turns.push({ role: currentRole, content: currentContent.trim() })
-
-  const nonEmpty = turns.filter(t => t.content)
-  if (nonEmpty.length >= 2) return nonEmpty
-  return [
-    { role: "user", content: input },
-    { role: "assistant", content: actualOutput },
-  ]
+export function TestRunCaseResultCard({
+  index,
+  testCase,
+  result,
+}: TestRunCaseResultCardProps) {
+  return (
+    <Card>
+      <CardContent className="pt-4 space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium">
+            {result?.passed === true ? "✅" : result?.passed === false ? "❌" : "—"}{" "}
+            #{index + 1} {testCase.title}
+          </span>
+          {result && (
+            <span className="text-sm font-bold" style={{
+              color: result.score >= 80 ? "#16a34a" : result.score >= 50 ? "#ca8a04" : "#dc2626"
+            }}>{result.score}分</span>
+          )}
+        </div>
+        {result?.actualOutput && (
+          <div className="grid gap-3 md:grid-cols-2">
+            <ConversationPanel
+              title="预期输出"
+              turns={parseExpectedConversationOutput(testCase.input, testCase.expectedOutput)}
+              showIntentBadges
+            />
+            <ConversationPanel
+              title="对话记录"
+              turns={parseConversationOutput(result.actualOutput, testCase.input, result)}
+              showIntentBadges
+            />
+          </div>
+        )}
+        {result && (
+          <TestRoutingResultDetails testCase={testCase} result={result} />
+        )}
+      </CardContent>
+    </Card>
+  )
 }
 
 export function TestRunHistory({ testSuiteId, testCases, suiteName }: TestRunHistoryProps) {
@@ -168,37 +187,7 @@ export function TestRunHistory({ testSuiteId, testCases, suiteName }: TestRunHis
           <h3 className="text-sm font-medium">用例结果</h3>
           {testCases.map((tc, i) => {
             const result = selectedRun.results.find(r => r.testCaseId === tc.id)
-            return (
-              <Card key={tc.id}>
-                <CardContent className="pt-4 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">
-                      {result?.passed === true ? "✅" : result?.passed === false ? "❌" : "—"}{" "}
-                      #{i + 1} {tc.title}
-                    </span>
-                    {result && (
-                      <span className="text-sm font-bold" style={{
-                        color: result.score >= 80 ? "#16a34a" : result.score >= 50 ? "#ca8a04" : "#dc2626"
-                      }}>{result.score}分</span>
-                    )}
-                  </div>
-                  {result?.actualOutput && (
-                    <div>
-                      <div className="text-xs text-muted-foreground mb-1">实际输出</div>
-                      <pre className="text-xs bg-muted p-2 rounded whitespace-pre-wrap break-all max-h-40 overflow-auto">
-                        {result.actualOutput}
-                      </pre>
-                    </div>
-                  )}
-                  {result?.reason && (
-                    <div>
-                      <div className="text-xs text-muted-foreground mb-1">评估理由</div>
-                      <p className="text-xs text-muted-foreground">{result.reason}</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )
+            return <TestRunCaseResultCard key={tc.id} index={i} testCase={tc} result={result} />
           })}
         </div>
 
@@ -214,58 +203,51 @@ export function TestRunHistory({ testSuiteId, testCases, suiteName }: TestRunHis
     <div className="space-y-2">
       {runs.map(run => {
         const report = run.report
-        const passRate = report && report.totalCases > 0
-          ? Math.round((report.passedCases / report.totalCases) * 100)
-          : null
         const time = run.completedAt
           ? format(new Date(run.completedAt), "yyyy-MM-dd HH:mm")
           : format(new Date(run.startedAt), "yyyy-MM-dd HH:mm")
 
         return (
-          <Card key={run.id} className="hover:bg-muted/50 transition-colors">
-            <CardContent className="pt-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <span className="text-sm text-muted-foreground">{time}</span>
-                  <Badge variant={getRunStatusVariant(run.status)}>
-                    {getRunStatusLabel(run.status)}
-                  </Badge>
-                  {report && (
-                    <>
-                      <span className="text-sm font-bold" style={{
-                        color: report.score >= 80 ? "#16a34a" : report.score >= 50 ? "#ca8a04" : "#dc2626"
-                      }}>{report.score}分</span>
-                      <span className="text-xs text-muted-foreground">
-                        {report.passedCases}/{report.totalCases} 通过
-                        {passRate !== null && ` (${passRate}%)`}
-                      </span>
-                    </>
-                  )}
-                </div>
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setSelectedRun(run)}
-                  >
-                    查看详情
-                  </Button>
-                  {run.status === "completed" && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={exporting === run.id}
-                      onClick={() => handleExport(run)}
-                    >
-                      {exporting === run.id
-                        ? <Loader2 className="size-4 animate-spin" />
-                        : <Download className="size-4" />}
-                    </Button>
-                  )}
-                </div>
+          <button
+            key={run.id}
+            type="button"
+            onClick={() => setSelectedRun(run)}
+            className="history-run flex w-full items-center gap-3 rounded-lg border border-zinc-200 bg-white px-3 py-3 text-left transition-colors hover:border-zinc-300 hover:bg-zinc-50"
+          >
+            <div className="history-run-num w-10 text-sm font-semibold text-zinc-600">
+              #{runs.length - runs.indexOf(run)}
+            </div>
+            <div className="history-run-info min-w-0 flex-1">
+              <div className="history-run-score text-sm font-medium text-zinc-900">
+                {report
+                  ? `${report.score} 分 · ${report.passedCases}/${report.totalCases} 通过`
+                  : getRunStatusLabel(run.status)}
               </div>
-            </CardContent>
-          </Card>
+              <div className="history-run-time mt-1 text-xs text-zinc-500">
+                {time}
+              </div>
+            </div>
+            <span className="history-run-badge shrink-0">
+              <Badge variant={getRunStatusVariant(run.status)} className="text-[11px]">
+                {run === runs[0] ? "最新" : "查看"}
+              </Badge>
+            </span>
+            {run.status === "completed" && (
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={exporting === run.id}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  void handleExport(run)
+                }}
+              >
+                {exporting === run.id
+                  ? <Loader2 className="size-4 animate-spin" />
+                  : <Download className="size-4" />}
+              </Button>
+            )}
+          </button>
         )
       })}
     </div>

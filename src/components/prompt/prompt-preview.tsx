@@ -110,7 +110,7 @@ export function PromptPreview({
 
   return (
     <>
-    <div className="flex flex-col p-6 gap-6 min-w-0 w-full">
+    <div className="flex min-w-0 w-full flex-col gap-5 p-5">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div className="flex flex-col gap-2 min-w-0">
@@ -150,12 +150,10 @@ export function PromptPreview({
         </div>
       </div>
 
-      <Separator />
-
       {/* Content */}
       <div className="flex flex-col gap-2">
-        <h3 className="text-sm font-medium text-muted-foreground">内容</h3>
-        <pre className="whitespace-pre-wrap break-words overflow-hidden font-mono text-sm bg-muted rounded-md p-4 leading-relaxed">
+        <h3 className="prompt-field-label text-xs font-semibold uppercase tracking-[0.04em] text-zinc-500">内容</h3>
+        <pre className="whitespace-pre-wrap break-words overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50 p-4 font-mono text-sm leading-relaxed">
           {highlightVariables(prompt.content)}
         </pre>
       </div>
@@ -165,7 +163,7 @@ export function PromptPreview({
         <>
           <Separator />
           <div className="flex flex-col gap-2">
-            <h3 className="text-sm font-medium text-muted-foreground">描述</h3>
+            <h3 className="prompt-field-label text-xs font-semibold uppercase tracking-[0.04em] text-zinc-500">描述</h3>
             <p className="text-sm text-foreground leading-relaxed">
               {prompt.description}
             </p>
@@ -178,17 +176,17 @@ export function PromptPreview({
         <>
           <Separator />
           <div className="flex flex-col gap-3">
-            <h3 className="text-sm font-medium text-muted-foreground">
+            <h3 className="prompt-field-label text-xs font-semibold uppercase tracking-[0.04em] text-zinc-500">
               变量列表
             </h3>
             <div className="flex flex-col gap-2">
               {prompt.variables.map((variable) => (
                 <div
                   key={variable.name}
-                  className="flex flex-col gap-1 rounded-md border p-3 bg-background"
+                  className="flex flex-col gap-1 rounded-md border border-zinc-200 bg-white p-3"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-mono text-blue-600 bg-blue-50 px-1 rounded">
+                    <span className="prompt-var rounded bg-violet-50 px-2 py-0.5 text-sm font-mono text-violet-600">
                       {`{{${variable.name}}}`}
                     </span>
                     {variable.defaultValue !== undefined &&

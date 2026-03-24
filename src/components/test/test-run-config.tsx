@@ -24,6 +24,7 @@ interface TestRunConfigProps {
   config: TestSuiteConfig
   promptId: string | null
   prompts: Array<{ id: string; title: string }>
+  promptSelectionLocked?: boolean
   onSave: (config: TestSuiteConfig) => void | Promise<void>
   onRunWithPrompt: (promptId: string) => void
 }
@@ -34,6 +35,7 @@ export function TestRunConfig({
   config,
   promptId,
   prompts,
+  promptSelectionLocked = false,
   onSave,
   onRunWithPrompt,
 }: TestRunConfigProps) {
@@ -84,19 +86,27 @@ export function TestRunConfig({
 
         <div className="space-y-4 py-2">
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium">目标 Prompt</label>
-            <Select value={selectedPromptId} onValueChange={setSelectedPromptId}>
-              <SelectTrigger>
-                <SelectValue placeholder="选择要测试的 Prompt" />
-              </SelectTrigger>
-              <SelectContent>
-                {prompts.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.title}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <label className="text-sm font-medium">
+              {promptSelectionLocked ? "入口 Prompt" : "目标 Prompt"}
+            </label>
+            {promptSelectionLocked ? (
+              <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
+                {prompts.find((prompt) => prompt.id === selectedPromptId)?.title || "未配置入口 Prompt"}
+              </div>
+            ) : (
+              <Select value={selectedPromptId} onValueChange={setSelectedPromptId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="选择要测试的 Prompt" />
+                </SelectTrigger>
+                <SelectContent>
+                  {prompts.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           <div className="flex flex-col gap-2">

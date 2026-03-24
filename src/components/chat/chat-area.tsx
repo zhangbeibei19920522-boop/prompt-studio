@@ -2,14 +2,21 @@
 
 import { useState, useRef, useEffect, useCallback } from "react"
 import { MessageSquarePlus, ChevronDown, ChevronRight } from "lucide-react"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import { MessageBubble } from "./message-bubble"
 import { ChatInput } from "./chat-input"
 import { TestSuiteCard } from "@/components/test/test-suite-card"
+import { TestFlowConfigCard } from "@/components/test/test-flow-config-card"
+import { TestRoutingConfigDialog } from "@/components/test/test-routing-config-dialog"
 import { streamChat, streamTestChat } from "@/lib/utils/sse-client"
-import type { Message, MessageReference, PreviewData, DiffData, PlanData } from "@/types/database"
-import type { StreamEvent, AgentContextSummary, MemoryCommandData, TestSuiteGenerationData, TestSuiteProgressData } from "@/types/ai"
+import type { Message, MessageReference, PreviewData, DiffData, TestSuiteRoutingConfig } from "@/types/database"
+import type {
+  AgentContextSummary,
+  MemoryCommandData,
+  TestSuiteGenerationData,
+  TestSuiteProgressData,
+  TestFlowConfigRequestData,
+} from "@/types/ai"
 
 function ContextLog({ summary }: { summary: AgentContextSummary }) {
   const [open, setOpen] = useState(false)
@@ -92,26 +99,46 @@ export function ChatArea({
   const [streamingText, setStreamingText] = useState("")
   const [isStreaming, setIsStreaming] = useState(false)
   const [contextSummary, setContextSummary] = useState<AgentContextSummary | null>(null)
+  const [pendingFlowConfig, setPendingFlowConfig] = useState<TestFlowConfigRequestData | null>(null)
+  const [routingDialogOpen, setRoutingDialogOpen] = useState(false)
+  const [routingConfig, setRoutingConfig] = useState<TestSuiteRoutingConfig>({
+    entryPromptId: "",
+    routes: [{ intent: "", promptId: "" }],
+  })
   const [pendingTestSuite, setPendingTestSuite] = useState<TestSuiteGenerationData | null>(null)
   const [batchProgress, setBatchProgress] = useState<TestSuiteProgressData | null>(null)
   const [continuationInfo, setContinuationInfo] = useState<{ iteration: number; maxIterations: number } | null>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages.length, streamingText, pendingTestSuite, batchProgress, continuationInfo])
+  }, [messages.length, streamingText, pendingFlowConfig, pendingTestSuite, batchProgress, continuationInfo])
 
   const handleSend = useCallback(
-    async (content: string, references: MessageReference[]) => {
+    async (
+      content: string,
+      references: MessageReference[],
+      options: {
+        routingConfig?: TestSuiteRoutingConfig | null
+      } = {}
+    ) => {
       if (!sessionId) return
 
       setIsStreaming(true)
       setStreamingText("")
       setContextSummary(null)
       setBatchProgress(null)
+      if (!options.routingConfig) {
+        setPendingFlowConfig(null)
+      }
 
       try {
         const stream = useTestAgent
-          ? streamTestChat({ sessionId, content, references })
+          ? streamTestChat({
+              sessionId,
+              content,
+              references,
+              routingConfig: options.routingConfig ?? null,
+            })
           : streamChat({ sessionId, content, references })
         for await (const event of stream) {
           switch (event.type) {
@@ -124,6 +151,15 @@ export function ChatArea({
             case "memory":
               onMemoryCommand?.(event.data)
               break
+            case "test-flow-config":
+              setPendingFlowConfig(event.data)
+              setRoutingConfig({
+                entryPromptId: "",
+                routes: [{ intent: "", promptId: "" }],
+              })
+              setStreamingText("")
+              setBatchProgress(null)
+              break
             case "continuation":
               setContinuationInfo(event.data)
               break
@@ -133,6 +169,7 @@ export function ChatArea({
               break
             case "test-suite":
               setPendingTestSuite(event.data)
+              setPendingFlowConfig(null)
               setStreamingText("")
               setBatchProgress(null)
               onMessagesChange()
@@ -166,23 +203,25 @@ export function ChatArea({
         onMessagesChange()
       }
     },
-    [sessionId, onMessagesChange, useTestAgent]
+    [sessionId, onMemoryCommand, onMessagesChange, onSessionTitleUpdate, useTestAgent]
   )
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
-      <ScrollArea className="flex-1 overflow-hidden">
-        <div className="flex flex-col gap-4 p-4 max-w-3xl mx-auto">
+    <div className="flex h-full flex-1 flex-col overflow-hidden bg-stone-50">
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-6">
+        <div className="mx-auto flex max-w-[720px] flex-col gap-5 pb-6">
           {messages.length === 0 && !isStreaming && (
-            <div className="flex flex-1 items-center justify-center py-20">
-              <div className="text-center space-y-4">
-                <MessageSquarePlus className="size-12 mx-auto text-muted-foreground/50" />
-                <p className="text-lg font-medium text-muted-foreground">
-                  开始新对话
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  点击输入框左侧按钮引用 Prompt 或知识库文档，描述您的需求
-                </p>
+            <div className="flex min-h-[55vh] items-center justify-center py-12">
+              <div className="space-y-4 text-center text-zinc-500">
+                <div className="mx-auto grid size-14 place-items-center rounded-2xl bg-zinc-100">
+                  <MessageSquarePlus className="size-7 text-zinc-400" />
+                </div>
+                <div className="space-y-2">
+                  <p className="text-lg font-semibold text-zinc-900">开始新对话</p>
+                  <p className="max-w-sm text-sm leading-6 text-zinc-500">
+                    点击输入框左侧按钮引用 Prompt 或知识库文档，描述您的需求。
+                  </p>
+                </div>
                 {!sessionId && onNewSession && (
                   <Button
                     onClick={onNewSession}
@@ -237,6 +276,17 @@ export function ChatArea({
               </div>
             </div>
           )}
+          {pendingFlowConfig && (
+            <div className="flex w-full justify-start">
+              <div className="max-w-[80%]">
+                <TestFlowConfigCard
+                  data={pendingFlowConfig}
+                  routingConfig={routingConfig.routes[0]?.intent ? routingConfig : null}
+                  onOpenConfig={() => setRoutingDialogOpen(true)}
+                />
+              </div>
+            </div>
+          )}
           {pendingTestSuite && (
             <div className="flex w-full justify-start">
               <div className="max-w-[80%]">
@@ -252,7 +302,21 @@ export function ChatArea({
           )}
           <div ref={bottomRef} />
         </div>
-      </ScrollArea>
+      </div>
+
+      {pendingFlowConfig && (
+        <TestRoutingConfigDialog
+          open={routingDialogOpen}
+          prompts={prompts}
+          value={routingConfig}
+          onOpenChange={setRoutingDialogOpen}
+          onSave={(value) => {
+            setRoutingConfig(value)
+            setRoutingDialogOpen(false)
+            void handleSend("", [], { routingConfig: value })
+          }}
+        />
+      )}
 
       <ChatInput
         onSend={handleSend}

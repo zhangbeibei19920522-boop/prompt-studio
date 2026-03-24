@@ -2,19 +2,24 @@
 
 import type { ChangeEvent, DragEvent } from "react"
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Download, FileText, Loader2, Play, RefreshCw, Upload } from "lucide-react"
+import { ChevronDown, ChevronRight, Download, FileText, Loader2, Play, RefreshCw, Trash2, Upload } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { ConversationPanel } from "@/components/test/conversation-panel"
+import type { ConversationTurn } from "@/components/test/conversation-output"
 import { conversationAuditJobsApi } from "@/lib/utils/api-client"
 import { streamConversationAuditRun } from "@/lib/utils/sse-client"
 import { cn } from "@/lib/utils"
 import type {
   ConversationAuditConversation,
   ConversationAuditJob,
+  ConversationAuditKnowledgeStatus,
+  ConversationAuditOverallStatus,
+  ConversationAuditProcessStatus,
   ConversationAuditTurn,
 } from "@/types/database"
 
@@ -31,10 +36,13 @@ interface ConversationAuditDetailProps {
   createMode: boolean
   onCreated: (jobId: string) => void
   onRefresh: (jobId: string) => Promise<ConversationAuditDetailData>
+  onDeleted: (jobId: string) => Promise<void> | void
 }
 
 const HISTORY_FILE_ACCEPT = [".xls", ".xlsx"]
 const KNOWLEDGE_FILE_ACCEPT = [".doc", ".docx", ".html", ".htm", ".xls", ".xlsx"]
+
+type ConversationAuditJobViewStateInput = Pick<ConversationAuditJob, "id" | "status" | "errorMessage">
 
 function getFileExtension(fileName: string): string {
   const extension = fileName.split(".").pop()?.toLowerCase()
@@ -57,6 +65,16 @@ function filterAcceptedFiles(incoming: FileList | File[], acceptedExtensions: st
   }
 
   return { accepted, rejected }
+}
+
+export function mergeKnowledgeFiles(existing: File[], incoming: File[]): File[] {
+  const merged = new Map(existing.map((file) => [file.name, file]))
+
+  for (const file of incoming) {
+    merged.set(file.name, file)
+  }
+
+  return Array.from(merged.values())
 }
 
 interface ConversationAuditUploadCardProps {
@@ -85,7 +103,7 @@ function ConversationAuditUploadCard({
   function applyFiles(incoming: FileList | File[]) {
     const { accepted, rejected } = filterAcceptedFiles(incoming, accept)
     setError(rejected.length > 0 ? `已忽略不支持的文件：${rejected.join("、")}` : "")
-    onFilesChange(multiple ? accepted : accepted.slice(0, 1))
+    onFilesChange(multiple ? mergeKnowledgeFiles(files, accepted) : accepted.slice(0, 1))
   }
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
@@ -187,6 +205,8 @@ function ConversationAuditUploadCard({
 
 function getStatusLabel(status: string): string {
   switch (status) {
+    case "parsing":
+      return "解析中"
     case "draft":
       return "草稿"
     case "running":
@@ -202,6 +222,8 @@ function getStatusLabel(status: string): string {
 
 function getStatusVariant(status: string): "default" | "secondary" | "destructive" | "outline" {
   switch (status) {
+    case "parsing":
+      return "secondary"
     case "completed":
       return "default"
     case "running":
@@ -213,37 +235,234 @@ function getStatusVariant(status: string): "default" | "secondary" | "destructiv
   }
 }
 
+function getResultBadgeVariant(status: "passed" | "failed" | "unknown"): "default" | "secondary" | "destructive" | "outline" {
+  switch (status) {
+    case "passed":
+      return "default"
+    case "failed":
+      return "destructive"
+    default:
+      return "outline"
+  }
+}
+
+function getProcessStepBadgeVariant(status: "passed" | "failed" | "out_of_order"): "default" | "destructive" | "outline" {
+  switch (status) {
+    case "passed":
+      return "default"
+    case "failed":
+      return "destructive"
+    case "out_of_order":
+      return "outline"
+  }
+}
+
+function getProcessStepStatusLabel(status: "passed" | "failed" | "out_of_order"): string {
+  switch (status) {
+    case "passed":
+      return "已完成"
+    case "failed":
+      return "缺失"
+    case "out_of_order":
+      return "顺序异常"
+  }
+}
+
+function getOverallStatusLabel(status: ConversationAuditOverallStatus): string {
+  switch (status) {
+    case "passed":
+      return "整体通过"
+    case "failed":
+      return "整体未通过"
+    default:
+      return "整体待确认"
+  }
+}
+
+function getProcessStatusLabel(status: ConversationAuditProcessStatus): string {
+  switch (status) {
+    case "passed":
+      return "流程通过"
+    case "failed":
+      return "流程异常"
+    default:
+      return "流程待确认"
+  }
+}
+
+function getKnowledgeStatusLabel(status: ConversationAuditKnowledgeStatus): string {
+  switch (status) {
+    case "passed":
+      return "知识通过"
+    case "failed":
+      return "知识错误"
+    default:
+      return "知识待确认"
+  }
+}
+
+function getRiskLabel(riskLevel: ConversationAuditConversation["riskLevel"]): string {
+  switch (riskLevel) {
+    case "high":
+      return "高风险"
+    case "medium":
+      return "中风险"
+    case "low":
+    default:
+      return "低风险"
+  }
+}
+
+function getRiskDotClass(riskLevel: ConversationAuditConversation["riskLevel"]): string {
+  switch (riskLevel) {
+    case "high":
+      return "bg-rose-500"
+    case "medium":
+      return "bg-orange-500"
+    case "low":
+    default:
+      return "bg-emerald-500"
+  }
+}
+
+function getConversationScore(conversation: ConversationAuditConversation): number {
+  switch (conversation.riskLevel) {
+    case "high":
+      return 45
+    case "medium":
+      return 71
+    case "low":
+    default:
+      return 94
+  }
+}
+
+export function getConversationAuditJobViewState(
+  job: ConversationAuditJobViewStateInput,
+  runProgressByJobId: Record<string, string> = {}
+): {
+  isParsing: boolean
+  isRunning: boolean
+  progressMessage: string
+} {
+  const isParsing = job.status === "parsing"
+  const isRunning = job.status === "running"
+  const progressMessage = runProgressByJobId[job.id]
+    ?? (job.status === "parsing"
+      ? "正在解析上传文件"
+      : job.status === "running"
+        ? "正在执行会话质检"
+        : job.status === "failed"
+          ? `解析失败：${job.errorMessage ?? "请重新创建任务"}`
+          : "上传完成后可直接运行会话质检")
+
+  return {
+    isParsing,
+    isRunning,
+    progressMessage,
+  }
+}
+
+function buildAuditConversationPanelTurns(turns: ConversationAuditTurn[]): ConversationTurn[] {
+  return turns.flatMap((turn) => {
+    const assistantReply = turn.botReply?.trim() ? turn.botReply : "无回复"
+
+    return [
+      {
+        role: "user" as const,
+        content: turn.userMessage,
+      },
+      {
+        role: "assistant" as const,
+        content: assistantReply,
+      },
+    ]
+  })
+}
+
 export function ConversationAuditDetail({
   projectId,
   data,
   createMode,
   onCreated,
   onRefresh,
+  onDeleted,
 }: ConversationAuditDetailProps) {
   const [name, setName] = useState("历史会话质检")
   const [historyFile, setHistoryFile] = useState<File | null>(null)
   const [knowledgeFiles, setKnowledgeFiles] = useState<File[]>([])
   const [submitting, setSubmitting] = useState(false)
-  const [running, setRunning] = useState(false)
   const [showIssuesOnly, setShowIssuesOnly] = useState(false)
   const [localData, setLocalData] = useState<ConversationAuditDetailData | null>(data)
-  const [progressText, setProgressText] = useState("")
+  const [runProgressByJobId, setRunProgressByJobId] = useState<Record<string, string>>({})
+  const [expandedConversationId, setExpandedConversationId] = useState<string | null>(data?.conversations[0]?.id ?? null)
+  const selectedJobIdRef = useRef<string | null>(data?.job.id ?? null)
 
   useEffect(() => {
     setLocalData(data)
   }, [data])
 
-  const filteredTurns = useMemo(() => {
-    const turns = localData?.turns ?? []
-    if (!showIssuesOnly) {
-      return turns
-    }
-    return turns.filter((turn) => turn.hasIssue === true)
-  }, [localData, showIssuesOnly])
+  useEffect(() => {
+    selectedJobIdRef.current = data?.job.id ?? null
+  }, [data])
 
-  const conversationLookup = useMemo(() => {
-    return new Map((localData?.conversations ?? []).map((conversation) => [conversation.id, conversation]))
-  }, [localData])
+  useEffect(() => {
+    const firstConversationId = data?.conversations[0]?.id ?? null
+    setExpandedConversationId((current) => current ?? firstConversationId)
+  }, [data])
+
+  useEffect(() => {
+    if (!localData || localData.job.status !== "parsing") {
+      return
+    }
+
+    let cancelled = false
+
+    async function poll() {
+      try {
+        const refreshed = await onRefresh(localData.job.id)
+        if (!cancelled) {
+          setLocalData(refreshed)
+        }
+      } catch (error) {
+        console.error("Refresh parsing conversation audit failed:", error)
+      }
+    }
+
+    const timer = window.setInterval(() => {
+      void poll()
+    }, 1500)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [localData, onRefresh])
+
+  const groupedConversations = useMemo(() => {
+    const turnsByConversation = new Map<string, ConversationAuditTurn[]>()
+
+    for (const turn of localData?.turns ?? []) {
+      const existing = turnsByConversation.get(turn.conversationId) ?? []
+      existing.push(turn)
+      turnsByConversation.set(turn.conversationId, existing)
+    }
+
+    const conversations = (localData?.conversations ?? []).map((conversation) => ({
+      conversation,
+      turns: (turnsByConversation.get(conversation.id) ?? []).sort((a, b) => a.turnIndex - b.turnIndex),
+    }))
+
+    if (!showIssuesOnly) {
+      return conversations
+    }
+
+    return conversations.filter(({ conversation }) => (
+      conversation.overallStatus === "failed"
+      || conversation.processStatus === "failed"
+      || conversation.knowledgeStatus === "failed"
+    ))
+  }, [localData, showIssuesOnly])
 
   async function handleCreate() {
     if (!historyFile || !name.trim()) {
@@ -273,35 +492,128 @@ export function ConversationAuditDetail({
       return
     }
 
-    setRunning(true)
-    setProgressText("准备开始...")
+    const jobId = localData.job.id
+    if (localData.job.status === "parsing" || localData.job.status === "running") {
+      return
+    }
+
+    setLocalData((current) => (
+      current && current.job.id === jobId
+        ? {
+          ...current,
+          job: {
+            ...current.job,
+            status: "running",
+            errorMessage: null,
+            completedAt: null,
+          },
+        }
+        : current
+    ))
+    setRunProgressByJobId((current) => ({
+      ...current,
+      [jobId]: "准备开始...",
+    }))
 
     try {
-      for await (const event of streamConversationAuditRun(localData.job.id)) {
+      for await (const event of streamConversationAuditRun(jobId)) {
         switch (event.type) {
           case "audit-start":
-            setProgressText(`开始检查，共 ${event.data.totalTurns} 轮`)
+            setLocalData((current) => (
+              current && current.job.id === jobId
+                ? {
+                  ...current,
+                  job: {
+                    ...current.job,
+                    status: "running",
+                    issueCount: 0,
+                    totalTurns: event.data.totalTurns,
+                    errorMessage: null,
+                    completedAt: null,
+                  },
+                }
+                : current
+            ))
+            setRunProgressByJobId((current) => ({
+              ...current,
+              [jobId]: `开始检查，共 ${event.data.totalTurns} 轮`,
+            }))
             break
           case "audit-turn-start":
-            setProgressText(`正在检查第 ${event.data.index + 1} 轮`)
+            setRunProgressByJobId((current) => ({
+              ...current,
+              [jobId]: `正在检查第 ${event.data.index + 1} 轮`,
+            }))
             break
           case "audit-turn-done":
-            setProgressText(event.data.hasIssue ? "发现问题轮次" : "本轮检查完成")
+            setRunProgressByJobId((current) => ({
+              ...current,
+              [jobId]: event.data.hasIssue ? "发现问题轮次" : "本轮检查完成",
+            }))
             break
           case "audit-complete":
-            setProgressText(`检查完成，共发现 ${event.data.issueCount} 个问题轮次`)
-            setLocalData(await onRefresh(localData.job.id))
+            setLocalData((current) => (
+              current && current.job.id === jobId
+                ? {
+                  ...current,
+                  job: {
+                    ...current.job,
+                    status: "completed",
+                    issueCount: event.data.issueCount,
+                    totalTurns: event.data.totalTurns,
+                    errorMessage: null,
+                  },
+                }
+                : current
+            ))
+            setRunProgressByJobId((current) => ({
+              ...current,
+              [jobId]: `检查完成，共发现 ${event.data.issueCount} 个问题轮次`,
+            }))
+            if (selectedJobIdRef.current === jobId) {
+              setLocalData(await onRefresh(jobId))
+            }
             break
           case "audit-error":
-            setProgressText(`运行失败：${event.data.error}`)
-            setLocalData(await onRefresh(localData.job.id))
+            setLocalData((current) => (
+              current && current.job.id === jobId
+                ? {
+                  ...current,
+                  job: {
+                    ...current.job,
+                    status: "failed",
+                    errorMessage: event.data.error,
+                  },
+                }
+                : current
+            ))
+            setRunProgressByJobId((current) => ({
+              ...current,
+              [jobId]: `运行失败：${event.data.error}`,
+            }))
+            if (selectedJobIdRef.current === jobId) {
+              setLocalData(await onRefresh(jobId))
+            }
             break
         }
       }
     } catch (error) {
       console.error("Run conversation audit failed:", error)
-    } finally {
-      setRunning(false)
+      setLocalData((current) => (
+        current && current.job.id === jobId
+          ? {
+            ...current,
+            job: {
+              ...current.job,
+              status: "failed",
+            },
+          }
+          : current
+      ))
+      setRunProgressByJobId((current) => ({
+        ...current,
+        [jobId]: `运行失败：${error instanceof Error ? error.message : "未知错误"}`,
+      }))
     }
   }
 
@@ -317,6 +629,23 @@ export function ConversationAuditDetail({
       return
     }
     window.location.href = `/api/conversation-audit-jobs/${localData.job.id}/export`
+  }
+
+  async function handleDelete() {
+    if (!localData) {
+      return
+    }
+
+    if (typeof window !== "undefined" && !window.confirm(`确定要删除任务「${localData.job.name}」吗？此操作无法撤销。`)) {
+      return
+    }
+
+    try {
+      await conversationAuditJobsApi.delete(localData.job.id)
+      await onDeleted(localData.job.id)
+    } catch (error) {
+      console.error("Delete conversation audit job failed:", error)
+    }
   }
 
   if (createMode || !localData) {
@@ -369,6 +698,11 @@ export function ConversationAuditDetail({
     )
   }
 
+  const { isParsing, isRunning, progressMessage } = getConversationAuditJobViewState(
+    localData.job,
+    runProgressByJobId
+  )
+
   return (
     <div className="flex h-full flex-1 overflow-hidden bg-muted/20">
       <div className="flex w-full flex-col gap-4 p-6">
@@ -380,52 +714,66 @@ export function ConversationAuditDetail({
                 {getStatusLabel(localData.job.status)}
               </Badge>
             </div>
-            <p className="mt-1 text-sm text-muted-foreground">{progressText || "上传完成后可直接运行会话质检"}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{progressMessage}</p>
           </div>
 
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setShowIssuesOnly((value) => !value)}>
-              {showIssuesOnly ? "显示全部" : "只看问题"}
+            <Button variant="outline" onClick={() => setShowIssuesOnly((value) => !value)} disabled={isParsing}>
+              {showIssuesOnly ? "显示全部" : "只看异常"}
             </Button>
             <Button variant="outline" onClick={handleRefresh}>
               <RefreshCw className="mr-2 size-4" />
               刷新
             </Button>
-            <Button variant="outline" onClick={handleExport}>
+            <Button variant="outline" onClick={handleExport} disabled={isParsing}>
               <Download className="mr-2 size-4" />
               导出 Excel
             </Button>
-            <Button onClick={handleRun} disabled={running}>
-              {running ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Play className="mr-2 size-4" />}
+            <Button onClick={handleRun} disabled={isRunning || isParsing}>
+              {isRunning ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Play className="mr-2 size-4" />}
               开始检查
+            </Button>
+            <Button variant="outline" onClick={handleDelete}>
+              <Trash2 className="mr-2 size-4" />
+              删除任务
             </Button>
           </div>
         </div>
 
-        <div className="grid grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="pt-6">
-              <p className="text-sm text-muted-foreground">知识库文件</p>
-              <p className="mt-2 text-2xl font-semibold">{localData.parseSummary.knowledgeFileCount}</p>
+        <div className="grid grid-cols-4 gap-3">
+          <Card className="py-4">
+            <CardContent className="px-5 py-4 sm:px-6">
+              <p className="text-sm text-muted-foreground">对话总数</p>
+              <p className="mt-1.5 text-2xl font-semibold">{localData.conversations.length}</p>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <p className="text-sm text-muted-foreground">会话数</p>
-              <p className="mt-2 text-2xl font-semibold">{localData.parseSummary.conversationCount}</p>
+          <Card className="py-4">
+            <CardContent className="px-5 py-4 sm:px-6">
+              <p className="text-sm text-muted-foreground">整体通过率</p>
+              <p className="mt-1.5 text-2xl font-semibold">
+                {localData.conversations.length > 0
+                  ? `${Math.round((localData.conversations.filter((conversation) => conversation.overallStatus === "passed").length / localData.conversations.length) * 100)}%`
+                  : "0%"}
+              </p>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <p className="text-sm text-muted-foreground">轮次数</p>
-              <p className="mt-2 text-2xl font-semibold">{localData.turns.length}</p>
+          <Card className="py-4">
+            <CardContent className="px-5 py-4 sm:px-6">
+              <p className="text-sm text-muted-foreground">流程通过率</p>
+              <p className="mt-1.5 text-2xl font-semibold">
+                {localData.conversations.length > 0
+                  ? `${Math.round((localData.conversations.filter((conversation) => conversation.processStatus === "passed").length / localData.conversations.length) * 100)}%`
+                  : "0%"}
+              </p>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <p className="text-sm text-muted-foreground">问题轮次</p>
-              <p className="mt-2 text-2xl font-semibold">
-                {localData.turns.filter((turn) => turn.hasIssue === true).length}
+          <Card className="py-4">
+            <CardContent className="px-5 py-4 sm:px-6">
+              <p className="text-sm text-muted-foreground">知识通过率</p>
+              <p className="mt-1.5 text-2xl font-semibold">
+                {localData.conversations.length > 0
+                  ? `${Math.round((localData.conversations.filter((conversation) => conversation.knowledgeStatus === "passed").length / localData.conversations.length) * 100)}%`
+                  : "0%"}
               </p>
             </CardContent>
           </Card>
@@ -433,49 +781,153 @@ export function ConversationAuditDetail({
 
         <Card className="flex min-h-0 flex-1 flex-col">
           <CardHeader>
-            <CardTitle>逐轮检查结果</CardTitle>
+            <CardTitle>对话详情</CardTitle>
           </CardHeader>
           <CardContent className="min-h-0 flex-1">
             <ScrollArea className="h-full pr-4">
               <div className="space-y-4">
-                {filteredTurns.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">当前没有可展示的轮次结果。</p>
+                {groupedConversations.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">当前没有可展示的对话结果。</p>
                 ) : null}
 
-                {filteredTurns.map((turn) => {
-                  const conversation = conversationLookup.get(turn.conversationId)
+                {groupedConversations.map(({ conversation, turns }) => {
+                  const isExpanded = expandedConversationId === conversation.id
+                  const conversationScore = getConversationScore(conversation)
 
                   return (
-                    <Card key={turn.id} className="border border-border/60">
-                      <CardContent className="space-y-4 pt-6">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-medium">
-                              会话 {conversation?.externalConversationId ?? turn.conversationId}
-                            </p>
-                            <p className="text-xs text-muted-foreground">第 {turn.turnIndex + 1} 轮</p>
+                    <Card key={conversation.id} className="border border-border/60 py-4">
+                      <CardContent className="space-y-3 px-5 py-4 sm:px-6">
+                        <button
+                          type="button"
+                          className="flex w-full items-start justify-between gap-2 text-left"
+                          onClick={() => setExpandedConversationId(isExpanded ? null : conversation.id)}
+                        >
+                          <div className="min-w-0 max-w-[42rem] flex-1 space-y-1">
+                            <div className="flex items-center gap-2">
+                              {isExpanded ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronRight className="size-4 text-muted-foreground" />}
+                              <span className={`inline-block size-2 rounded-full ${getRiskDotClass(conversation.riskLevel)}`} />
+                              <p className="text-sm font-medium">
+                                对话 #{conversation.externalConversationId}
+                              </p>
+                            </div>
+                            {conversation.summary ? (
+                              <p className="pl-6 text-sm text-muted-foreground">{conversation.summary}</p>
+                            ) : null}
                           </div>
-                          <Badge variant={turn.hasIssue === true ? "destructive" : turn.hasIssue === false ? "default" : "outline"}>
-                            {turn.hasIssue === true ? "有问题" : turn.hasIssue === false ? "无问题" : "待检查"}
-                          </Badge>
-                        </div>
+                          <div className="flex shrink-0 flex-nowrap justify-end gap-2">
+                            <span className="text-sm font-semibold text-zinc-700">{`${conversationScore}分`}</span>
+                          </div>
+                        </button>
 
-                        <div className="space-y-2">
-                          <div>
-                            <p className="text-xs font-medium text-muted-foreground">用户问题</p>
-                            <p className="mt-1 whitespace-pre-wrap text-sm">{turn.userMessage}</p>
+                        {isExpanded ? (
+                          <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+                            <div className="space-y-3">
+                              <ConversationPanel
+                                title="对话记录"
+                                turns={buildAuditConversationPanelTurns(turns)}
+                              />
+                            </div>
+
+                            <div className="space-y-4">
+                              <div className="space-y-3 rounded-lg border bg-background p-4">
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="text-sm font-medium">流程规范检查</p>
+                                  <Badge variant={getResultBadgeVariant(conversation.processStatus)}>
+                                    {getProcessStatusLabel(conversation.processStatus)}
+                                  </Badge>
+                                </div>
+
+                                {conversation.processSteps.length > 0 ? (
+                                  <div className="space-y-3">
+                                    {conversation.processSteps.map((step) => (
+                                      <div key={step.name} className="rounded-md border bg-muted/20 p-3">
+                                        <div className="flex items-center justify-between gap-2">
+                                          <p className="text-sm font-medium">{step.name}</p>
+                                          <Badge variant={getProcessStepBadgeVariant(step.status)}>
+                                            {getProcessStepStatusLabel(step.status)}
+                                          </Badge>
+                                        </div>
+                                        <p className="mt-2 text-sm text-muted-foreground">{step.reason}</p>
+                                        {step.sourceNames.length > 0 ? (
+                                          <div className="mt-2 flex flex-wrap gap-2">
+                                            {step.sourceNames.map((sourceName) => (
+                                              <span key={sourceName} className="rounded-full border px-2 py-0.5 text-xs text-muted-foreground">
+                                                {sourceName}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        ) : null}
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className="text-sm text-muted-foreground">暂无流程步骤结果。</p>
+                                )}
+                              </div>
+
+                              <div className="space-y-3 rounded-lg border bg-background p-4">
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="text-sm font-medium">知识问答问题</p>
+                                  <Badge variant={getResultBadgeVariant(conversation.knowledgeStatus)}>
+                                    {getKnowledgeStatusLabel(conversation.knowledgeStatus)}
+                                  </Badge>
+                                </div>
+
+                                <div className="space-y-3">
+                                  {turns.filter((turn) => turn.hasIssue === true).length > 0 ? turns
+                                    .filter((turn) => turn.hasIssue === true)
+                                    .map((turn) => (
+                                      <div key={turn.id} className="rounded-md border bg-muted/20 p-3">
+                                        <p className="text-sm font-medium">第 {turn.turnIndex + 1} 轮</p>
+                                        <p className="mt-2 text-sm text-muted-foreground">
+                                          正确回答：{turn.knowledgeAnswer || "尚未生成"}
+                                        </p>
+                                        {turn.retrievedSources.length > 0 ? (
+                                          <div className="mt-2 flex flex-wrap gap-2">
+                                            {turn.retrievedSources.map((source) => (
+                                              <span key={source.chunkId} className="rounded-full border px-2 py-0.5 text-xs text-muted-foreground">
+                                                {source.sourceName}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        ) : null}
+                                      </div>
+                                    )) : (
+                                  <p className="text-sm text-muted-foreground">当前没有知识问答错误。</p>
+                                    )}
+                                </div>
+                              </div>
+
+                              <div className="space-y-3 rounded-lg border border-rose-100 bg-rose-50 p-4">
+                                <div className="flex items-center gap-2">
+                                  <span className={`inline-block size-2 rounded-full ${getRiskDotClass(conversation.riskLevel)}`} />
+                                  <p className="text-sm font-medium text-rose-700">问题摘要</p>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  <Badge variant={getResultBadgeVariant(conversation.overallStatus)}>
+                                    {getOverallStatusLabel(conversation.overallStatus)}
+                                  </Badge>
+                                  <Badge variant={getResultBadgeVariant(conversation.processStatus)}>
+                                    {getProcessStatusLabel(conversation.processStatus)}
+                                  </Badge>
+                                  <Badge variant={getResultBadgeVariant(conversation.knowledgeStatus)}>
+                                    {getKnowledgeStatusLabel(conversation.knowledgeStatus)}
+                                  </Badge>
+                                </div>
+                                <div className="text-sm leading-6 text-zinc-700">
+                                  <p>
+                                    {`${getRiskLabel(conversation.riskLevel)} · ${conversationScore}分`}
+                                  </p>
+                                  <p className="mt-2">
+                                    {conversation.summary || "当前未生成摘要。"}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
                           </div>
-                          <div>
-                            <p className="text-xs font-medium text-muted-foreground">Bot 回答</p>
-                            <p className="mt-1 whitespace-pre-wrap text-sm">{turn.botReply || "无回复"}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs font-medium text-muted-foreground">原知识库回答</p>
-                            <p className="mt-1 whitespace-pre-wrap text-sm">
-                              {turn.knowledgeAnswer || "尚未生成"}
-                            </p>
-                          </div>
-                        </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">点击卡片查看对话内容与详细评估。</p>
+                        )}
                       </CardContent>
                     </Card>
                   )

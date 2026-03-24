@@ -1,5 +1,47 @@
 # Changelog
 
+## Unreleased
+
+### 新功能
+- **对话式工作区重构**: 主界面重构为“左侧会话列表 + 中间常驻对话 + 右侧 Canvas 抽屉”布局，Prompt、Prompt 库、测试、质检、知识库、设置统一收敛到右侧抽屉；测试/质检支持原型式 list/detail 切换，进入详情时自动扩展 Canvas
+- **多 Prompt 路由测试工作流**: 测试 Agent 现在支持在会话中识别“单 Prompt / 多 Prompt”测试模式；多 Prompt 时可先配置入口 Prompt 和 `intent -> Prompt` 路由，再继续生成测试集。测试运行新增中间 `intent` 命中和最终回复的双阶段评估，历史记录与 PDF 导出也会展示路由结果
+
+### Bug 修复
+- **工作区抽屉与输入区布局回退**: 修复右侧抽屉顶部 tab 被压成竖排、默认宽度不足需要滑动才能看全的问题；默认抽屉宽度上调并与中区让位宽度联动。聊天输入区也改为底部吸附卡片样式，消息区保持独立滚动，不再出现输入区跟随内容漂移
+- **会话质检运行状态串扰**: 修复质检任务开始后切换到其他任务再切回时，“开始检查”按钮错误恢复可点击的问题；同时修复任务 1 运行时切换到其他未运行任务仍显示“运行中”的状态串扰。前端改为按 `job.id` 隔离运行进度与展示状态，后端运行接口新增 `running` 任务的重复启动保护
+- **聊天输入框 `@` 引用未生效**: 修复真实前端聊天输入框中输入 `@` 无法触发引用的问题。现在会按当前光标位置识别 `@query`，弹出 Prompt / 知识库候选，支持上下键选择、Enter 确认、Escape 关闭，并在选中后把引用加入消息 references 同时从正文中移除触发串
+
+### 改进
+- **右侧 Canvas 与原型对齐**: Prompt 库新增搜索和状态筛选；测试详情补充评分/历史趋势壳；质检详情补充风险等级、问题摘要和双栏评估区；Prompt 编辑、预览、版本历史、测试运行历史的内部样式统一向原型稿收拢
+- **会话质检卡片头部布局**: 对话摘要区域增加宽度上限，保留完整摘要内容但限制其占位宽度，避免长摘要把右侧“整体/流程/知识”三个状态气泡挤到下一行，保证三个状态气泡始终单行展示
+- **聊天引用交互补齐**: 保留左侧引用按钮的同时，聊天输入框新增 `@` 内联引用面板，与产品文档要求的输入流对齐
+- **测试与侧栏细节对齐**: 测试用例编辑器、运行配置、测试集卡片继续向工作区原型收拢；侧边栏质检任务补充 `parsing` 阶段状态文案，避免“解析中”仍显示为草稿/运行中的歧义
+
+### 修改文件
+- `src/app/(main)/page.tsx` / `src/components/workspace/workspace-frame.tsx` / `src/components/workspace/workspace-canvas.tsx` — 主工作区改为对话常驻 + 右侧 Canvas 抽屉，命令面板改为打开对应 Canvas，抽屉默认宽度和中区让位宽度统一联动
+- `src/components/chat/chat-area.tsx` / `src/components/chat/chat-input.tsx` — 聊天区改为独立滚动 + 底部吸附输入卡片，更贴近原型的中区对话结构
+- `src/components/test/test-suite-detail.tsx` / `src/components/test/test-run-history.tsx` — 测试详情与历史记录改为原型式 summary、history run、趋势壳和更紧凑的 detail 展示
+- `src/components/audit/conversation-audit-detail.tsx` — 质检详情补充风险标识、问题摘要、对话记录/评估双栏布局
+- `src/components/prompt/prompt-editor.tsx` / `src/components/prompt/prompt-preview.tsx` / `src/components/prompt/version-history.tsx` — Prompt 编辑、预览、版本历史样式向原型稿对齐
+- `src/app/__tests__/main-page-workspace-layout.test.ts` / `src/components/workspace/__tests__/workspace-frame.test.tsx` / `src/components/workspace/__tests__/workspace-canvas.test.tsx` — 补充工作区布局、抽屉宽度和 tab 单行展示回归测试
+- `src/components/test/__tests__/test-suite-detail.test.tsx` / `src/components/audit/__tests__/conversation-audit-detail.test.tsx` / `src/components/prompt/__tests__/prompt-canvas-components.test.ts` — 补充测试详情、质检详情、Prompt Canvas 组件的原型对齐回归测试
+- `.gitignore` — 忽略 `.superpowers/`
+- `src/components/chat/chat-area.tsx` / `src/components/test/*` — 会话内新增多 Prompt 路由配置卡片、弹窗和测试结果展示
+- `src/lib/ai/test-agent-prompt.ts` / `src/lib/ai/test-runner.ts` / `src/lib/ai/test-evaluator.ts` — 测试 Agent 支持 routing 模式生成，运行链路支持入口 Prompt 路由和双阶段评估
+- `src/lib/db/schema.sql` / `src/lib/db/repositories/test-*.ts` / `src/types/database.ts` — 测试集、用例、运行结果新增 routing 所需字段
+- `src/lib/utils/pdf-export.ts` / `src/components/test/test-run-history.tsx` — 历史记录和 PDF 导出补充路由结果信息
+- `src/app/globals.css` — `tw-animate-css` 改为包名导入，避免 worktree 环境下前端启动失败
+- `src/components/audit/conversation-audit-detail.tsx` — 运行状态按任务隔离，卡片头部摘要区域限宽，状态气泡区固定为单行
+- `src/components/audit/__tests__/conversation-audit-detail.test.tsx` — 补充运行态与卡片头部布局回归测试
+- `src/app/api/conversation-audit-jobs/[id]/run/route.ts` — 新增运行中任务重复启动的 `409` 拦截
+- `src/app/api/__tests__/conversation-audit-run-route.test.ts` — 补充重复启动运行任务的接口回归测试
+- `src/app/(main)/page.tsx` — 质检详情刷新增加任务 ID 保护，避免切换任务时被旧任务刷新结果覆盖
+- `src/components/chat/chat-input.tsx` — 聊天输入框新增 `@` 触发的引用候选面板，支持键盘导航与回车确认
+- `src/components/chat/chat-input-mentions.ts` — 新增聊天输入框 `@` 匹配与替换的纯函数
+- `src/components/chat/__tests__/chat-input-mentions.test.ts` — 补充 `@` 引用识别与替换的回归测试
+- `src/components/test/test-case-editor.tsx` / `src/components/test/test-run-config.tsx` / `src/components/test/test-suite-card.tsx` — 测试编辑表单、运行配置和测试集卡片样式继续向工作区原型对齐
+- `src/components/layout/sidebar.tsx` — 质检任务状态新增 `解析中` 文案与对应 badge 展示
+
 ## v0.1.24 (2026-03-18)
 
 ### 新功能

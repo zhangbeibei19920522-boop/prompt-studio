@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Prompt Studio Test Agent Routing Flow</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap");
+
+      :root {
+        --bg: #eef4fb;
+        --sidebar: #101828;
+        --sidebar-muted: rgba(255, 255, 255, 0.58);
+        --sidebar-line: rgba(255, 255, 255, 0.08);
+        --panel: rgba(255, 255, 255, 0.88);
+        --panel-solid: #ffffff;
+        --line: rgba(15, 23, 42, 0.08);
+        --line-strong: rgba(15, 23, 42, 0.15);
+        --text: #0f172a;
+        --muted: #475569;
+        --brand: #2563eb;
+        --brand-strong: #1d4ed8;
+        --brand-soft: rgba(37, 99, 235, 0.1);
+        --green: #15803d;
+        --green-soft: rgba(21, 128, 61, 0.12);
+        --amber: #b45309;
+        --amber-soft: rgba(180, 83, 9, 0.12);
+        --shadow: 0 22px 60px rgba(15, 23, 42, 0.08);
+        --shadow-float: 0 28px 90px rgba(15, 23, 42, 0.18);
+        --radius-xl: 28px;
+        --radius-lg: 22px;
+        --radius-md: 16px;
+        --radius-sm: 12px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Manrope", sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, rgba(59, 130, 246, 0.12), transparent 22%),
+          linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
+      }
+
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+      }
+
+      .app {
+        min-height: 100vh;
+        display: grid;
+        grid-template-columns: 248px minmax(0, 1fr);
+      }
+
+      .sidebar {
+        background: linear-gradient(180deg, #111827 0%, #0f172a 100%);
+        color: white;
+        padding: 22px 16px;
+        display: grid;
+        grid-template-rows: auto auto 1fr;
+        gap: 18px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 10px;
+      }
+
+      .logo {
+        width: 40px;
+        height: 40px;
+        border-radius: 14px;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+        font-weight: 800;
+      }
+
+      .brand strong {
+        display: block;
+        font-size: 15px;
+      }
+
+      .brand span {
+        display: block;
+        margin-top: 3px;
+        font-size: 12px;
+        color: var(--sidebar-muted);
+      }
+
+      .project {
+        padding: 0 10px;
+      }
+
+      .project-card {
+        padding: 14px;
+        border-radius: 18px;
+        border: 1px solid var(--sidebar-line);
+        background: rgba(255, 255, 255, 0.06);
+      }
+
+      .project-card strong {
+        display: block;
+        font-size: 14px;
+      }
+
+      .project-card span {
+        display: block;
+        margin-top: 6px;
+        font-size: 12px;
+        color: var(--sidebar-muted);
+        line-height: 1.6;
+      }
+
+      .nav {
+        padding: 0 8px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .nav-title {
+        padding: 0 10px 8px;
+        color: var(--sidebar-muted);
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .nav-item {
+        padding: 10px 12px;
+        border-radius: 14px;
+        color: var(--sidebar-muted);
+        font-size: 13px;
+      }
+
+      .nav-item.active {
+        background: rgba(255, 255, 255, 0.08);
+        color: white;
+      }
+
+      .main {
+        position: relative;
+        border-left: 1px solid rgba(255, 255, 255, 0.55);
+        border-right: 1px solid rgba(255, 255, 255, 0.55);
+        overflow: hidden;
+      }
+
+      .chat-shell {
+        height: 100vh;
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+      }
+
+      .topbar {
+        padding: 20px 24px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        backdrop-filter: blur(14px);
+        background: rgba(255, 255, 255, 0.64);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.7);
+      }
+
+      .topbar h1 {
+        margin: 0;
+        font-size: 22px;
+        letter-spacing: -0.04em;
+      }
+
+      .topbar p {
+        margin: 6px 0 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .top-actions {
+        display: flex;
+        gap: 10px;
+      }
+
+      .ghost-btn,
+      .solid-btn,
+      .tonal-btn {
+        min-height: 42px;
+        border-radius: 14px;
+        padding: 0 16px;
+        border: 1px solid transparent;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .ghost-btn {
+        background: rgba(255, 255, 255, 0.82);
+        border-color: var(--line-strong);
+        color: var(--text);
+      }
+
+      .solid-btn {
+        background: linear-gradient(135deg, var(--brand), var(--brand-strong));
+        color: white;
+      }
+
+      .tonal-btn {
+        background: var(--brand-soft);
+        color: var(--brand-strong);
+      }
+
+      .chat-stream {
+        overflow: auto;
+        padding: 28px 22px 120px;
+      }
+
+      .chat-column {
+        max-width: 760px;
+        margin: 0 auto;
+        display: grid;
+        gap: 16px;
+      }
+
+      .msg-row {
+        display: flex;
+      }
+
+      .msg-row.user {
+        justify-content: flex-end;
+      }
+
+      .bubble {
+        max-width: 86%;
+        padding: 16px 18px;
+        border-radius: 22px;
+        box-shadow: var(--shadow);
+        line-height: 1.75;
+        font-size: 14px;
+      }
+
+      .bubble.assistant {
+        background: var(--panel);
+        border: 1px solid rgba(255, 255, 255, 0.75);
+      }
+
+      .bubble.user {
+        background: linear-gradient(135deg, #2563eb, #1d4ed8);
+        color: white;
+      }
+
+      .context-log {
+        width: fit-content;
+        padding: 9px 12px;
+        border-radius: 14px;
+        background: rgba(15, 23, 42, 0.05);
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .route-card,
+      .suite-card {
+        width: min(100%, 700px);
+        border-radius: var(--radius-lg);
+        background: var(--panel-solid);
+        border: 1px solid var(--line);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+
+      .card-head {
+        padding: 18px 20px;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 14px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .card-head h2,
+      .card-head h3 {
+        margin: 0;
+        font-size: 18px;
+        letter-spacing: -0.03em;
+      }
+
+      .card-head p {
+        margin: 6px 0 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 11px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .badge.blue {
+        background: var(--brand-soft);
+        color: var(--brand-strong);
+      }
+
+      .badge.green {
+        background: var(--green-soft);
+        color: var(--green);
+      }
+
+      .card-body {
+        padding: 20px;
+        display: grid;
+        gap: 16px;
+      }
+
+      .summary {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+
+      .summary-box {
+        padding: 14px;
+        border-radius: 16px;
+        background: rgba(248, 250, 252, 0.9);
+        border: 1px solid var(--line);
+      }
+
+      .summary-box strong {
+        display: block;
+        font-size: 13px;
+      }
+
+      .summary-box span {
+        display: block;
+        margin-top: 7px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .route-pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .route-pill,
+      .code-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 9px 12px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .route-pill {
+        border: 1px solid var(--line);
+        background: white;
+      }
+
+      .code-chip {
+        background: rgba(37, 99, 235, 0.09);
+        color: var(--brand-strong);
+        font-family: "IBM Plex Mono", monospace;
+      }
+
+      .choice-card {
+        width: min(100%, 700px);
+        border-radius: var(--radius-lg);
+        background: var(--panel-solid);
+        border: 1px solid var(--line);
+        box-shadow: var(--shadow);
+        padding: 18px 20px;
+        display: grid;
+        gap: 14px;
+      }
+
+      .choice-card h3 {
+        margin: 0;
+        font-size: 18px;
+        letter-spacing: -0.03em;
+      }
+
+      .choice-card p {
+        margin: 6px 0 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .choice-row {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .choice-btn {
+        min-height: 44px;
+        padding: 0 16px;
+        border-radius: 14px;
+        border: 1px solid var(--line-strong);
+        background: white;
+        color: var(--text);
+        font-weight: 700;
+      }
+
+      .choice-btn.active {
+        background: var(--brand-soft);
+        border-color: rgba(37, 99, 235, 0.2);
+        color: var(--brand-strong);
+      }
+
+      .suite-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      .suite-table th,
+      .suite-table td {
+        padding: 12px 10px;
+        border-top: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+        font-size: 13px;
+      }
+
+      .suite-table th {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .card-footer {
+        padding: 16px 20px 20px;
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        border-top: 1px solid var(--line);
+      }
+
+      .card-footer p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.6;
+      }
+
+      .composer {
+        position: absolute;
+        left: 22px;
+        right: 22px;
+        bottom: 22px;
+      }
+
+      .composer-box {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 14px;
+        border-radius: 24px;
+        background: rgba(255, 255, 255, 0.9);
+        border: 1px solid rgba(255, 255, 255, 0.88);
+        box-shadow: var(--shadow);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .composer-input {
+        flex: 1;
+        min-height: 54px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: rgba(248, 250, 252, 0.9);
+        display: flex;
+        align-items: center;
+        padding: 0 14px;
+        color: var(--muted);
+      }
+
+      .overlay {
+        position: absolute;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.2);
+        backdrop-filter: blur(4px);
+      }
+
+      .modal {
+        position: absolute;
+        left: 50%;
+        top: 92px;
+        transform: translateX(-50%);
+        width: min(760px, calc(100% - 36px));
+        border-radius: 30px;
+        background: white;
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        box-shadow: var(--shadow-float);
+        overflow: hidden;
+      }
+
+      .modal-head {
+        padding: 22px 24px 18px;
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .modal-head h2 {
+        margin: 0;
+        font-size: 22px;
+        letter-spacing: -0.04em;
+      }
+
+      .modal-head p {
+        margin: 6px 0 0;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .close {
+        width: 38px;
+        height: 38px;
+        border-radius: 12px;
+        border: 1px solid var(--line);
+        background: rgba(248, 250, 252, 0.9);
+        color: var(--text);
+        font-size: 18px;
+      }
+
+      .modal-body {
+        padding: 22px 24px;
+        display: grid;
+        gap: 16px;
+      }
+
+      .field {
+        display: grid;
+        gap: 8px;
+      }
+
+      .field label {
+        font-size: 12px;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        font-weight: 700;
+        color: var(--muted);
+      }
+
+      .select,
+      .input {
+        min-height: 48px;
+        padding: 0 14px;
+        border-radius: 14px;
+        border: 1px solid var(--line-strong);
+        background: white;
+        display: flex;
+        align-items: center;
+      }
+
+      .select {
+        justify-content: space-between;
+        gap: 12px;
+        background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+      }
+
+      .caret {
+        color: var(--muted);
+        font-size: 12px;
+        flex: 0 0 auto;
+      }
+
+      .route-grid {
+        display: grid;
+        gap: 10px;
+      }
+
+      .route-row {
+        display: grid;
+        grid-template-columns: 1fr 30px 1fr 34px;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .arrow {
+        text-align: center;
+        color: var(--muted);
+        font-weight: 700;
+      }
+
+      .remove {
+        width: 34px;
+        height: 34px;
+        border-radius: 12px;
+        border: 1px solid rgba(180, 83, 9, 0.12);
+        background: var(--amber-soft);
+        color: var(--amber);
+        font-size: 16px;
+      }
+
+      .modal-footer {
+        padding: 16px 24px 22px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        border-top: 1px solid var(--line);
+      }
+
+      .modal-footer p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .mono {
+        font-family: "IBM Plex Mono", monospace;
+      }
+
+      @media (max-width: 860px) {
+        .app {
+          grid-template-columns: 1fr;
+        }
+
+        .sidebar {
+          display: none;
+        }
+
+        .topbar {
+          padding: 16px 14px;
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .chat-stream {
+          padding: 18px 12px 120px;
+        }
+
+        .composer {
+          left: 12px;
+          right: 12px;
+          bottom: 12px;
+        }
+
+        .summary,
+        .route-row,
+        .card-footer,
+        .modal-footer {
+          grid-template-columns: 1fr;
+          flex-direction: column;
+          align-items: stretch;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="logo">P</div>
+          <div>
+            <strong>Prompt Studio</strong>
+            <span>Agent workspace</span>
+          </div>
+        </div>
+
+        <div class="project">
+          <div class="project-card">
+            <strong>智能客服项目</strong>
+            <span>12 个 Prompt · 当前会话正在创建测试集</span>
+          </div>
+        </div>
+
+        <div class="nav">
+          <div class="nav-title">测试 Agent</div>
+          <div class="nav-item">欢迎语 Prompt</div>
+          <div class="nav-item">退款说明 Prompt</div>
+          <div class="nav-item">投诉处理 Prompt</div>
+          <div class="nav-item active">新建测试集会话</div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <div class="chat-shell">
+          <header class="topbar">
+            <div>
+              <h1>新建测试集</h1>
+              <p>测试 Agent 会先判断是单 Prompt 还是多 Prompt 路由，再进入后续生成</p>
+            </div>
+            <div class="top-actions">
+              <button class="ghost-btn">引用 Prompt</button>
+              <button class="tonal-btn">测试 Agent 已开启</button>
+            </div>
+          </header>
+
+          <section class="chat-stream">
+            <div class="chat-column">
+              <div class="context-log">Agent 思考链 · 3 项上下文</div>
+
+              <div class="msg-row user">
+                <div class="bubble user">
+                  我想给这套客服流程建测试集。先用意图识别 Prompt 判断 intent，再按 intent 进入不同回复 Prompt。
+                </div>
+              </div>
+
+              <div class="msg-row">
+                <div class="bubble assistant">
+                  这个流程看起来可能是单 Prompt，也可能是多 Prompt 协同。先确认一下测试方式。
+                </div>
+              </div>
+
+              <div class="msg-row">
+                <div class="choice-card">
+                  <div>
+                    <h3>选择测试方式</h3>
+                    <p>如果是单 Prompt，沿用当前流程直接生成测试集；如果是多 Prompt，再配置路由。</p>
+                  </div>
+                  <div class="choice-row">
+                    <button class="choice-btn">单 Prompt</button>
+                    <button class="choice-btn active">多 Prompt 路由</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="msg-row user">
+                <div class="bubble user">
+                  这是多 Prompt。先用意图识别 Prompt 判断 intent，再根据 intent 进入不同回复 Prompt。
+                </div>
+              </div>
+
+              <div class="msg-row">
+                <div class="route-card">
+                  <div class="card-head">
+                    <div>
+                      <h2>配置业务流程</h2>
+                      <p>用于创建路由型测试集</p>
+                    </div>
+                    <span class="badge blue">待完成</span>
+                  </div>
+                  <div class="card-body">
+                    <div class="summary">
+                      <div class="summary-box">
+                        <strong>流程类型</strong>
+                        <span>多 Prompt 路由</span>
+                      </div>
+                      <div class="summary-box">
+                        <strong>状态</strong>
+                        <span>尚未配置入口 Prompt 和 intent 映射</span>
+                      </div>
+                    </div>
+                    <div>
+                      <button class="solid-btn">开始配置</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="msg-row">
+                <div class="bubble assistant">
+                  路由已保存。我会基于入口 Prompt 和 intent 映射继续生成测试用例，结果里会额外包含期望 intent。
+                </div>
+              </div>
+
+              <div class="msg-row">
+                <div class="bubble assistant">
+                  正在生成测试用例 (6/10)...
+                </div>
+              </div>
+
+              <div class="msg-row">
+                <div class="suite-card">
+                  <div class="card-head">
+                    <div>
+                      <h3>测试集：客服路由回归</h3>
+                      <p>围绕意图识别和最终回复双阶段覆盖</p>
+                    </div>
+                    <span class="badge green">可确认创建</span>
+                  </div>
+                  <div class="card-body">
+                    <table class="suite-table">
+                      <thead>
+                        <tr>
+                          <th>用例</th>
+                          <th>期望 intent</th>
+                          <th>期望输出</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td>退款到账时效</td>
+                          <td><span class="code-chip">refund</span></td>
+                          <td>说明退款时效、渠道差异和补充信息要求</td>
+                        </tr>
+                        <tr>
+                          <td>售前功能咨询</td>
+                          <td><span class="code-chip">pre_sale</span></td>
+                          <td>围绕多门店能力给出准确说明和下一步引导</td>
+                        </tr>
+                        <tr>
+                          <td>投诉升级</td>
+                          <td><span class="code-chip">complaint</span></td>
+                          <td>先安抚，再说明人工介入和处理时效</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div class="card-footer">
+                    <p>确认后进入现有测试集详情页，创建和编辑流程保持不变。</p>
+                    <div class="top-actions">
+                      <button class="ghost-btn">返回修改</button>
+                      <button class="solid-btn">确认创建</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <div class="composer">
+            <div class="composer-box">
+              <button class="ghost-btn">+</button>
+              <div class="composer-input">继续补充测试重点或引用更多 Prompt</div>
+              <button class="solid-btn">发送</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="overlay"></div>
+
+        <section class="modal">
+          <div class="modal-head">
+            <div>
+              <h2>配置业务流程</h2>
+              <p>只允许选择当前项目里已经创建的 Prompt</p>
+            </div>
+            <button class="close">×</button>
+          </div>
+
+          <div class="modal-body">
+            <div class="field">
+              <label>流程类型</label>
+              <div class="select">
+                <span>多 Prompt 路由</span>
+                <span class="caret">▼</span>
+              </div>
+            </div>
+
+            <div class="field">
+              <label>入口 Prompt</label>
+              <div class="select">
+                <span>PromptA · 意图识别器</span>
+                <span class="caret">▼</span>
+              </div>
+            </div>
+
+            <div class="field">
+              <label>intent 到 Prompt 映射</label>
+              <div class="route-grid">
+                <div class="route-row">
+                  <div class="input mono">pre_sale</div>
+                  <div class="arrow">→</div>
+                  <div class="select">
+                    <span>PromptB · 售前回复</span>
+                    <span class="caret">▼</span>
+                  </div>
+                  <button class="remove">×</button>
+                </div>
+                <div class="route-row">
+                  <div class="input mono">after_sale</div>
+                  <div class="arrow">→</div>
+                  <div class="select">
+                    <span>PromptC · 售后处理</span>
+                    <span class="caret">▼</span>
+                  </div>
+                  <button class="remove">×</button>
+                </div>
+                <div class="route-row">
+                  <div class="input mono">refund</div>
+                  <div class="arrow">→</div>
+                  <div class="select">
+                    <span>PromptD · 退款说明</span>
+                    <span class="caret">▼</span>
+                  </div>
+                  <button class="remove">×</button>
+                </div>
+                <div class="route-row">
+                  <div class="input mono">complaint</div>
+                  <div class="arrow">→</div>
+                  <div class="select">
+                    <span>PromptE · 投诉处理</span>
+                    <span class="caret">▼</span>
+                  </div>
+                  <button class="remove">×</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="field">
+              <label>已配置流程预览</label>
+              <div class="route-pills">
+                <div class="route-pill">入口：PromptA</div>
+                <div class="route-pill"><span class="mono">pre_sale</span> → PromptB</div>
+                <div class="route-pill"><span class="mono">after_sale</span> → PromptC</div>
+                <div class="route-pill"><span class="mono">refund</span> → PromptD</div>
+                <div class="route-pill"><span class="mono">complaint</span> → PromptE</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <p>保存后返回当前会话，测试 Agent 继续生成测试集。</p>
+            <div class="top-actions">
+              <button class="ghost-btn">取消</button>
+              <button class="tonal-btn">新增映射</button>
+              <button class="solid-btn">保存并继续</button>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

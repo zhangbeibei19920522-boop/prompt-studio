@@ -25,6 +25,7 @@ export function TestSuiteCard({ data, onConfirm }: TestSuiteCardProps) {
         {data.cases.map((tc, i) => (
           <p key={i} className="text-xs text-muted-foreground">
             {i + 1}. {tc.title}
+            {tc.expectedIntent ? ` · 期望 intent: ${tc.expectedIntent}` : ""}
           </p>
         ))}
       </div>

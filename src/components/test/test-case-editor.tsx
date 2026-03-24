@@ -6,24 +6,48 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 
 interface TestCaseEditorProps {
-  initialData?: { title: string; context: string; input: string; expectedOutput: string }
-  onSave: (data: { title: string; context: string; input: string; expectedOutput: string }) => void
+  initialData?: {
+    title: string
+    context: string
+    input: string
+    expectedIntent?: string | null
+    expectedOutput: string
+  }
+  showExpectedIntent?: boolean
+  onSave: (data: {
+    title: string
+    context: string
+    input: string
+    expectedIntent?: string | null
+    expectedOutput: string
+  }) => void
   onCancel: () => void
 }
 
-export function TestCaseEditor({ initialData, onSave, onCancel }: TestCaseEditorProps) {
+export function TestCaseEditor({
+  initialData,
+  showExpectedIntent = false,
+  onSave,
+  onCancel,
+}: TestCaseEditorProps) {
   const [title, setTitle] = useState(initialData?.title ?? "")
   const [context, setContext] = useState(initialData?.context ?? "")
   const [input, setInput] = useState(initialData?.input ?? "")
+  const [expectedIntent, setExpectedIntent] = useState(initialData?.expectedIntent ?? "")
   const [expectedOutput, setExpectedOutput] = useState(initialData?.expectedOutput ?? "")
 
-  const isValid = title.trim().length > 0 && input.trim().length > 0 && expectedOutput.trim().length > 0
+  const isValid =
+    title.trim().length > 0 &&
+    input.trim().length > 0 &&
+    expectedOutput.trim().length > 0 &&
+    (!showExpectedIntent || expectedIntent.trim().length > 0)
 
   function handleSave() {
     onSave({
       title: title.trim(),
       context: context.trim(),
       input: input.trim(),
+      expectedIntent: showExpectedIntent ? expectedIntent.trim() : null,
       expectedOutput: expectedOutput.trim(),
     })
   }
@@ -69,6 +93,20 @@ export function TestCaseEditor({ initialData, onSave, onCancel }: TestCaseEditor
           className="text-sm resize-none"
         />
       </div>
+
+      {showExpectedIntent && (
+        <div className="flex flex-col gap-2">
+          <label className="text-sm font-medium" htmlFor="tc-expected-intent">
+            期望 intent <span className="text-destructive">*</span>
+          </label>
+          <Input
+            id="tc-expected-intent"
+            placeholder="例如 after_sale"
+            value={expectedIntent}
+            onChange={(e) => setExpectedIntent(e.target.value)}
+          />
+        </div>
+      )}
 
       <div className="flex flex-col gap-2">
         <label className="text-sm font-medium" htmlFor="tc-expected">

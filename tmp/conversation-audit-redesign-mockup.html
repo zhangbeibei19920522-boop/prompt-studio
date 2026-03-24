@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>会话质检</title>
+  <style>
+    :root {
+      --background: #ffffff;
+      --foreground: #171717;
+      --card: #ffffff;
+      --muted: #fafafa;
+      --muted-foreground: #737373;
+      --border: #e5e5e5;
+      --accent: #f5f5f5;
+      --primary: #171717;
+      --primary-foreground: #ffffff;
+      --destructive: #dc2626;
+      --destructive-soft: #fef2f2;
+      --success: #16a34a;
+      --success-soft: #f0fdf4;
+      --warning: #d97706;
+      --warning-soft: #fffbeb;
+      --radius: 10px;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--background);
+      color: var(--foreground);
+      font-family:
+        ui-sans-serif,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        "PingFang SC",
+        "Hiragino Sans GB",
+        "Microsoft YaHei",
+        sans-serif;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      height: 100vh;
+    }
+
+    .sidebar {
+      border-right: 1px solid var(--border);
+      background: #fff;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .side-title {
+      padding: 6px 8px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted-foreground);
+    }
+
+    .side-item {
+      border-radius: 8px;
+      padding: 10px 12px;
+      border: 1px solid transparent;
+      font-size: 14px;
+    }
+
+    .side-item.active {
+      background: var(--accent);
+      border-color: var(--border);
+      font-weight: 600;
+    }
+
+    .side-item small {
+      display: block;
+      margin-top: 4px;
+      font-size: 12px;
+      color: var(--muted-foreground);
+      font-weight: 400;
+    }
+
+    .main {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      background: #fff;
+    }
+
+    .topbar {
+      height: 56px;
+      border-bottom: 1px solid var(--border);
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      background: #fff;
+    }
+
+    .topbar h1 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      height: 32px;
+      padding: 0 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #fff;
+      color: var(--foreground);
+      font-size: 13px;
+      font-weight: 500;
+      box-shadow: var(--shadow);
+    }
+
+    .btn.primary {
+      background: var(--primary);
+      color: var(--primary-foreground);
+      border-color: var(--primary);
+      box-shadow: none;
+    }
+
+    .content {
+      padding: 16px;
+      background: #fafafa;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .overview {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .overview-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: flex-start;
+    }
+
+    .overview-head h2 {
+      margin: 0 0 6px;
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    .overview-head p {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--muted-foreground);
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .metric {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #fff;
+      padding: 14px;
+    }
+
+    .metric label {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 12px;
+      color: var(--muted-foreground);
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 24px;
+      font-weight: 600;
+      letter-spacing: -0.03em;
+    }
+
+    .metric span {
+      display: block;
+      margin-top: 6px;
+      font-size: 12px;
+      color: var(--muted-foreground);
+    }
+
+    .section {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 16px;
+    }
+
+    .section-head h3 {
+      margin: 0 0 4px;
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .section-head p {
+      margin: 0;
+      font-size: 13px;
+      color: var(--muted-foreground);
+    }
+
+    .filter-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .filter {
+      height: 28px;
+      padding: 0 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: #fff;
+      font-size: 12px;
+      color: var(--muted-foreground);
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .filter.active {
+      background: var(--accent);
+      color: var(--foreground);
+    }
+
+    .conversation-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .conversation-card {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #fff;
+      overflow: hidden;
+    }
+
+    .conversation-head {
+      padding: 14px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+    }
+
+    .conversation-title {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .conversation-title strong {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .conversation-title p {
+      margin: 0;
+      font-size: 13px;
+      color: var(--muted-foreground);
+      line-height: 1.5;
+    }
+
+    .status-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      height: 24px;
+      padding: 0 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--muted-foreground);
+      background: #fff;
+    }
+
+    .badge.success {
+      color: var(--success);
+      background: var(--success-soft);
+      border-color: #bbf7d0;
+    }
+
+    .badge.warning {
+      color: var(--warning);
+      background: var(--warning-soft);
+      border-color: #fde68a;
+    }
+
+    .badge.error {
+      color: var(--destructive);
+      background: var(--destructive-soft);
+      border-color: #fecaca;
+    }
+
+    .conversation-body {
+      border-top: 1px solid var(--border);
+      background: #fcfcfc;
+      padding: 16px;
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 16px;
+    }
+
+    .transcript,
+    .detail {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .panel-title {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--foreground);
+    }
+
+    .transcript-card {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #fff;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .message {
+      padding: 12px 0;
+      border-top: 1px solid var(--border);
+    }
+
+    .message:first-child {
+      padding-top: 0;
+      border-top: none;
+    }
+
+    .message:last-child {
+      padding-bottom: 0;
+    }
+
+    .message label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 12px;
+      color: var(--muted-foreground);
+      font-weight: 600;
+    }
+
+    .message p {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--foreground);
+    }
+
+    .detail-panel {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #fff;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .detail-panel-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .detail-panel-head h4 {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .detail-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .detail-item {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fafafa;
+      padding: 10px;
+    }
+
+    .detail-item strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .detail-item p {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--muted-foreground);
+    }
+
+    .sources {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+
+    .source {
+      display: inline-flex;
+      align-items: center;
+      height: 24px;
+      padding: 0 8px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: #fff;
+      font-size: 12px;
+      color: var(--muted-foreground);
+    }
+
+    .collapsed {
+      border-top: 1px solid var(--border);
+      padding: 12px 16px;
+      font-size: 13px;
+      color: var(--muted-foreground);
+      background: #fcfcfc;
+    }
+
+    @media (max-width: 1200px) {
+      .metrics,
+      .conversation-body {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 960px) {
+      .app {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        display: none;
+      }
+
+      .overview-head,
+      .section-head,
+      .conversation-head {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .status-row {
+        justify-content: flex-start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="side-title">项目资源</div>
+      <div class="side-item">Prompt<small>12 个</small></div>
+      <div class="side-item">文档<small>18 个</small></div>
+      <div class="side-item">测试集<small>4 个</small></div>
+      <div class="side-item active">会话质检<small>03.18 退款流程复盘</small></div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <h1>会话质检</h1>
+        <div class="actions">
+          <button class="btn">筛选</button>
+          <button class="btn">导出</button>
+          <button class="btn primary">发起复核</button>
+        </div>
+      </div>
+
+      <div class="content">
+        <section class="card overview">
+          <div class="overview-head">
+            <div>
+              <h2>03.18 退款流程复盘</h2>
+              <p>每张对话卡片直接展示整体结果、流程结果、知识结果，展开后查看对话内容与详细评估。</p>
+            </div>
+            <div class="status-row">
+              <span class="badge success">已完成</span>
+              <span class="badge error">高风险 9</span>
+            </div>
+          </div>
+
+          <div class="metrics">
+            <div class="metric">
+              <label>对话总数</label>
+              <strong>128</strong>
+              <span>本次质检范围</span>
+            </div>
+            <div class="metric">
+              <label>整体通过率</label>
+              <strong>82%</strong>
+              <span>按对话计算</span>
+            </div>
+            <div class="metric">
+              <label>流程通过率</label>
+              <strong>88%</strong>
+              <span>流程规范检查</span>
+            </div>
+            <div class="metric">
+              <label>知识通过率</label>
+              <strong>91%</strong>
+              <span>知识问答检查</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="card section">
+          <div class="section-head">
+            <div>
+              <h3>对话详情</h3>
+              <p>点击对话卡片可展开详情。当前示例中第一条为展开状态。</p>
+            </div>
+            <div class="filter-row">
+              <span class="filter active">全部</span>
+              <span class="filter">未通过</span>
+              <span class="filter">流程异常</span>
+              <span class="filter">知识错误</span>
+            </div>
+          </div>
+
+          <div class="conversation-list">
+            <article class="conversation-card">
+              <div class="conversation-head">
+                <div class="conversation-title">
+                  <strong>COV-20260318-017</strong>
+                  <p>缺少订单核验，退款时效与运费规则回答错误</p>
+                </div>
+                <div class="status-row">
+                  <span class="badge error">整体未通过</span>
+                  <span class="badge warning">流程异常</span>
+                  <span class="badge error">知识错误</span>
+                </div>
+              </div>
+
+              <div class="conversation-body">
+                <div class="transcript">
+                  <h3 class="panel-title">对话内容</h3>
+
+                  <div class="transcript-card">
+                    <div class="message">
+                      <label>用户</label>
+                      <p>我这笔订单想退款，多久能到账？运费会不会一起退？</p>
+                    </div>
+
+                    <div class="message">
+                      <label>机器人</label>
+                      <p>可以退款，通常 24 小时内到账，运费也会一起退回。</p>
+                    </div>
+
+                    <div class="message">
+                      <label>用户</label>
+                      <p>那我现在直接申请就行吗？</p>
+                    </div>
+
+                    <div class="message">
+                      <label>机器人</label>
+                      <p>可以，直接提交就行。</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="detail">
+                  <div class="detail-panel">
+                    <div class="detail-panel-head">
+                      <h4>流程规范检查</h4>
+                      <span class="badge warning">流程异常</span>
+                    </div>
+
+                    <div class="detail-list">
+                      <div class="detail-item">
+                        <strong>核验订单信息缺失</strong>
+                        <p>进入退款处理前应核验订单号或身份信息，本次对话未发现该步骤。</p>
+                        <div class="sources">
+                          <span class="source">退款处理流程.html</span>
+                          <span class="source">售后SOP.docx</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="detail-panel">
+                    <div class="detail-panel-head">
+                      <h4>知识问答问题</h4>
+                      <span class="badge error">知识错误</span>
+                    </div>
+
+                    <div class="detail-list">
+                      <div class="detail-item">
+                        <strong>退款到账时间回答错误</strong>
+                        <p>正确回答应为：退款提交后通常 3-7 个工作日原路退回。</p>
+                        <div class="sources">
+                          <span class="source">退款规则说明.docx</span>
+                        </div>
+                      </div>
+
+                      <div class="detail-item">
+                        <strong>运费规则回答错误</strong>
+                        <p>正确回答应区分质量问题与非质量问题场景，不应直接答复“全部退回”。</p>
+                        <div class="sources">
+                          <span class="source">售后政策.docx</span>
+                          <span class="source">运费规则.html</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </article>
+
+            <article class="conversation-card">
+              <div class="conversation-head">
+                <div class="conversation-title">
+                  <strong>COV-20260318-021</strong>
+                  <p>流程前置动作缺失，知识问答正常</p>
+                </div>
+                <div class="status-row">
+                  <span class="badge warning">整体未通过</span>
+                  <span class="badge warning">流程异常</span>
+                  <span class="badge success">知识通过</span>
+                </div>
+              </div>
+              <div class="collapsed">点击展开后查看对话内容、异常步骤和来源文件。</div>
+            </article>
+
+            <article class="conversation-card">
+              <div class="conversation-head">
+                <div class="conversation-title">
+                  <strong>COV-20260318-026</strong>
+                  <p>流程正确，运费规则解释错误</p>
+                </div>
+                <div class="status-row">
+                  <span class="badge warning">整体未通过</span>
+                  <span class="badge success">流程通过</span>
+                  <span class="badge error">知识错误</span>
+                </div>
+              </div>
+              <div class="collapsed">点击展开后查看对话内容、错误回答和建议回答。</div>
+            </article>
+
+            <article class="conversation-card">
+              <div class="conversation-head">
+                <div class="conversation-title">
+                  <strong>COV-20260318-031</strong>
+                  <p>流程节点完整，知识问答一致</p>
+                </div>
+                <div class="status-row">
+                  <span class="badge success">整体通过</span>
+                  <span class="badge success">流程通过</span>
+                  <span class="badge success">知识通过</span>
+                </div>
+              </div>
+              <div class="collapsed">点击展开后查看完整对话内容与通过依据。</div>
+            </article>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

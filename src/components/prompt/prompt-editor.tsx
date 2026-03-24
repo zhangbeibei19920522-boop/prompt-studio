@@ -6,7 +6,6 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { Separator } from "@/components/ui/separator"
 
 interface Variable {
   name: string
@@ -139,13 +138,19 @@ export function PromptEditor({ prompt, onSave, onCancel }: PromptEditorProps) {
   }
 
   return (
-    <div className="flex flex-col p-6 gap-6 min-w-0 w-full">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">
-          {prompt ? "编辑 Prompt" : "新建 Prompt"}
-        </h2>
+    <div className="flex min-w-0 w-full flex-col gap-5 p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <input
+          id="editor-title"
+          placeholder="Prompt 标题"
+          value={form.title}
+          onChange={(e) => updateField("title", e.target.value)}
+          className="prompt-editor-title w-full flex-1 border-b border-transparent bg-transparent px-0 py-1 text-lg font-semibold outline-none transition-colors focus:border-blue-500"
+        />
         <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={onCancel}>
+            取消
+          </Button>
           <Button
             variant="default"
             size="sm"
@@ -154,31 +159,13 @@ export function PromptEditor({ prompt, onSave, onCancel }: PromptEditorProps) {
           >
             保存
           </Button>
-          <Button variant="outline" size="sm" onClick={onCancel}>
-            取消
-          </Button>
         </div>
-      </div>
-
-      <Separator />
-
-      {/* Title */}
-      <div className="flex flex-col gap-2">
-        <label className="text-sm font-medium" htmlFor="editor-title">
-          标题 <span className="text-destructive">*</span>
-        </label>
-        <Input
-          id="editor-title"
-          placeholder="输入 Prompt 标题"
-          value={form.title}
-          onChange={(e) => updateField("title", e.target.value)}
-        />
       </div>
 
       {/* Content */}
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <label className="text-sm font-medium" htmlFor="editor-content">
+          <label className="prompt-field-label text-xs font-semibold uppercase tracking-[0.04em] text-zinc-500" htmlFor="editor-content">
             内容 <span className="text-destructive">*</span>
           </label>
           <Button
@@ -204,7 +191,7 @@ export function PromptEditor({ prompt, onSave, onCancel }: PromptEditorProps) {
           value={form.content}
           onChange={(e) => updateField("content", e.target.value)}
           rows={12}
-          className="font-mono text-sm resize-none"
+          className="min-h-[180px] resize-y rounded-lg border-zinc-200 font-mono text-sm leading-6"
         />
         <p className="text-xs text-muted-foreground">
           使用 {"{{变量名}}"} 语法定义变量占位符
@@ -213,7 +200,7 @@ export function PromptEditor({ prompt, onSave, onCancel }: PromptEditorProps) {
 
       {/* Description */}
       <div className="flex flex-col gap-2">
-        <label className="text-sm font-medium" htmlFor="editor-description">
+        <label className="prompt-field-label text-xs font-semibold uppercase tracking-[0.04em] text-zinc-500" htmlFor="editor-description">
           描述
         </label>
         <Textarea
@@ -222,13 +209,13 @@ export function PromptEditor({ prompt, onSave, onCancel }: PromptEditorProps) {
           value={form.description}
           onChange={(e) => updateField("description", e.target.value)}
           rows={3}
-          className="text-sm resize-none"
+          className="resize-y rounded-lg border-zinc-200 text-sm leading-6"
         />
       </div>
 
       {/* Tags */}
       <div className="flex flex-col gap-2">
-        <label className="text-sm font-medium" htmlFor="editor-tags">
+        <label className="prompt-field-label text-xs font-semibold uppercase tracking-[0.04em] text-zinc-500" htmlFor="editor-tags">
           标签
         </label>
         <Input
@@ -259,7 +246,7 @@ export function PromptEditor({ prompt, onSave, onCancel }: PromptEditorProps) {
 
       {/* Status */}
       <div className="flex flex-col gap-2">
-        <label className="text-sm font-medium" htmlFor="editor-status">
+        <label className="prompt-field-label text-xs font-semibold uppercase tracking-[0.04em] text-zinc-500" htmlFor="editor-status">
           状态
         </label>
         <select

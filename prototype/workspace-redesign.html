@@ -1,0 +1,3226 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prompt Studio — Workspace Redesign</title>
+<style>
+/* ═══════════════════════════════════════════
+   DESIGN TOKENS (shadcn/ui neutral palette)
+   ═══════════════════════════════════════════ */
+:root {
+  --bg: #fafafa;
+  --bg-card: #ffffff;
+  --bg-sidebar: #f5f5f4;
+  --bg-hover: #f0efee;
+  --bg-active: #e7e5e4;
+  --bg-muted: #f5f5f4;
+  --bg-canvas: #ffffff;
+  --bg-input: #ffffff;
+  --bg-overlay: rgba(0,0,0,0.4);
+  --bg-chip: #eff6ff;
+
+  --border: #e5e5e5;
+  --border-strong: #d4d4d4;
+  --border-focus: #3b82f6;
+  --border-canvas: #e5e7eb;
+
+  --text: #0a0a0a;
+  --text-secondary: #525252;
+  --text-muted: #a3a3a3;
+  --text-inverse: #fafafa;
+  --text-chip: #2563eb;
+
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --accent-light: #dbeafe;
+  --green: #22c55e;
+  --green-light: #dcfce7;
+  --orange: #f97316;
+  --orange-light: #fff7ed;
+  --red: #ef4444;
+  --red-light: #fef2f2;
+  --purple: #8b5cf6;
+  --purple-light: #f5f3ff;
+
+  --radius: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+  --shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1);
+  --shadow-xl: 0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);
+
+  --sidebar-w: 260px;
+  --topbar-h: 52px;
+  --canvas-w: 480px;
+  --canvas-w-expanded: calc(100vw - var(--sidebar-w));
+  --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  font-size: 14px;
+  color: var(--text);
+}
+
+/* ═══════════════════
+   RESET & BASE
+   ═══════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); height: 100vh; overflow: hidden; }
+button { font: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+input, textarea { font: inherit; border: none; outline: none; background: none; color: inherit; }
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+
+/* ═══════════════════
+   APP SHELL
+   ═══════════════════ */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* ═══════════════════
+   TOP BAR
+   ═══════════════════ */
+.topbar {
+  height: var(--topbar-h);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-card);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 12px;
+  flex-shrink: 0;
+  z-index: 100;
+}
+.topbar-left { display: flex; align-items: center; gap: 10px; }
+.topbar-center { flex: 1; display: flex; justify-content: center; }
+.topbar-right { display: flex; align-items: center; gap: 8px; }
+
+.sidebar-toggle {
+  width: 32px; height: 32px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius);
+  color: var(--text-secondary);
+  transition: all var(--transition);
+}
+.sidebar-toggle:hover { background: var(--bg-hover); color: var(--text); }
+
+.project-switcher {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius);
+  font-weight: 600;
+  font-size: 14px;
+  transition: all var(--transition);
+  position: relative;
+}
+.project-switcher:hover { background: var(--bg-hover); }
+.project-switcher svg { width: 14px; height: 14px; color: var(--text-muted); }
+
+.cmd-palette-trigger {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-size: 13px;
+  min-width: 280px;
+  transition: all var(--transition);
+}
+.cmd-palette-trigger:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-muted);
+}
+.cmd-palette-trigger kbd {
+  font-family: inherit;
+  font-size: 11px;
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-muted);
+  margin-left: auto;
+}
+
+.topbar-btn {
+  width: 34px; height: 34px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius);
+  color: var(--text-secondary);
+  transition: all var(--transition);
+  position: relative;
+}
+.topbar-btn:hover { background: var(--bg-hover); color: var(--text); }
+
+/* ═══════════════════
+   MAIN LAYOUT
+   ═══════════════════ */
+.main {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+/* ═══════════════════
+   LEFT SIDEBAR
+   ═══════════════════ */
+.sidebar {
+  width: var(--sidebar-w);
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  transition: width var(--transition), opacity var(--transition);
+  overflow: hidden;
+}
+.sidebar.collapsed { width: 0; border-right: none; }
+
+.sidebar-header {
+  padding: 12px 12px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sidebar-header h3 {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+.new-chat-btn {
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius);
+  color: var(--text-secondary);
+  transition: all var(--transition);
+}
+.new-chat-btn:hover { background: var(--bg-active); color: var(--text); }
+
+.sidebar-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 8px 12px;
+}
+.sidebar-group-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 12px 8px 4px;
+  font-weight: 500;
+}
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all var(--transition);
+  position: relative;
+}
+.sidebar-item:hover { background: var(--bg-hover); }
+.sidebar-item.active { background: var(--bg-active); }
+.sidebar-item-text {
+  flex: 1;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sidebar-item-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.sidebar-item-delete {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px; height: 22px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.sidebar-item:hover .sidebar-item-delete { display: flex; }
+.sidebar-item:hover .sidebar-item-time { display: none; }
+.sidebar-item-delete:hover { background: var(--red-light); color: var(--red); }
+
+/* ═══════════════════
+   CONVERSATION AREA
+   ═══════════════════ */
+.conversation {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  transition: all var(--transition);
+  background: var(--bg);
+}
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 0;
+}
+.messages-inner {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Empty state */
+.empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: var(--text-muted);
+  padding: 40px;
+}
+.empty-state-icon {
+  width: 56px; height: 56px;
+  border-radius: var(--radius-xl);
+  background: var(--bg-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.empty-state h2 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+}
+.empty-state p {
+  font-size: 14px;
+  text-align: center;
+  max-width: 400px;
+  line-height: 1.6;
+}
+.quick-actions {
+  display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; justify-content: center;
+}
+.quick-action {
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  transition: all var(--transition);
+}
+.quick-action:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-light);
+}
+
+/* Message bubbles */
+.message { display: flex; gap: 12px; }
+.message-avatar {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+}
+.message-avatar.user { background: var(--accent); color: white; }
+.message-avatar.assistant { background: var(--text); color: white; }
+.message-body { flex: 1; min-width: 0; }
+.message-role {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: var(--text-secondary);
+}
+.message-content {
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--text);
+}
+.message-content p { margin-bottom: 8px; }
+.message-content p:last-child { margin-bottom: 0; }
+.message-refs {
+  display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap;
+}
+.message-ref {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: var(--bg-chip);
+  color: var(--text-chip);
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Agent action card */
+.agent-action {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  margin-top: 10px;
+}
+.agent-action-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.agent-action-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+}
+.agent-action-btns {
+  display: flex; gap: 8px; margin-top: 12px;
+}
+.btn-primary {
+  padding: 7px 16px;
+  background: var(--text);
+  color: var(--text-inverse);
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 500;
+  transition: all var(--transition);
+}
+.btn-primary:hover { opacity: 0.85; }
+.btn-secondary {
+  padding: 7px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition: all var(--transition);
+}
+.btn-secondary:hover { background: var(--bg-hover); border-color: var(--border-strong); }
+
+/* ═══════════════════
+   CHAT INPUT
+   ═══════════════════ */
+.input-area {
+  padding: 0 24px 20px;
+}
+.input-wrapper {
+  max-width: 720px;
+  margin: 0 auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  transition: border-color var(--transition), box-shadow var(--transition);
+  position: relative;
+}
+.input-wrapper:focus-within {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.1), var(--shadow);
+}
+.input-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 12px 0;
+}
+.input-chips:empty { display: none; padding: 0; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: var(--bg-chip);
+  color: var(--text-chip);
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: default;
+  animation: chipIn 0.2s ease;
+}
+@keyframes chipIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+.chip-icon { font-size: 12px; }
+.chip-remove {
+  width: 14px; height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-left: 2px;
+}
+.chip-remove:hover { background: rgba(37,99,235,0.15); }
+.input-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 10px 12px;
+}
+.chat-input {
+  flex: 1;
+  min-height: 22px;
+  max-height: 120px;
+  resize: none;
+  font-size: 14px;
+  line-height: 1.5;
+  padding: 0;
+}
+.chat-input::placeholder { color: var(--text-muted); }
+.send-btn {
+  width: 32px; height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--text);
+  color: var(--text-inverse);
+  border-radius: var(--radius);
+  flex-shrink: 0;
+  transition: all var(--transition);
+}
+.send-btn:hover { opacity: 0.8; }
+
+/* ═══════════════════
+   @ MENTION PANEL
+   ═══════════════════ */
+.mention-panel {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
+  z-index: 200;
+  display: none;
+  flex-direction: column;
+  max-height: 380px;
+  animation: panelIn 0.2s ease;
+}
+.mention-panel.visible { display: flex; }
+@keyframes panelIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.mention-search {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mention-search input {
+  flex: 1;
+  font-size: 13px;
+}
+.mention-search input::placeholder { color: var(--text-muted); }
+.mention-search-icon { color: var(--text-muted); }
+.mention-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  padding: 0 12px;
+}
+.mention-tab {
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  border-bottom: 2px solid transparent;
+  transition: all var(--transition);
+}
+.mention-tab:hover { color: var(--text-secondary); }
+.mention-tab.active {
+  color: var(--text);
+  border-bottom-color: var(--text);
+}
+.mention-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px;
+}
+.mention-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.mention-item:hover { background: var(--bg-hover); }
+.mention-item.selected { background: var(--accent-light); }
+.mention-item.active {
+  background: var(--accent-light);
+  box-shadow: inset 0 0 0 1px rgba(59,130,246,0.25);
+}
+.mention-check {
+  width: 18px; height: 18px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+  transition: all 0.15s;
+  font-size: 11px;
+  color: white;
+}
+.mention-item.selected .mention-check {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.mention-item-info { flex: 1; min-width: 0; }
+.mention-item-name {
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 2px;
+}
+.mention-item-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mention-item-badge {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.badge-prompt { background: var(--purple-light); color: var(--purple); }
+.badge-doc { background: var(--orange-light); color: var(--orange); }
+.mention-footer {
+  border-top: 1px solid var(--border);
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.mention-footer-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.mention-footer-btn {
+  padding: 5px 12px;
+  background: var(--text);
+  color: var(--text-inverse);
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-weight: 500;
+}
+.mention-preview {
+  border-top: 1px solid var(--border);
+  padding: 10px 12px;
+  background: var(--bg-muted);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  max-height: 120px;
+  overflow-y: auto;
+}
+.mention-preview-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+.mention-preview-content {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* ═══════════════════
+   CANVAS PANEL
+   ═══════════════════ */
+.canvas-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+}
+.canvas-overlay.visible { display: block; }
+
+.canvas {
+  position: fixed;
+  top: var(--topbar-h);
+  right: 0;
+  bottom: 0;
+  width: var(--canvas-w);
+  background: var(--bg-canvas);
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-xl);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform var(--transition), width var(--transition);
+}
+.canvas.open { transform: translateX(0); }
+.canvas.expanded {
+  width: var(--canvas-w-expanded);
+  box-shadow: none;
+  border-left: 1px solid var(--border);
+}
+/* Hide conversation when canvas is full page */
+.conversation.hidden-by-canvas {
+  display: none;
+}
+
+.canvas-header {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  padding: 0 16px;
+  height: 46px;
+  flex-shrink: 0;
+}
+.canvas-tabs {
+  display: flex;
+  flex: 1;
+  gap: 0;
+  height: 100%;
+}
+.canvas-tab {
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  border-bottom: 2px solid transparent;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all var(--transition);
+  height: 100%;
+  white-space: nowrap;
+}
+.canvas-tab:hover { color: var(--text-secondary); }
+.canvas-tab.active {
+  color: var(--text);
+  border-bottom-color: var(--text);
+}
+.canvas-tab-icon { font-size: 14px; }
+.canvas-close {
+  width: 30px; height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  transition: all var(--transition);
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+.canvas-close:hover { background: var(--bg-hover); color: var(--text); }
+
+.canvas-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+/* Canvas content panels */
+.canvas-content { display: none; }
+.canvas-content.active { display: block; }
+
+/* ── Prompt Editor ── */
+.prompt-editor-title {
+  font-size: 18px;
+  font-weight: 600;
+  width: 100%;
+  margin-bottom: 16px;
+  padding: 6px 0;
+  border-bottom: 1px solid transparent;
+}
+.prompt-editor-title:focus { border-bottom-color: var(--accent); }
+.prompt-field { margin-bottom: 20px; }
+.prompt-field-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+.prompt-textarea {
+  width: 100%;
+  min-height: 180px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 13px;
+  line-height: 1.6;
+  resize: vertical;
+  transition: border-color var(--transition);
+}
+.prompt-textarea:focus { border-color: var(--border-focus); }
+.prompt-vars {
+  display: flex; flex-wrap: wrap; gap: 6px;
+}
+.prompt-var {
+  padding: 4px 10px;
+  background: var(--purple-light);
+  color: var(--purple);
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: "SF Mono", "Fira Code", monospace;
+}
+.prompt-versions {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+  margin-top: 8px;
+}
+.prompt-version-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  transition: background 0.15s;
+}
+.prompt-version-item:hover { background: var(--bg-hover); }
+.prompt-version-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+.prompt-version-info { flex: 1; }
+.prompt-version-label { font-size: 13px; font-weight: 500; }
+.prompt-version-time { font-size: 11px; color: var(--text-muted); }
+
+/* ── Prompt Library ── */
+.library-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+}
+.library-search input { flex: 1; font-size: 13px; }
+.library-filters {
+  display: flex; gap: 6px; margin-bottom: 14px;
+}
+.library-filter {
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  transition: all var(--transition);
+}
+.library-filter:hover { border-color: var(--border-strong); }
+.library-filter.active {
+  background: var(--text);
+  color: var(--text-inverse);
+  border-color: var(--text);
+}
+.library-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.library-item:hover { border-color: var(--border-strong); background: var(--bg-muted); }
+.library-item-icon {
+  width: 36px; height: 36px;
+  background: var(--purple-light);
+  color: var(--purple);
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.library-item-info { flex: 1; min-width: 0; }
+.library-item-name { font-size: 14px; font-weight: 500; }
+.library-item-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.library-item-status {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+.status-active { background: var(--green-light); color: #16a34a; }
+.status-draft { background: var(--bg-muted); color: var(--text-muted); }
+
+/* ── Test workspace ── */
+.test-suite-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.test-suite-title { font-size: 18px; font-weight: 600; }
+.test-suite-badge {
+  padding: 3px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.test-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.test-stat {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  text-align: center;
+}
+.test-stat-value { font-size: 24px; font-weight: 700; margin-bottom: 2px; }
+.test-stat-label { font-size: 12px; color: var(--text-muted); }
+.test-case-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+.test-case-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.test-case-header:hover { background: var(--bg-muted); }
+.test-case-status {
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.test-pass { background: var(--green-light); color: #16a34a; }
+.test-fail { background: var(--red-light); color: var(--red); }
+.test-case-name { flex: 1; font-size: 13px; font-weight: 500; }
+.test-case-score { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+.test-case-detail {
+  border-top: 1px solid var(--border);
+  padding: 14px;
+  background: var(--bg-muted);
+  display: none;
+}
+.test-case-detail.open { display: block; }
+.test-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.test-column {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+.test-column-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+.test-turn {
+  margin-bottom: 10px;
+}
+.test-turn:last-child { margin-bottom: 0; }
+.test-turn-role {
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 3px;
+}
+.test-turn-role.user { color: var(--accent); }
+.test-turn-role.assistant { color: var(--green); }
+.test-turn-text { font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
+
+/* ── Audit workspace ── */
+.audit-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.audit-stat {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.audit-stat-value { font-size: 24px; font-weight: 700; }
+.audit-stat-label { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.audit-conv-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.audit-conv-card:hover { border-color: var(--border-strong); background: var(--bg-muted); }
+.audit-risk {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.risk-high { background: var(--red); }
+.risk-medium { background: var(--orange); }
+.risk-low { background: var(--green); }
+.audit-conv-info { flex: 1; }
+.audit-conv-name { font-size: 13px; font-weight: 500; }
+.audit-conv-summary { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.audit-conv-score { font-size: 13px; font-weight: 600; }
+
+/* ── Knowledge Base ── */
+.kb-upload-zone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  text-align: center;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+  transition: all var(--transition);
+  cursor: pointer;
+}
+.kb-upload-zone:hover { border-color: var(--accent); background: var(--accent-light); }
+.kb-upload-icon { font-size: 28px; margin-bottom: 8px; }
+.kb-upload-text { font-size: 13px; }
+.kb-doc-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 6px;
+}
+.kb-doc-icon {
+  width: 32px; height: 32px;
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.kb-doc-icon.pdf { background: var(--red-light); color: var(--red); }
+.kb-doc-icon.word { background: var(--accent-light); color: var(--accent); }
+.kb-doc-icon.txt { background: var(--bg-muted); color: var(--text-muted); }
+.kb-doc-info { flex: 1; }
+.kb-doc-name { font-size: 13px; font-weight: 500; }
+.kb-doc-size { font-size: 11px; color: var(--text-muted); }
+
+/* ── Settings ── */
+.settings-section { margin-bottom: 24px; }
+.settings-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.settings-field { margin-bottom: 14px; }
+.settings-label { font-size: 12px; font-weight: 500; color: var(--text-secondary); margin-bottom: 4px; }
+.settings-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 13px;
+  transition: border-color var(--transition);
+}
+.settings-input:focus { border-color: var(--border-focus); }
+.settings-select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 13px;
+  background: var(--bg-card);
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23999' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+}
+
+/* ── Canvas views (list/detail) ── */
+.canvas-view { display: none; }
+.canvas-view.active { display: block; }
+.back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+  padding: 4px 8px 4px 2px;
+  border-radius: var(--radius);
+  transition: all var(--transition);
+}
+.back-btn:hover { color: var(--text); background: var(--bg-hover); }
+.list-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.list-card:hover { border-color: var(--border-strong); background: var(--bg-muted); }
+.list-card-icon {
+  width: 40px; height: 40px;
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.list-card-icon.test-icon { background: var(--green-light); }
+.list-card-icon.audit-icon { background: var(--accent-light); }
+.list-card-info { flex: 1; min-width: 0; }
+.list-card-name { font-size: 14px; font-weight: 500; }
+.list-card-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.list-card-status { flex-shrink: 0; }
+.detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.detail-title { font-size: 18px; font-weight: 600; }
+.detail-subtitle { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.inner-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+  gap: 0;
+}
+.inner-tab {
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  border-bottom: 2px solid transparent;
+  transition: all var(--transition);
+}
+.inner-tab:hover { color: var(--text-secondary); }
+.inner-tab.active { color: var(--text); border-bottom-color: var(--text); }
+.inner-tab-content { display: none; }
+.inner-tab-content.active { display: block; }
+.history-run {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.history-run:hover { border-color: var(--border-strong); background: var(--bg-muted); }
+.history-run-num { font-size: 13px; font-weight: 600; color: var(--text-secondary); width: 40px; }
+.history-run-info { flex: 1; }
+.history-run-score { font-size: 12px; font-weight: 500; }
+.history-run-time { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.history-run-badge { flex-shrink: 0; }
+.audit-detail-turn { padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.audit-detail-turn:last-child { border-bottom: none; }
+.audit-detail-role { font-size: 11px; font-weight: 600; margin-bottom: 4px; }
+.audit-detail-text { font-size: 13px; line-height: 1.6; }
+.audit-eval-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin-bottom: 10px; }
+.audit-eval-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+.audit-eval-item { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 4px 0; }
+.audit-eval-label { flex: 1; color: var(--text-secondary); }
+.audit-eval-value { font-weight: 600; }
+.audit-detail-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.audit-transcript-box { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.audit-transcript-title { font-size: 12px; font-weight: 600; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--bg-muted); color: var(--text-secondary); }
+
+/* ═══════════════════
+   AUDIT CONFIG CARD
+   ═══════════════════ */
+.audit-config {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
+  z-index: 200;
+  display: none;
+  flex-direction: column;
+  animation: panelIn 0.2s ease;
+}
+.audit-config.visible { display: flex; }
+.audit-config-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.audit-config-title { font-size: 14px; font-weight: 600; }
+.audit-config-close {
+  width: 24px; height: 24px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 4px;
+  color: var(--text-muted);
+}
+.audit-config-close:hover { background: var(--bg-hover); color: var(--text); }
+.audit-config-body { padding: 14px; }
+.audit-config-section { margin-bottom: 14px; }
+.audit-config-section:last-child { margin-bottom: 0; }
+.audit-config-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+.audit-upload-zone {
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  text-align: center;
+  color: var(--text-muted);
+  transition: all var(--transition);
+  cursor: pointer;
+  font-size: 13px;
+}
+.audit-upload-zone:hover { border-color: var(--accent); background: var(--accent-light); }
+.audit-upload-hint { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+.audit-file-preview {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--bg-muted);
+  border-radius: var(--radius);
+  font-size: 12px;
+  margin-top: 8px;
+}
+.audit-file-preview.has-file { display: flex; }
+.audit-file-name { flex: 1; font-weight: 500; }
+.audit-file-remove { color: var(--text-muted); font-size: 14px; cursor: pointer; }
+.audit-file-remove:hover { color: var(--red); }
+.audit-kb-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.audit-kb-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.audit-kb-chip:hover { border-color: var(--border-strong); }
+.audit-kb-chip.selected {
+  background: var(--accent-light);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.audit-config-footer {
+  border-top: 1px solid var(--border);
+  padding: 10px 14px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* ═══════════════════
+   TEST FLOW CONFIG CARD
+   ═══════════════════ */
+.flow-config-card {
+  border: 1px solid #a7f3d0;
+  background: rgba(236,253,245,0.8);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  margin-top: 10px;
+}
+.flow-config-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.flow-config-body { flex: 1; }
+.flow-config-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #064e3b;
+  margin-bottom: 6px;
+}
+.flow-config-title svg { flex-shrink: 0; }
+.flow-config-desc {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #065f46;
+  margin-bottom: 4px;
+}
+.flow-config-hint {
+  font-size: 12px;
+  color: rgba(6,95,70,0.7);
+}
+.flow-config-routes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.flow-route-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: rgba(167,243,208,0.4);
+  border-radius: 4px;
+  font-size: 11px;
+  color: #064e3b;
+  font-weight: 500;
+}
+.flow-route-arrow { color: rgba(6,78,59,0.4); }
+.btn-emerald {
+  padding: 6px 14px;
+  background: #059669;
+  color: white;
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-weight: 500;
+  flex-shrink: 0;
+  transition: all var(--transition);
+}
+.btn-emerald:hover { background: #047857; }
+
+/* ═══════════════════════════════════
+   COMMAND PALETTE (modal)
+   ═══════════════════════════════════ */
+.cmd-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: var(--bg-overlay);
+  z-index: 500;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 20vh;
+}
+.cmd-overlay.visible { display: flex; }
+.cmd-dialog {
+  width: 520px;
+  background: var(--bg-card);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+  animation: cmdIn 0.2s ease;
+}
+@keyframes cmdIn {
+  from { opacity: 0; transform: scale(0.96) translateY(-8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.cmd-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.cmd-search-icon { color: var(--text-muted); flex-shrink: 0; }
+.cmd-search input {
+  flex: 1;
+  font-size: 15px;
+}
+.cmd-search input::placeholder { color: var(--text-muted); }
+.cmd-group { padding: 6px; }
+.cmd-group-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 8px 10px 4px;
+}
+.cmd-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.cmd-item:hover { background: var(--bg-hover); }
+.cmd-item-icon { font-size: 16px; width: 24px; text-align: center; }
+.cmd-item-text { font-size: 13px; flex: 1; }
+.cmd-item-shortcut {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex; gap: 3px;
+}
+.cmd-item-shortcut kbd {
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 11px;
+  background: var(--bg-muted);
+}
+.cmd-footer {
+  border-top: 1px solid var(--border);
+  padding: 8px 16px;
+  display: flex; gap: 16px;
+}
+.cmd-footer-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.cmd-footer-hint kbd {
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-family: inherit;
+  font-size: 10px;
+  background: var(--bg-muted);
+}
+
+/* ═══════════════════
+   ANIMATIONS
+   ═══════════════════ */
+.fade-in {
+  animation: fadeIn 0.3s ease;
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ═══════════════════
+   STREAMING INDICATOR
+   ═══════════════════ */
+.streaming-dot {
+  display: inline-block;
+  width: 6px; height: 6px;
+  background: var(--text);
+  border-radius: 50%;
+  animation: blink 1.2s infinite;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0.2; }
+}
+
+/* ═══════════════════
+   RESULT CARDS (in conversation)
+   ═══════════════════ */
+.result-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin-top: 10px;
+  transition: border-color 0.15s;
+  cursor: pointer;
+}
+.result-card:hover { border-color: var(--border-strong); }
+.result-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--bg-muted);
+  border-bottom: 1px solid var(--border);
+}
+.result-card-icon {
+  width: 32px; height: 32px;
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.result-card-icon.test { background: var(--green-light); }
+.result-card-icon.audit { background: var(--accent-light); }
+.result-card-title { font-size: 13px; font-weight: 600; }
+.result-card-subtitle { font-size: 11px; color: var(--text-muted); }
+.result-card-badge { margin-left: auto; flex-shrink: 0; }
+.result-card-body {
+  padding: 12px 14px;
+  display: flex;
+  gap: 12px;
+}
+.result-card-stat {
+  flex: 1;
+  text-align: center;
+}
+.result-card-stat-value { font-size: 18px; font-weight: 700; }
+.result-card-stat-label { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.result-card-footer {
+  border-top: 1px solid var(--border);
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.result-card-link {
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ═══════════════════
+   INPUT QUICK ACTIONS
+   ═══════════════════ */
+.input-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px 8px;
+}
+.input-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  font-size: 12px;
+  color: var(--text-muted);
+  transition: all var(--transition);
+}
+.input-action-btn:hover {
+  border-color: var(--border-strong);
+  color: var(--text-secondary);
+  background: var(--bg-muted);
+}
+.input-action-btn span { font-size: 13px; }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- ═══ TOP BAR ═══ -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <button class="sidebar-toggle" onclick="toggleSidebar()" title="Toggle sidebar">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+      </button>
+      <button class="project-switcher" onclick="toggleProjectDropdown(event)">
+        <span>📋</span>
+        <span id="currentProjectName">电商客服项目</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+    </div>
+    <div class="topbar-center">
+      <button class="cmd-palette-trigger" onclick="openCmdPalette()">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
+        搜索 Prompt、测试、文档...
+        <kbd>⌘K</kbd>
+      </button>
+    </div>
+    <div class="topbar-right">
+      <button class="topbar-btn" onclick="openCanvas('knowledge')" title="知识库">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+      </button>
+      <button class="topbar-btn" onclick="openCanvas('settings')" title="设置">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ═══ MAIN LAYOUT ═══ -->
+  <div class="main">
+    <!-- ═══ LEFT SIDEBAR ═══ -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <h3>对话</h3>
+        <button class="new-chat-btn" onclick="newChat()" title="新建对话">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+      </div>
+      <div class="sidebar-list">
+        <div class="sidebar-group-label">今天</div>
+        <div class="sidebar-item active" onclick="selectChat(this)">
+          <span class="sidebar-item-text">优化订单查询 Prompt</span>
+          <span class="sidebar-item-time">10分钟前</span>
+          <button class="sidebar-item-delete" onclick="event.stopPropagation()">×</button>
+        </div>
+        <div class="sidebar-item" onclick="selectChat(this)">
+          <span class="sidebar-item-text">创建退款流程测试集</span>
+          <span class="sidebar-item-time">2小时前</span>
+          <button class="sidebar-item-delete" onclick="event.stopPropagation()">×</button>
+        </div>
+        <div class="sidebar-item" onclick="selectChat(this)">
+          <span class="sidebar-item-text">质检上周客服对话</span>
+          <span class="sidebar-item-time">3小时前</span>
+          <button class="sidebar-item-delete" onclick="event.stopPropagation()">×</button>
+        </div>
+        <div class="sidebar-group-label">昨天</div>
+        <div class="sidebar-item" onclick="selectChat(this)">
+          <span class="sidebar-item-text">新建商品推荐 Prompt</span>
+          <span class="sidebar-item-time">昨天</span>
+          <button class="sidebar-item-delete" onclick="event.stopPropagation()">×</button>
+        </div>
+        <div class="sidebar-item" onclick="selectChat(this)">
+          <span class="sidebar-item-text">路由测试 — 意图分发</span>
+          <span class="sidebar-item-time">昨天</span>
+          <button class="sidebar-item-delete" onclick="event.stopPropagation()">×</button>
+        </div>
+        <div class="sidebar-group-label">更早</div>
+        <div class="sidebar-item" onclick="selectChat(this)">
+          <span class="sidebar-item-text">知识库 FAQ 更新</span>
+          <span class="sidebar-item-time">3天前</span>
+          <button class="sidebar-item-delete" onclick="event.stopPropagation()">×</button>
+        </div>
+        <div class="sidebar-item" onclick="selectChat(this)">
+          <span class="sidebar-item-text">投诉处理流程优化</span>
+          <span class="sidebar-item-time">5天前</span>
+          <button class="sidebar-item-delete" onclick="event.stopPropagation()">×</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ═══ CONVERSATION AREA ═══ -->
+    <section class="conversation" id="conversation">
+      <div class="messages" id="messagesArea">
+        <div class="messages-inner" id="messagesInner">
+          <!-- Message 1: User -->
+          <div class="message fade-in">
+            <div class="message-avatar user">你</div>
+            <div class="message-body">
+              <div class="message-role">你</div>
+              <div class="message-content">
+                <p>帮我优化一下订单查询的 Prompt，现在回复太机械了，客户体验不好</p>
+              </div>
+              <div class="message-refs">
+                <span class="message-ref">📋 订单查询Prompt</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Message 2: Assistant -->
+          <div class="message fade-in">
+            <div class="message-avatar assistant">AI</div>
+            <div class="message-body">
+              <div class="message-role">Agent</div>
+              <div class="message-content">
+                <p>我已经分析了当前的「订单查询 Prompt」，发现了几个问题：</p>
+                <p>1. 回复模板过于固定，缺少语气变化<br>
+                2. 没有针对不同订单状态做差异化表达<br>
+                3. 缺少共情语句（如发货延迟时的安抚话术）</p>
+                <p>我的修改计划：在保持信息完整性的前提下，增加语气多样性和场景化表达。</p>
+              </div>
+              <!-- Agent Action Card -->
+              <div class="agent-action">
+                <div class="agent-action-header">
+                  <span class="agent-action-dot"></span>
+                  修改 Prompt: 订单查询
+                </div>
+                <div style="font-size:12px;color:var(--text-secondary);line-height:1.5;">
+                  <div>+ 增加 3 种语气模板（温和/正式/轻松）</div>
+                  <div>+ 按订单状态分支处理（已发货/配送中/延迟）</div>
+                  <div>+ 添加共情回复模块</div>
+                </div>
+                <div class="agent-action-btns">
+                  <button class="btn-primary" onclick="openCanvas('prompt')">查看修改</button>
+                  <button class="btn-secondary">修改计划</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Message 3: Agent - routing flow config -->
+          <div class="message fade-in">
+            <div class="message-avatar assistant">AI</div>
+            <div class="message-body">
+              <div class="message-role">Agent</div>
+              <div class="message-content">
+                <p>我检测到订单查询涉及多个 Prompt 协作（意图路由 → 子 Prompt），建议按路由模式创建测试集：</p>
+              </div>
+              <!-- Test Flow Config Card (emerald) -->
+              <div class="flow-config-card">
+                <div class="flow-config-header">
+                  <div class="flow-config-body">
+                    <div class="flow-config-title">
+                      <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+                      多 Prompt 业务流程
+                    </div>
+                    <div class="flow-config-desc">入口 Prompt 识别用户意图，路由到对应的处理 Prompt</div>
+                    <div class="flow-config-hint">已配置 3 条 intent 路由，保存后会继续生成测试集。</div>
+                    <div class="flow-config-routes">
+                      <span class="flow-route-chip">订单查询 <span class="flow-route-arrow">→</span> 订单查询Prompt</span>
+                      <span class="flow-route-chip">退款申请 <span class="flow-route-arrow">→</span> 退款处理Prompt</span>
+                      <span class="flow-route-chip">投诉 <span class="flow-route-arrow">→</span> 投诉处理Prompt</span>
+                    </div>
+                  </div>
+                  <button class="btn-emerald">配置业务流程</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Message 4: User -->
+          <div class="message fade-in">
+            <div class="message-avatar user">你</div>
+            <div class="message-body">
+              <div class="message-role">你</div>
+              <div class="message-content">
+                <p>不错，改好之后帮我跑一下测试看看效果</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Message 4: Agent - test result card -->
+          <div class="message fade-in">
+            <div class="message-avatar assistant">AI</div>
+            <div class="message-body">
+              <div class="message-role">Agent</div>
+              <div class="message-content">
+                <p>测试已完成，以下是「订单查询测试集」的运行结果：</p>
+              </div>
+              <!-- Test Result Card -->
+              <div class="result-card" onclick="openCanvas('test'); setTimeout(()=>showTestDetail('订单查询测试集'), 100);">
+                <div class="result-card-header">
+                  <div class="result-card-icon test">🧪</div>
+                  <div>
+                    <div class="result-card-title">订单查询测试集</div>
+                    <div class="result-card-subtitle">4 个用例 · 路由模式 · GPT-4o</div>
+                  </div>
+                  <span class="library-item-status status-active result-card-badge">已完成</span>
+                </div>
+                <div class="result-card-body">
+                  <div class="result-card-stat">
+                    <div class="result-card-stat-value" style="color:var(--green)">85</div>
+                    <div class="result-card-stat-label">总评分</div>
+                  </div>
+                  <div class="result-card-stat">
+                    <div class="result-card-stat-value">3/4</div>
+                    <div class="result-card-stat-label">通过</div>
+                  </div>
+                  <div class="result-card-stat">
+                    <div class="result-card-stat-value">75%</div>
+                    <div class="result-card-stat-label">意图匹配</div>
+                  </div>
+                </div>
+                <div class="result-card-footer">
+                  <span class="result-card-link">查看完整报告 →</span>
+                  <span style="font-size:11px;color:var(--text-muted)">刚刚</span>
+                </div>
+              </div>
+              <div class="message-content" style="margin-top:10px;">
+                <p>整体评分 85 分，3/4 通过。「退款中订单查询」得分较低（62分），主要问题是缺少退款进度的具体信息。要我针对这个用例优化一下 Prompt 吗？</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Message 5: User -->
+          <div class="message fade-in">
+            <div class="message-avatar user">你</div>
+            <div class="message-body">
+              <div class="message-role">你</div>
+              <div class="message-content">
+                <p>好的，再帮我质检一下上周的客服对话，看看有没有类似的问题</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Message 6: Agent - audit result card -->
+          <div class="message fade-in">
+            <div class="message-avatar assistant">AI</div>
+            <div class="message-body">
+              <div class="message-role">Agent</div>
+              <div class="message-content">
+                <p>质检完成，发现了一些需要关注的问题：</p>
+              </div>
+              <!-- Audit Result Card -->
+              <div class="result-card" onclick="openCanvas('audit'); setTimeout(()=>showAuditDetail('上周客服对话质检'), 100);">
+                <div class="result-card-header">
+                  <div class="result-card-icon audit">🔍</div>
+                  <div>
+                    <div class="result-card-title">上周客服对话质检</div>
+                    <div class="result-card-subtitle">28 段对话 · 刚刚完成</div>
+                  </div>
+                  <span class="library-item-status status-active result-card-badge">已完成</span>
+                </div>
+                <div class="result-card-body">
+                  <div class="result-card-stat">
+                    <div class="result-card-stat-value" style="color:var(--green)">82%</div>
+                    <div class="result-card-stat-label">通过率</div>
+                  </div>
+                  <div class="result-card-stat">
+                    <div class="result-card-stat-value" style="color:var(--orange)">76%</div>
+                    <div class="result-card-stat-label">知识准确</div>
+                  </div>
+                  <div class="result-card-stat">
+                    <div class="result-card-stat-value" style="color:var(--red)">3</div>
+                    <div class="result-card-stat-label">高风险</div>
+                  </div>
+                </div>
+                <div class="result-card-footer">
+                  <span class="result-card-link">查看完整报告 →</span>
+                  <span style="font-size:11px;color:var(--text-muted)">刚刚</span>
+                </div>
+              </div>
+              <div class="message-content" style="margin-top:10px;">
+                <p>有 3 段高风险对话，主要问题集中在退款流程上——和测试中发现的问题一致。建议优先修复退款场景的 Prompt。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chat Input -->
+      <div class="input-area">
+        <div class="input-wrapper" id="inputWrapper">
+          <!-- Audit Config Card -->
+          <div class="audit-config" id="auditConfigPanel">
+            <div class="audit-config-header">
+              <div class="audit-config-title">🔍 新建质检任务</div>
+              <button class="audit-config-close" onclick="hideAuditConfig()">×</button>
+            </div>
+            <div class="audit-config-body">
+              <div class="audit-config-section">
+                <div class="audit-config-label">📄 对话文件</div>
+                <div class="audit-upload-zone" id="auditUploadZone" onclick="simulateFileUpload()">
+                  <div>点击或拖拽上传对话文件</div>
+                  <div class="audit-upload-hint">支持 .xls, .xlsx 格式</div>
+                </div>
+                <div class="audit-file-preview" id="auditFilePreview">
+                  <span>📊</span>
+                  <span class="audit-file-name" id="auditFileName"></span>
+                  <span class="audit-file-remove" onclick="removeAuditFile()">×</span>
+                </div>
+              </div>
+              <div class="audit-config-section">
+                <div class="audit-config-label">📚 质检基准（知识库文档）</div>
+                <div class="audit-kb-chips">
+                  <button class="audit-kb-chip selected" onclick="toggleKbChip(this)">
+                    <span>📄</span> 产品手册 v3.2
+                  </button>
+                  <button class="audit-kb-chip selected" onclick="toggleKbChip(this)">
+                    <span>📄</span> 退款政策说明
+                  </button>
+                  <button class="audit-kb-chip" onclick="toggleKbChip(this)">
+                    <span>📄</span> 常见问题 FAQ
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="audit-config-footer">
+              <button class="btn-secondary" onclick="hideAuditConfig()">取消</button>
+              <button class="btn-primary" onclick="hideAuditConfig()">开始质检</button>
+            </div>
+          </div>
+
+          <!-- @ Mention Panel -->
+          <div class="mention-panel" id="mentionPanel">
+            <div class="mention-search">
+              <span class="mention-search-icon">
+                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
+              </span>
+              <input type="text" placeholder="搜索 Prompt 或文档..." id="mentionSearchInput" oninput="filterMentions(this.value)">
+            </div>
+            <div class="mention-tabs">
+              <button class="mention-tab active" onclick="switchMentionTab(this, 'all')">全部</button>
+              <button class="mention-tab" onclick="switchMentionTab(this, 'prompt')">Prompt</button>
+              <button class="mention-tab" onclick="switchMentionTab(this, 'doc')">文档</button>
+            </div>
+            <div class="mention-list" id="mentionList">
+              <!-- Prompts -->
+              <div class="mention-item" data-type="prompt" data-name="订单查询" onclick="toggleMention(this)">
+                <div class="mention-check"></div>
+                <div class="mention-item-info">
+                  <div class="mention-item-name">订单查询</div>
+                  <div class="mention-item-desc">根据订单号或用户信息查询订单状态并给出回复...</div>
+                </div>
+                <span class="mention-item-badge badge-prompt">Prompt</span>
+              </div>
+              <div class="mention-item" data-type="prompt" data-name="退款处理" onclick="toggleMention(this)">
+                <div class="mention-check"></div>
+                <div class="mention-item-info">
+                  <div class="mention-item-name">退款处理</div>
+                  <div class="mention-item-desc">处理用户退款申请，判断退款条件并给出方案...</div>
+                </div>
+                <span class="mention-item-badge badge-prompt">Prompt</span>
+              </div>
+              <div class="mention-item" data-type="prompt" data-name="商品推荐" onclick="toggleMention(this)">
+                <div class="mention-check"></div>
+                <div class="mention-item-info">
+                  <div class="mention-item-name">商品推荐</div>
+                  <div class="mention-item-desc">根据用户浏览和购买历史推荐相关商品...</div>
+                </div>
+                <span class="mention-item-badge badge-prompt">Prompt</span>
+              </div>
+              <div class="mention-item" data-type="prompt" data-name="投诉处理" onclick="toggleMention(this)">
+                <div class="mention-check"></div>
+                <div class="mention-item-info">
+                  <div class="mention-item-name">投诉处理</div>
+                  <div class="mention-item-desc">处理客户投诉，安抚情绪并提供解决方案...</div>
+                </div>
+                <span class="mention-item-badge badge-prompt">Prompt</span>
+              </div>
+              <div class="mention-item" data-type="prompt" data-name="意图路由入口" onclick="toggleMention(this)">
+                <div class="mention-check"></div>
+                <div class="mention-item-info">
+                  <div class="mention-item-name">意图路由入口</div>
+                  <div class="mention-item-desc">识别用户意图并路由到对应的处理 Prompt...</div>
+                </div>
+                <span class="mention-item-badge badge-prompt">Prompt</span>
+              </div>
+              <!-- Documents -->
+              <div class="mention-item" data-type="doc" data-name="产品手册 v3.2" onclick="toggleMention(this)">
+                <div class="mention-check"></div>
+                <div class="mention-item-info">
+                  <div class="mention-item-name">产品手册 v3.2</div>
+                  <div class="mention-item-desc">PDF · 包含所有产品规格、功能说明和使用指南</div>
+                </div>
+                <span class="mention-item-badge badge-doc">PDF</span>
+              </div>
+              <div class="mention-item" data-type="doc" data-name="退款政策说明" onclick="toggleMention(this)">
+                <div class="mention-check"></div>
+                <div class="mention-item-info">
+                  <div class="mention-item-name">退款政策说明</div>
+                  <div class="mention-item-desc">DOCX · 详细退款条件、流程和时限说明</div>
+                </div>
+                <span class="mention-item-badge badge-doc">Word</span>
+              </div>
+              <div class="mention-item" data-type="doc" data-name="常见问题 FAQ" onclick="toggleMention(this)">
+                <div class="mention-check"></div>
+                <div class="mention-item-info">
+                  <div class="mention-item-name">常见问题 FAQ</div>
+                  <div class="mention-item-desc">TXT · 200+ 条常见客户问题与标准回答</div>
+                </div>
+                <span class="mention-item-badge badge-doc">TXT</span>
+              </div>
+            </div>
+            <div class="mention-footer" id="mentionFooter" style="display:none">
+              <span class="mention-footer-hint">已选 <strong id="mentionCount">0</strong> 项</span>
+              <button class="mention-footer-btn" onclick="confirmMentions()">插入引用</button>
+            </div>
+          </div>
+
+          <div class="input-chips" id="inputChips"></div>
+          <div class="input-row">
+            <textarea class="chat-input" id="chatInput" placeholder="输入消息，@ 引用 Prompt 或文档..." rows="1"
+              oninput="handleInput(event)" onkeydown="handleKeydown(event)"></textarea>
+            <button class="send-btn" title="发送" onclick="sendMessage()">
+              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2Z"/></svg>
+            </button>
+          </div>
+          <div class="input-actions">
+            <button class="input-action-btn" onclick="openCanvas('test')"><span>🧪</span> 测试</button>
+            <button class="input-action-btn" onclick="showAuditConfig()"><span>🔍</span> 质检</button>
+            <button class="input-action-btn" onclick="openCanvas('library')"><span>📋</span> Prompt</button>
+            <button class="input-action-btn" onclick="openCanvas('knowledge')"><span>📚</span> 知识库</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- ═══ CANVAS PANEL ═══ -->
+<div class="canvas-overlay" id="canvasOverlay" onclick="closeCanvas()"></div>
+<div class="canvas" id="canvas">
+  <div class="canvas-header">
+    <div class="canvas-tabs" id="canvasTabs">
+      <button class="canvas-tab active" data-panel="prompt" onclick="switchCanvasTab(this)">
+        <span class="canvas-tab-icon">✏️</span> Prompt
+      </button>
+      <button class="canvas-tab" data-panel="library" onclick="switchCanvasTab(this)">
+        <span class="canvas-tab-icon">📋</span> Prompt 库
+      </button>
+      <button class="canvas-tab" data-panel="test" onclick="switchCanvasTab(this)">
+        <span class="canvas-tab-icon">🧪</span> 测试
+      </button>
+      <button class="canvas-tab" data-panel="audit" onclick="switchCanvasTab(this)">
+        <span class="canvas-tab-icon">🔍</span> 质检
+      </button>
+      <button class="canvas-tab" data-panel="knowledge" onclick="switchCanvasTab(this)">
+        <span class="canvas-tab-icon">📚</span> 知识库
+      </button>
+      <button class="canvas-tab" data-panel="settings" onclick="switchCanvasTab(this)">
+        <span class="canvas-tab-icon">⚙️</span> 设置
+      </button>
+    </div>
+    <button class="canvas-close" onclick="closeCanvas()" title="关闭 (Esc)">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="canvas-body">
+    <!-- ── Prompt Editor ── -->
+    <div class="canvas-content active" id="panel-prompt">
+      <input type="text" class="prompt-editor-title" value="订单查询" placeholder="Prompt 标题">
+      <div class="prompt-field">
+        <div class="prompt-field-label">内容</div>
+        <textarea class="prompt-textarea">你是一位专业且温暖的电商客服助手。当用户查询订单状态时，请根据以下规则回复：
+
+## 回复风格
+- 使用友好、自然的语气，避免机械式回复
+- 先确认用户的需求，表达理解
+- 根据订单状态调整回复语气
+
+## 订单状态分支
+### 已发货 / 配送中
+"您的订单已经在路上啦！🚚 预计 {{delivery_date}} 送达。您可以通过快递单号 {{tracking_number}} 随时查看物流进度。"
+
+### 发货延迟
+"非常抱歉让您久等了 🙏 由于 {{delay_reason}}，您的订单发货时间有所推迟。我们正在加紧处理，预计 {{new_date}} 前为您发出。"
+
+### 退款中
+"您的退款申请我们已经收到并在处理中。预计 {{refund_days}} 个工作日内到账，届时请留意您的 {{payment_method}}。"
+
+## 变量
+- {{order_id}}: 订单编号
+- {{delivery_date}}: 预计送达日期
+- {{tracking_number}}: 快递单号</textarea>
+      </div>
+      <div class="prompt-field">
+        <div class="prompt-field-label">变量</div>
+        <div class="prompt-vars">
+          <span class="prompt-var">{{order_id}}</span>
+          <span class="prompt-var">{{delivery_date}}</span>
+          <span class="prompt-var">{{tracking_number}}</span>
+          <span class="prompt-var">{{delay_reason}}</span>
+          <span class="prompt-var">{{refund_days}}</span>
+          <span class="prompt-var">{{payment_method}}</span>
+        </div>
+      </div>
+      <div class="prompt-versions">
+        <div class="prompt-field-label">版本历史</div>
+        <div class="prompt-version-item">
+          <span class="prompt-version-dot"></span>
+          <div class="prompt-version-info">
+            <div class="prompt-version-label">v3 — 增加语气多样性和共情模块</div>
+            <div class="prompt-version-time">10 分钟前 · 由 Agent 修改</div>
+          </div>
+        </div>
+        <div class="prompt-version-item">
+          <span class="prompt-version-dot" style="background:var(--border-strong)"></span>
+          <div class="prompt-version-info">
+            <div class="prompt-version-label">v2 — 添加发货延迟场景</div>
+            <div class="prompt-version-time">昨天 14:30</div>
+          </div>
+        </div>
+        <div class="prompt-version-item">
+          <span class="prompt-version-dot" style="background:var(--border-strong)"></span>
+          <div class="prompt-version-info">
+            <div class="prompt-version-label">v1 — 初始版本</div>
+            <div class="prompt-version-time">3 天前</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Prompt Library ── -->
+    <div class="canvas-content" id="panel-library">
+      <div class="library-search">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input type="text" placeholder="搜索 Prompt...">
+      </div>
+      <div class="library-filters">
+        <button class="library-filter active">全部 (5)</button>
+        <button class="library-filter">已发布 (3)</button>
+        <button class="library-filter">草稿 (2)</button>
+      </div>
+      <div class="library-item" onclick="openCanvas('prompt')">
+        <div class="library-item-icon">📋</div>
+        <div class="library-item-info">
+          <div class="library-item-name">订单查询</div>
+          <div class="library-item-meta">v3 · 更新于 10 分钟前</div>
+        </div>
+        <span class="library-item-status status-active">已发布</span>
+      </div>
+      <div class="library-item">
+        <div class="library-item-icon">📋</div>
+        <div class="library-item-info">
+          <div class="library-item-name">退款处理</div>
+          <div class="library-item-meta">v2 · 更新于 2 天前</div>
+        </div>
+        <span class="library-item-status status-active">已发布</span>
+      </div>
+      <div class="library-item">
+        <div class="library-item-icon">📋</div>
+        <div class="library-item-info">
+          <div class="library-item-name">商品推荐</div>
+          <div class="library-item-meta">v1 · 更新于 3 天前</div>
+        </div>
+        <span class="library-item-status status-draft">草稿</span>
+      </div>
+      <div class="library-item">
+        <div class="library-item-icon">📋</div>
+        <div class="library-item-info">
+          <div class="library-item-name">投诉处理</div>
+          <div class="library-item-meta">v4 · 更新于 5 天前</div>
+        </div>
+        <span class="library-item-status status-active">已发布</span>
+      </div>
+      <div class="library-item">
+        <div class="library-item-icon">📋</div>
+        <div class="library-item-info">
+          <div class="library-item-name">意图路由入口</div>
+          <div class="library-item-meta">v1 · 更新于 1 周前</div>
+        </div>
+        <span class="library-item-status status-draft">草稿</span>
+      </div>
+    </div>
+
+    <!-- ── Test Workspace ── -->
+    <div class="canvas-content" id="panel-test">
+      <!-- LIST VIEW -->
+      <div class="canvas-view active" id="test-list">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+          <div style="font-size:18px;font-weight:600;">测试套件</div>
+        </div>
+        <div class="list-card" onclick="showTestDetail('订单查询测试集', 'completed')">
+          <div class="list-card-icon test-icon">🧪</div>
+          <div class="list-card-info">
+            <div class="list-card-name">订单查询测试集</div>
+            <div class="list-card-meta">4 个用例 · 路由模式 · 运行 3 次</div>
+          </div>
+          <span class="library-item-status status-active list-card-status">已完成</span>
+        </div>
+        <div class="list-card" onclick="showTestDetail('退款流程测试集', 'completed')">
+          <div class="list-card-icon test-icon">🧪</div>
+          <div class="list-card-info">
+            <div class="list-card-name">退款流程测试集</div>
+            <div class="list-card-meta">6 个用例 · 单 Prompt · 运行 5 次</div>
+          </div>
+          <span class="library-item-status status-active list-card-status">已完成</span>
+        </div>
+        <div class="list-card" onclick="showTestDetail('意图路由分发测试', 'draft')">
+          <div class="list-card-icon test-icon">🧪</div>
+          <div class="list-card-info">
+            <div class="list-card-name">意图路由分发测试</div>
+            <div class="list-card-meta">8 个用例 · 路由模式 · 未运行</div>
+          </div>
+          <span class="library-item-status status-draft list-card-status">草稿</span>
+        </div>
+        <div class="list-card" onclick="showTestDetail('投诉处理回归测试', 'running')">
+          <div class="list-card-icon test-icon">🧪</div>
+          <div class="list-card-info">
+            <div class="list-card-name">投诉处理回归测试</div>
+            <div class="list-card-meta">5 个用例 · 单 Prompt · 运行中</div>
+          </div>
+          <span class="library-item-status list-card-status" style="background:var(--accent-light);color:var(--accent);">运行中</span>
+        </div>
+      </div>
+
+      <!-- DETAIL VIEW -->
+      <div class="canvas-view" id="test-detail">
+        <button class="back-btn" onclick="showTestList()">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          返回列表
+        </button>
+        <div class="detail-header">
+          <div>
+            <div class="detail-title" id="testDetailTitle">订单查询测试集</div>
+            <div class="detail-subtitle">4 个用例 · 路由模式</div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-secondary" style="font-size:12px;padding:5px 12px;">路由配置</button>
+            <button class="btn-secondary" style="font-size:12px;padding:5px 12px;">配置</button>
+            <button class="btn-secondary" style="font-size:12px;padding:5px 12px;">重新生成预期结果</button>
+            <button class="btn-primary" style="font-size:12px;padding:5px 12px;">运行测试</button>
+          </div>
+        </div>
+
+        <!-- Inner tabs: Results / History -->
+        <div class="inner-tabs">
+          <button class="inner-tab active" onclick="switchInnerTab(this, 'test-results')">测试结果</button>
+          <button class="inner-tab" onclick="switchInnerTab(this, 'test-history')">历史记录 (3)</button>
+        </div>
+
+        <!-- Results tab -->
+        <div class="inner-tab-content active" id="test-results">
+          <div class="test-summary">
+            <div class="test-stat">
+              <div class="test-stat-value" style="color:var(--green)">85</div>
+              <div class="test-stat-label">总评分</div>
+            </div>
+            <div class="test-stat">
+              <div class="test-stat-value">3/4</div>
+              <div class="test-stat-label">通过率</div>
+            </div>
+            <div class="test-stat">
+              <div class="test-stat-value">75%</div>
+              <div class="test-stat-label">意图匹配</div>
+            </div>
+          </div>
+          <div class="test-case-card">
+            <div class="test-case-header" onclick="toggleTestCase(this)">
+              <div class="test-case-status test-pass">✓</div>
+              <span class="test-case-name">正常订单查询</span>
+              <span class="test-case-score">92分</span>
+            </div>
+            <div class="test-case-detail open">
+              <div class="test-columns">
+                <div class="test-column">
+                  <div class="test-column-title">期望输出</div>
+                  <div class="test-turn"><div class="test-turn-role user">User</div><div class="test-turn-text">我想查一下订单 202403150001 的状态</div></div>
+                  <div class="test-turn"><div class="test-turn-role assistant">Assistant</div><div class="test-turn-text">您好！我来帮您查看订单信息 📦 您的订单已发货，预计明天送达...</div></div>
+                </div>
+                <div class="test-column">
+                  <div class="test-column-title">实际输出</div>
+                  <div class="test-turn"><div class="test-turn-role user">User</div><div class="test-turn-text">我想查一下订单 202403150001 的状态</div></div>
+                  <div class="test-turn"><div class="test-turn-role assistant">Assistant</div><div class="test-turn-text">您好呀！我马上帮您看一下 ☺️ 您的订单已经发出，正在配送中，预计明天就能到啦...</div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="test-case-card">
+            <div class="test-case-header" onclick="toggleTestCase(this)">
+              <div class="test-case-status test-pass">✓</div>
+              <span class="test-case-name">发货延迟安抚</span>
+              <span class="test-case-score">88分</span>
+            </div>
+            <div class="test-case-detail"></div>
+          </div>
+          <div class="test-case-card">
+            <div class="test-case-header" onclick="toggleTestCase(this)">
+              <div class="test-case-status test-fail">✗</div>
+              <span class="test-case-name">退款中订单查询</span>
+              <span class="test-case-score">62分</span>
+            </div>
+            <div class="test-case-detail"></div>
+          </div>
+          <div class="test-case-card">
+            <div class="test-case-header" onclick="toggleTestCase(this)">
+              <div class="test-case-status test-pass">✓</div>
+              <span class="test-case-name">多次催促客户</span>
+              <span class="test-case-score">90分</span>
+            </div>
+            <div class="test-case-detail"></div>
+          </div>
+        </div>
+
+        <!-- History tab -->
+        <div class="inner-tab-content" id="test-history">
+          <div class="history-run" onclick="switchInnerTab(document.querySelector('.inner-tab:first-child'), 'test-results')">
+            <div class="history-run-num">#3</div>
+            <div class="history-run-info">
+              <div class="history-run-score">85 分 · 3/4 通过</div>
+              <div class="history-run-time">今天 10:30 · GPT-4o</div>
+            </div>
+            <span class="library-item-status status-active history-run-badge">最新</span>
+          </div>
+          <div class="history-run">
+            <div class="history-run-num">#2</div>
+            <div class="history-run-info">
+              <div class="history-run-score">72 分 · 2/4 通过</div>
+              <div class="history-run-time">昨天 16:45 · GPT-4o</div>
+            </div>
+            <span class="library-item-status status-draft history-run-badge" style="font-size:11px">查看</span>
+          </div>
+          <div class="history-run">
+            <div class="history-run-num">#1</div>
+            <div class="history-run-info">
+              <div class="history-run-score">58 分 · 1/4 通过</div>
+              <div class="history-run-time">3 天前 · DeepSeek-V3</div>
+            </div>
+            <span class="library-item-status status-draft history-run-badge" style="font-size:11px">查看</span>
+          </div>
+          <div style="margin-top:16px;padding:14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-muted);">
+            <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;">趋势</div>
+            <div style="display:flex;align-items:flex-end;gap:8px;height:60px;">
+              <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">
+                <div style="background:var(--red-light);width:100%;border-radius:4px;height:35px;"></div>
+                <span style="font-size:10px;color:var(--text-muted)">#1</span>
+              </div>
+              <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">
+                <div style="background:var(--orange-light);width:100%;border-radius:4px;height:43px;"></div>
+                <span style="font-size:10px;color:var(--text-muted)">#2</span>
+              </div>
+              <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">
+                <div style="background:var(--green-light);width:100%;border-radius:4px;height:51px;"></div>
+                <span style="font-size:10px;color:var(--text-muted)">#3</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Audit Workspace ── -->
+    <div class="canvas-content" id="panel-audit">
+      <!-- LIST VIEW -->
+      <div class="canvas-view active" id="audit-list">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+          <div style="font-size:18px;font-weight:600;">质检任务</div>
+        </div>
+        <div class="list-card" onclick="showAuditDetail('上周客服对话质检')">
+          <div class="list-card-icon audit-icon">🔍</div>
+          <div class="list-card-info">
+            <div class="list-card-name">上周客服对话质检</div>
+            <div class="list-card-meta">28 段对话 · 完成于 3 小时前</div>
+          </div>
+          <span class="library-item-status status-active list-card-status">已完成</span>
+        </div>
+        <div class="list-card" onclick="showAuditDetail('3月第2周质检')">
+          <div class="list-card-icon audit-icon">🔍</div>
+          <div class="list-card-info">
+            <div class="list-card-name">3月第2周质检</div>
+            <div class="list-card-meta">42 段对话 · 完成于 3 天前</div>
+          </div>
+          <span class="library-item-status status-active list-card-status">已完成</span>
+        </div>
+        <div class="list-card" onclick="showAuditDetail('新客服培训评估')">
+          <div class="list-card-icon audit-icon">🔍</div>
+          <div class="list-card-info">
+            <div class="list-card-name">新客服培训评估</div>
+            <div class="list-card-meta">15 段对话 · 解析中</div>
+          </div>
+          <span class="library-item-status list-card-status" style="background:var(--orange-light);color:var(--orange);">解析中</span>
+        </div>
+      </div>
+
+      <!-- REPORT VIEW -->
+      <div class="canvas-view" id="audit-report">
+        <button class="back-btn" onclick="showAuditList()">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          返回列表
+        </button>
+        <div class="detail-header">
+          <div>
+            <div class="detail-title" id="auditDetailTitle">上周客服对话质检</div>
+            <div class="detail-subtitle">28 段对话 · 完成于 3 小时前</div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-secondary" style="font-size:12px;padding:5px 12px;">导出报告</button>
+            <button class="btn-secondary" style="font-size:12px;padding:5px 12px;color:var(--red);border-color:var(--red);">删除</button>
+          </div>
+        </div>
+        <div class="audit-stats">
+          <div class="audit-stat">
+            <div class="audit-stat-value" style="color:var(--green)">82%</div>
+            <div class="audit-stat-label">整体通过率</div>
+          </div>
+          <div class="audit-stat">
+            <div class="audit-stat-value" style="color:var(--accent)">89%</div>
+            <div class="audit-stat-label">流程合规率</div>
+          </div>
+          <div class="audit-stat">
+            <div class="audit-stat-value" style="color:var(--orange)">76%</div>
+            <div class="audit-stat-label">知识准确率</div>
+          </div>
+          <div class="audit-stat">
+            <div class="audit-stat-value" style="color:var(--red)">3</div>
+            <div class="audit-stat-label">高风险对话</div>
+          </div>
+        </div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:10px;">对话列表</div>
+        <div class="audit-conv-card" onclick="showAuditConvDetail('#1042')">
+          <div class="audit-risk risk-high"></div>
+          <div class="audit-conv-info">
+            <div class="audit-conv-name">对话 #1042 — 退款纠纷</div>
+            <div class="audit-conv-summary">未按退款政策回复，遗漏关键时限信息</div>
+          </div>
+          <span class="audit-conv-score" style="color:var(--red)">45分</span>
+        </div>
+        <div class="audit-conv-card" onclick="showAuditConvDetail('#1038')">
+          <div class="audit-risk risk-high"></div>
+          <div class="audit-conv-info">
+            <div class="audit-conv-name">对话 #1038 — 商品质量投诉</div>
+            <div class="audit-conv-summary">安抚话术不当，升级流程缺失</div>
+          </div>
+          <span class="audit-conv-score" style="color:var(--red)">52分</span>
+        </div>
+        <div class="audit-conv-card" onclick="showAuditConvDetail('#1035')">
+          <div class="audit-risk risk-medium"></div>
+          <div class="audit-conv-info">
+            <div class="audit-conv-name">对话 #1035 — 配送时间询问</div>
+            <div class="audit-conv-summary">回复基本正确，但缺少主动关怀</div>
+          </div>
+          <span class="audit-conv-score" style="color:var(--orange)">71分</span>
+        </div>
+        <div class="audit-conv-card" onclick="showAuditConvDetail('#1030')">
+          <div class="audit-risk risk-low"></div>
+          <div class="audit-conv-info">
+            <div class="audit-conv-name">对话 #1030 — 常规订单查询</div>
+            <div class="audit-conv-summary">回复准确、流程规范</div>
+          </div>
+          <span class="audit-conv-score" style="color:var(--green)">94分</span>
+        </div>
+      </div>
+
+      <!-- CONVERSATION DETAIL VIEW -->
+      <div class="canvas-view" id="audit-conv-detail">
+        <button class="back-btn" onclick="backToAuditReport()">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          返回报告
+        </button>
+        <div class="detail-header">
+          <div>
+            <div class="detail-title">对话 #1042 — 退款纠纷</div>
+            <div class="detail-subtitle">
+              <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:50%;background:var(--red);display:inline-block;"></span> 高风险 · 45 分</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="audit-detail-columns">
+          <!-- Left: Transcript -->
+          <div>
+            <div class="audit-transcript-box">
+              <div class="audit-transcript-title">对话记录</div>
+              <div class="audit-detail-turn">
+                <div class="audit-detail-role" style="color:var(--accent)">用户</div>
+                <div class="audit-detail-text">你好，我三天前申请了退款，到现在还没到账，什么情况？</div>
+              </div>
+              <div class="audit-detail-turn">
+                <div class="audit-detail-role" style="color:var(--green)">客服</div>
+                <div class="audit-detail-text">您好，退款需要一定时间处理，请耐心等待。</div>
+              </div>
+              <div class="audit-detail-turn">
+                <div class="audit-detail-role" style="color:var(--accent)">用户</div>
+                <div class="audit-detail-text">到底要多久？你们页面上写的是 1-3 个工作日，现在已经超了</div>
+              </div>
+              <div class="audit-detail-turn">
+                <div class="audit-detail-role" style="color:var(--green)">客服</div>
+                <div class="audit-detail-text">非常抱歉给您带来不便，我这边帮您查一下。</div>
+              </div>
+              <div class="audit-detail-turn">
+                <div class="audit-detail-role" style="color:var(--accent)">用户</div>
+                <div class="audit-detail-text">查了吗？什么结果</div>
+              </div>
+              <div class="audit-detail-turn">
+                <div class="audit-detail-role" style="color:var(--green)">客服</div>
+                <div class="audit-detail-text">系统显示您的退款正在处理中，请再等等。</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right: Assessment -->
+          <div>
+            <div class="audit-eval-card">
+              <div class="audit-eval-title">流程评估</div>
+              <div class="audit-eval-item">
+                <span class="audit-eval-label">问候规范</span>
+                <span class="audit-eval-value" style="color:var(--green)">通过</span>
+              </div>
+              <div class="audit-eval-item">
+                <span class="audit-eval-label">身份确认</span>
+                <span class="audit-eval-value" style="color:var(--red)">未执行</span>
+              </div>
+              <div class="audit-eval-item">
+                <span class="audit-eval-label">问题确认与复述</span>
+                <span class="audit-eval-value" style="color:var(--orange)">部分</span>
+              </div>
+              <div class="audit-eval-item">
+                <span class="audit-eval-label">解决方案提供</span>
+                <span class="audit-eval-value" style="color:var(--red)">未提供</span>
+              </div>
+              <div class="audit-eval-item">
+                <span class="audit-eval-label">结束语</span>
+                <span class="audit-eval-value" style="color:var(--red)">缺失</span>
+              </div>
+            </div>
+            <div class="audit-eval-card">
+              <div class="audit-eval-title">知识问答评估</div>
+              <div class="audit-eval-item">
+                <span class="audit-eval-label">退款时限说明</span>
+                <span class="audit-eval-value" style="color:var(--red)">未提供具体时限</span>
+              </div>
+              <div class="audit-eval-item">
+                <span class="audit-eval-label">退款进度查询</span>
+                <span class="audit-eval-value" style="color:var(--red)">未给出结果</span>
+              </div>
+              <div class="audit-eval-item">
+                <span class="audit-eval-label">升级处理</span>
+                <span class="audit-eval-value" style="color:var(--red)">未触发</span>
+              </div>
+            </div>
+            <div class="audit-eval-card" style="background:var(--red-light);border-color:transparent;">
+              <div class="audit-eval-title" style="color:var(--red)">问题摘要</div>
+              <div style="font-size:12px;line-height:1.6;color:var(--text-secondary);">
+                客服未提供退款具体时限信息，未查询退款实际进度，对用户的焦虑情绪缺乏有效安抚。按退款政策，超过 3 个工作日未到账应主动升级处理，但客服未执行此流程。
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Knowledge Base ── -->
+    <div class="canvas-content" id="panel-knowledge">
+      <div style="font-size:18px;font-weight:600;margin-bottom:16px;">知识库</div>
+      <div class="kb-upload-zone">
+        <div class="kb-upload-icon">📄</div>
+        <div class="kb-upload-text">拖拽文件到此处，或点击上传<br><span style="font-size:12px;color:var(--text-muted)">支持 PDF、Word、TXT、Markdown</span></div>
+      </div>
+      <div style="font-size:13px;font-weight:600;margin-bottom:10px;">已上传文档 (3)</div>
+      <div class="kb-doc-item">
+        <div class="kb-doc-icon pdf">PDF</div>
+        <div class="kb-doc-info">
+          <div class="kb-doc-name">产品手册 v3.2.pdf</div>
+          <div class="kb-doc-size">2.4 MB · 上传于 3 天前</div>
+        </div>
+      </div>
+      <div class="kb-doc-item">
+        <div class="kb-doc-icon word">DOC</div>
+        <div class="kb-doc-info">
+          <div class="kb-doc-name">退款政策说明.docx</div>
+          <div class="kb-doc-size">156 KB · 上传于 5 天前</div>
+        </div>
+      </div>
+      <div class="kb-doc-item">
+        <div class="kb-doc-icon txt">TXT</div>
+        <div class="kb-doc-info">
+          <div class="kb-doc-name">常见问题 FAQ.txt</div>
+          <div class="kb-doc-size">89 KB · 上传于 1 周前</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Settings ── -->
+    <div class="canvas-content" id="panel-settings">
+      <div style="font-size:18px;font-weight:600;margin-bottom:20px;">设置</div>
+      <div class="settings-section">
+        <div class="settings-section-title">AI 模型配置</div>
+        <div class="settings-field">
+          <div class="settings-label">Provider</div>
+          <select class="settings-select settings-input">
+            <option>OpenAI</option>
+            <option>Claude</option>
+            <option>DeepSeek</option>
+            <option>通义千问</option>
+            <option>Kimi</option>
+            <option>GLM</option>
+          </select>
+        </div>
+        <div class="settings-field">
+          <div class="settings-label">Model</div>
+          <input class="settings-input" type="text" value="gpt-4o" placeholder="模型名称">
+        </div>
+        <div class="settings-field">
+          <div class="settings-label">API Key</div>
+          <input class="settings-input" type="password" value="sk-xxxxxxxxxxxxx" placeholder="API Key">
+        </div>
+        <div class="settings-field">
+          <div class="settings-label">Base URL (可选)</div>
+          <input class="settings-input" type="text" placeholder="https://api.openai.com/v1">
+        </div>
+      </div>
+      <div class="settings-section">
+        <div class="settings-section-title">全局业务信息</div>
+        <div class="settings-field">
+          <div class="settings-label">业务描述</div>
+          <textarea class="prompt-textarea" style="min-height:80px">我们是一家综合电商平台，主营家电、数码和日用品。客服团队使用 AI 辅助回复客户咨询。</textarea>
+        </div>
+        <div class="settings-field">
+          <div class="settings-label">业务目标</div>
+          <textarea class="prompt-textarea" style="min-height:60px">提升客服回复质量和一致性，减少人工介入率。</textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ COMMAND PALETTE ═══ -->
+<div class="cmd-overlay" id="cmdOverlay" onclick="closeCmdPalette()">
+  <div class="cmd-dialog" onclick="event.stopPropagation()">
+    <div class="cmd-search">
+      <span class="cmd-search-icon">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
+      </span>
+      <input type="text" placeholder="搜索或输入命令..." id="cmdInput" autofocus>
+    </div>
+    <div class="cmd-group">
+      <div class="cmd-group-label">快捷操作</div>
+      <div class="cmd-item" onclick="closeCmdPalette(); newChat();">
+        <span class="cmd-item-icon">💬</span>
+        <span class="cmd-item-text">新建对话</span>
+        <div class="cmd-item-shortcut"><kbd>⌘</kbd><kbd>N</kbd></div>
+      </div>
+      <div class="cmd-item" onclick="closeCmdPalette(); openCanvas('prompt');">
+        <span class="cmd-item-icon">✏️</span>
+        <span class="cmd-item-text">新建 Prompt</span>
+      </div>
+      <div class="cmd-item" onclick="closeCmdPalette(); openCanvas('test');">
+        <span class="cmd-item-icon">🧪</span>
+        <span class="cmd-item-text">新建测试集</span>
+      </div>
+      <div class="cmd-item" onclick="closeCmdPalette(); openCanvas('audit');">
+        <span class="cmd-item-icon">🔍</span>
+        <span class="cmd-item-text">新建质检任务</span>
+      </div>
+    </div>
+    <div class="cmd-group">
+      <div class="cmd-group-label">Prompt</div>
+      <div class="cmd-item" onclick="closeCmdPalette(); openCanvas('prompt');">
+        <span class="cmd-item-icon">📋</span>
+        <span class="cmd-item-text">订单查询</span>
+        <div class="cmd-item-shortcut" style="border:none;background:none"><span style="font-size:11px;color:var(--text-muted)">v3 · 已发布</span></div>
+      </div>
+      <div class="cmd-item" onclick="closeCmdPalette(); openCanvas('prompt');">
+        <span class="cmd-item-icon">📋</span>
+        <span class="cmd-item-text">退款处理</span>
+        <div class="cmd-item-shortcut" style="border:none;background:none"><span style="font-size:11px;color:var(--text-muted)">v2 · 已发布</span></div>
+      </div>
+      <div class="cmd-item" onclick="closeCmdPalette(); openCanvas('prompt');">
+        <span class="cmd-item-icon">📋</span>
+        <span class="cmd-item-text">商品推荐</span>
+        <div class="cmd-item-shortcut" style="border:none;background:none"><span style="font-size:11px;color:var(--text-muted)">v1 · 草稿</span></div>
+      </div>
+    </div>
+    <div class="cmd-group">
+      <div class="cmd-group-label">文档</div>
+      <div class="cmd-item" onclick="closeCmdPalette(); openCanvas('knowledge');">
+        <span class="cmd-item-icon">📄</span>
+        <span class="cmd-item-text">产品手册 v3.2</span>
+        <div class="cmd-item-shortcut" style="border:none;background:none"><span style="font-size:11px;color:var(--text-muted)">PDF</span></div>
+      </div>
+      <div class="cmd-item" onclick="closeCmdPalette(); openCanvas('knowledge');">
+        <span class="cmd-item-icon">📄</span>
+        <span class="cmd-item-text">退款政策说明</span>
+        <div class="cmd-item-shortcut" style="border:none;background:none"><span style="font-size:11px;color:var(--text-muted)">DOCX</span></div>
+      </div>
+    </div>
+    <div class="cmd-footer">
+      <span class="cmd-footer-hint"><kbd>↑</kbd><kbd>↓</kbd> 导航</span>
+      <span class="cmd-footer-hint"><kbd>↵</kbd> 选择</span>
+      <span class="cmd-footer-hint"><kbd>esc</kbd> 关闭</span>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ═══════════════════
+   STATE
+   ═══════════════════ */
+let canvasOpen = false;
+let selectedMentions = new Set();
+let activeMentionIndex = -1;
+let mentionTriggerRange = null;
+
+/* ═══════════════════
+   SIDEBAR
+   ═══════════════════ */
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('collapsed');
+}
+
+function selectChat(el) {
+  document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function newChat() {
+  document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+  // Show empty state (simplified demo)
+}
+
+/* ═══════════════════
+   CANVAS
+   ═══════════════════ */
+function openCanvas(panel) {
+  const canvas = document.getElementById('canvas');
+  const overlay = document.getElementById('canvasOverlay');
+
+  // Switch to correct tab
+  document.querySelectorAll('.canvas-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.panel === panel);
+  });
+  document.querySelectorAll('.canvas-content').forEach(c => {
+    c.classList.toggle('active', c.id === 'panel-' + panel);
+  });
+
+  // Reset to list view for test/audit
+  if (panel === 'test') {
+    showTestList();
+  } else if (panel === 'audit') {
+    showAuditList();
+  }
+
+  canvas.classList.add('open');
+  canvas.classList.remove('expanded');
+  overlay.classList.add('visible');
+  canvasOpen = true;
+
+  updateConversationMargin();
+}
+
+function closeCanvas() {
+  const canvas = document.getElementById('canvas');
+  canvas.classList.remove('open', 'expanded');
+  document.getElementById('canvasOverlay').classList.remove('visible');
+  document.getElementById('conversation').classList.remove('hidden-by-canvas');
+  document.getElementById('conversation').style.marginRight = '0';
+  canvasOpen = false;
+}
+
+function switchCanvasTab(tab) {
+  const panel = tab.dataset.panel;
+  document.querySelectorAll('.canvas-tab').forEach(t => t.classList.remove('active'));
+  tab.classList.add('active');
+  document.querySelectorAll('.canvas-content').forEach(c => {
+    c.classList.toggle('active', c.id === 'panel-' + panel);
+  });
+
+  // Reset to list view when switching tabs
+  if (panel === 'test') showTestList();
+  else if (panel === 'audit') showAuditList();
+  else setCanvasExpanded(false);
+}
+
+function setCanvasExpanded(expanded) {
+  const canvas = document.getElementById('canvas');
+  const conversation = document.getElementById('conversation');
+  const overlay = document.getElementById('canvasOverlay');
+  if (expanded) {
+    canvas.classList.add('expanded');
+    conversation.classList.add('hidden-by-canvas');
+    overlay.classList.remove('visible'); // no overlay in full page mode
+  } else {
+    canvas.classList.remove('expanded');
+    conversation.classList.remove('hidden-by-canvas');
+    if (canvasOpen) overlay.classList.add('visible');
+  }
+  updateConversationMargin();
+}
+
+function updateConversationMargin() {
+  const canvas = document.getElementById('canvas');
+  const conversation = document.getElementById('conversation');
+  if (canvas.classList.contains('expanded')) {
+    conversation.style.marginRight = '0';
+  } else if (canvasOpen) {
+    conversation.style.marginRight = 'var(--canvas-w)';
+  } else {
+    conversation.style.marginRight = '0';
+  }
+}
+
+/* ═══════════════════
+   TEST: LIST ↔ DETAIL
+   ═══════════════════ */
+function showTestDetail(name) {
+  document.getElementById('test-list').classList.remove('active');
+  document.getElementById('test-detail').classList.add('active');
+  document.getElementById('testDetailTitle').textContent = name;
+  setCanvasExpanded(true);
+}
+
+function showTestList() {
+  document.getElementById('test-detail').classList.remove('active');
+  document.getElementById('test-list').classList.add('active');
+  setCanvasExpanded(false);
+}
+
+/* ═══════════════════
+   AUDIT: LIST → REPORT → CONV DETAIL
+   ═══════════════════ */
+function showAuditDetail(name) {
+  document.getElementById('audit-list').classList.remove('active');
+  document.getElementById('audit-conv-detail').classList.remove('active');
+  document.getElementById('audit-report').classList.add('active');
+  document.getElementById('auditDetailTitle').textContent = name;
+  setCanvasExpanded(true);
+}
+
+function showAuditList() {
+  document.getElementById('audit-report').classList.remove('active');
+  document.getElementById('audit-conv-detail').classList.remove('active');
+  document.getElementById('audit-list').classList.add('active');
+  setCanvasExpanded(false);
+}
+
+function showAuditConvDetail(id) {
+  document.getElementById('audit-report').classList.remove('active');
+  document.getElementById('audit-conv-detail').classList.add('active');
+}
+
+function backToAuditReport() {
+  document.getElementById('audit-conv-detail').classList.remove('active');
+  document.getElementById('audit-report').classList.add('active');
+}
+
+/* ═══════════════════
+   AUDIT CONFIG CARD
+   ═══════════════════ */
+function showAuditConfig() {
+  hideAllInputPanels();
+  document.getElementById('auditConfigPanel').classList.add('visible');
+}
+
+function hideAuditConfig() {
+  document.getElementById('auditConfigPanel').classList.remove('visible');
+}
+
+function simulateFileUpload() {
+  document.getElementById('auditUploadZone').style.display = 'none';
+  const preview = document.getElementById('auditFilePreview');
+  preview.classList.add('has-file');
+  document.getElementById('auditFileName').textContent = '上周客服对话记录.xlsx';
+}
+
+function removeAuditFile() {
+  document.getElementById('auditUploadZone').style.display = '';
+  document.getElementById('auditFilePreview').classList.remove('has-file');
+}
+
+function toggleKbChip(chip) {
+  chip.classList.toggle('selected');
+}
+
+function hideAllInputPanels() {
+  document.getElementById('mentionPanel').classList.remove('visible');
+  document.getElementById('auditConfigPanel').classList.remove('visible');
+}
+
+/* ═══════════════════
+   INNER TABS (results/history)
+   ═══════════════════ */
+function switchInnerTab(tab, contentId) {
+  const parent = tab.closest('.canvas-view') || tab.closest('.canvas-content');
+  parent.querySelectorAll('.inner-tab').forEach(t => t.classList.remove('active'));
+  tab.classList.add('active');
+  parent.querySelectorAll('.inner-tab-content').forEach(c => c.classList.remove('active'));
+  document.getElementById(contentId).classList.add('active');
+}
+
+/* ═══════════════════
+   COMMAND PALETTE
+   ═══════════════════ */
+function openCmdPalette() {
+  document.getElementById('cmdOverlay').classList.add('visible');
+  setTimeout(() => document.getElementById('cmdInput').focus(), 50);
+}
+
+function closeCmdPalette() {
+  document.getElementById('cmdOverlay').classList.remove('visible');
+  document.getElementById('cmdInput').value = '';
+}
+
+/* ═══════════════════
+   @ MENTION PANEL
+   ═══════════════════ */
+function showMentionPanel() {
+  document.getElementById('mentionPanel').classList.add('visible');
+  syncMentionSelections();
+  syncActiveMention();
+}
+
+function hideMentionPanel() {
+  document.getElementById('mentionPanel').classList.remove('visible');
+  document.getElementById('mentionSearchInput').value = '';
+  activeMentionIndex = -1;
+  mentionTriggerRange = null;
+  document.querySelectorAll('.mention-item').forEach(i => i.classList.remove('active'));
+  updateMentionFooter();
+}
+
+function switchMentionTab(tab, type) {
+  document.querySelectorAll('.mention-tab').forEach(t => t.classList.remove('active'));
+  tab.classList.add('active');
+  document.querySelectorAll('.mention-item').forEach(item => {
+    if (type === 'all') {
+      item.style.display = '';
+    } else {
+      item.style.display = item.dataset.type === type ? '' : 'none';
+    }
+  });
+  syncActiveMention();
+}
+
+function filterMentions(query) {
+  const q = query.toLowerCase();
+  document.querySelectorAll('.mention-item').forEach(item => {
+    const name = item.dataset.name.toLowerCase();
+    item.style.display = name.includes(q) ? '' : 'none';
+  });
+  syncActiveMention();
+}
+
+function toggleMention(item) {
+  const name = item.dataset.name;
+  const type = item.dataset.type;
+  const key = type + ':' + name;
+
+  if (selectedMentions.has(key)) {
+    selectedMentions.delete(key);
+    item.classList.remove('selected');
+  } else {
+    selectedMentions.add(key);
+    item.classList.add('selected');
+  }
+  updateMentionFooter();
+}
+
+function syncMentionSelections() {
+  document.querySelectorAll('.mention-item').forEach(item => {
+    const key = `${item.dataset.type}:${item.dataset.name}`;
+    item.classList.toggle('selected', selectedMentions.has(key));
+  });
+}
+
+function updateMentionFooter() {
+  const footer = document.getElementById('mentionFooter');
+  const count = document.getElementById('mentionCount');
+  if (selectedMentions.size > 0) {
+    footer.style.display = 'flex';
+    count.textContent = selectedMentions.size;
+  } else {
+    footer.style.display = 'none';
+  }
+}
+
+function confirmMentions() {
+  const chipsContainer = document.getElementById('inputChips');
+  selectedMentions.forEach(key => {
+    const [type, name] = key.split(':');
+    const icon = type === 'prompt' ? '📋' : '📄';
+
+    // Check if chip already exists
+    if (chipsContainer.querySelector(`[data-key="${key}"]`)) return;
+
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.dataset.key = key;
+    chip.innerHTML = `<span class="chip-icon">${icon}</span>${name}<span class="chip-remove" onclick="removeChip(this)">×</span>`;
+    chipsContainer.appendChild(chip);
+  });
+  insertMentionTokensIntoInput();
+  hideMentionPanel();
+  document.getElementById('chatInput').focus();
+}
+
+function removeChip(btn) {
+  const chip = btn.parentElement;
+  const key = chip.dataset.key;
+  if (key) {
+    selectedMentions.delete(key);
+    removeMentionTokenFromInput(key);
+    syncMentionSelections();
+    updateMentionFooter();
+  }
+  chip.style.opacity = '0';
+  chip.style.transform = 'scale(0.8)';
+  setTimeout(() => chip.remove(), 150);
+}
+
+function getVisibleMentionItems() {
+  return Array.from(document.querySelectorAll('.mention-item')).filter(item => item.style.display !== 'none');
+}
+
+function syncActiveMention() {
+  const items = getVisibleMentionItems();
+  if (items.length === 0) {
+    activeMentionIndex = -1;
+    return;
+  }
+
+  if (activeMentionIndex < 0 || activeMentionIndex >= items.length) {
+    activeMentionIndex = 0;
+  }
+
+  document.querySelectorAll('.mention-item').forEach(item => item.classList.remove('active'));
+  const activeItem = items[activeMentionIndex];
+  if (activeItem) {
+    activeItem.classList.add('active');
+    activeItem.scrollIntoView({ block: 'nearest' });
+  }
+}
+
+function moveActiveMention(offset) {
+  const items = getVisibleMentionItems();
+  if (items.length === 0) return;
+
+  if (activeMentionIndex < 0) {
+    activeMentionIndex = 0;
+  } else {
+    activeMentionIndex = (activeMentionIndex + offset + items.length) % items.length;
+  }
+  syncActiveMention();
+}
+
+function getActiveMentionItem() {
+  const items = getVisibleMentionItems();
+  if (activeMentionIndex < 0 || activeMentionIndex >= items.length) {
+    return items[0] || null;
+  }
+  return items[activeMentionIndex];
+}
+
+function insertMentionTokensIntoInput() {
+  const textarea = document.getElementById('chatInput');
+  const tokens = Array.from(selectedMentions)
+    .filter(key => {
+      const [, name] = key.split(':');
+      return !textarea.value.includes(`[@${name}]`);
+    })
+    .map(key => {
+      const [, name] = key.split(':');
+      return `[@${name}]`;
+    });
+
+  if (tokens.length === 0) return;
+
+  const replacement = `${tokens.join(' ')} `;
+  if (mentionTriggerRange) {
+    textarea.value = `${textarea.value.slice(0, mentionTriggerRange.start)}${replacement}${textarea.value.slice(mentionTriggerRange.end)}`;
+  } else {
+    const trimmed = textarea.value.trim();
+    const prefix = trimmed ? `${trimmed} ` : '';
+    textarea.value = `${prefix}${replacement}`.replace(/\s+/g, ' ');
+  }
+
+  textarea.focus();
+  textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
+  resizeTextarea(textarea);
+}
+
+function removeMentionTokenFromInput(key) {
+  const textarea = document.getElementById('chatInput');
+  const [, name] = key.split(':');
+  const token = `[@${name}]`;
+
+  textarea.value = textarea.value
+    .replace(token, '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+\n/g, '\n')
+    .trimStart();
+
+  resizeTextarea(textarea);
+}
+
+function resizeTextarea(textarea) {
+  textarea.style.height = 'auto';
+  textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+}
+
+function extractMentionRefs() {
+  return Array.from(document.querySelectorAll('#inputChips .chip')).map(chip => {
+    const [type, name] = chip.dataset.key.split(':');
+    return {
+      type,
+      name,
+      icon: type === 'prompt' ? '📋' : '📄',
+    };
+  });
+}
+
+function escapeHtml(value) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatMessageContent(value) {
+  return value
+    .trim()
+    .split(/\n+/)
+    .map(line => `<p>${escapeHtml(line)}</p>`)
+    .join('');
+}
+
+function scrollMessagesToBottom() {
+  const messagesArea = document.getElementById('messagesArea');
+  messagesArea.scrollTop = messagesArea.scrollHeight;
+}
+
+function sendMessage() {
+  const textarea = document.getElementById('chatInput');
+  const rawValue = textarea.value;
+  const text = rawValue.replace(/\[@[^\]]+\]/g, '').replace(/\s{2,}/g, ' ').trim();
+  const refs = extractMentionRefs();
+
+  if (!text && refs.length === 0) return;
+
+  const message = document.createElement('div');
+  message.className = 'message fade-in';
+  message.innerHTML = `
+    <div class="message-avatar user">你</div>
+    <div class="message-body">
+      <div class="message-role">你</div>
+      <div class="message-content">
+        ${text ? formatMessageContent(text) : '<p>已添加引用</p>'}
+      </div>
+      ${refs.length > 0 ? `<div class="message-refs">${refs.map(ref => `<span class="message-ref">${ref.icon} ${escapeHtml(ref.name)}</span>`).join('')}</div>` : ''}
+    </div>
+  `;
+
+  document.getElementById('messagesInner').appendChild(message);
+
+  textarea.value = '';
+  resizeTextarea(textarea);
+  document.getElementById('inputChips').innerHTML = '';
+  selectedMentions.clear();
+  syncMentionSelections();
+  hideMentionPanel();
+  scrollMessagesToBottom();
+}
+
+/* ═══════════════════
+   CHAT INPUT
+   ═══════════════════ */
+function handleInput(e) {
+  const textarea = e.target;
+  resizeTextarea(textarea);
+
+  // Detect @ trigger
+  const val = textarea.value;
+  const cursorPos = textarea.selectionStart;
+  const textBefore = val.substring(0, cursorPos);
+  const lastAt = textBefore.lastIndexOf('@');
+
+  if (lastAt >= 0 && (lastAt === 0 || textBefore[lastAt-1] === ' ' || textBefore[lastAt-1] === '\n')) {
+    const query = textBefore.substring(lastAt + 1);
+    if (!query.includes(' ')) {
+      mentionTriggerRange = { start: lastAt, end: cursorPos };
+      showMentionPanel();
+      filterMentions(query);
+      return;
+    }
+  }
+
+  mentionTriggerRange = null;
+  if (document.getElementById('mentionPanel').classList.contains('visible')) {
+    hideMentionPanel();
+  }
+}
+
+function handleKeydown(e) {
+  const mentionVisible = document.getElementById('mentionPanel').classList.contains('visible');
+
+  if (mentionVisible && e.key === 'ArrowDown') {
+    moveActiveMention(1);
+    e.preventDefault();
+    return;
+  }
+
+  if (mentionVisible && e.key === 'ArrowUp') {
+    moveActiveMention(-1);
+    e.preventDefault();
+    return;
+  }
+
+  if (mentionVisible && e.key === 'Enter' && !e.shiftKey) {
+    const activeItem = getActiveMentionItem();
+    if (activeItem) {
+      const key = `${activeItem.dataset.type}:${activeItem.dataset.name}`;
+      if (!selectedMentions.has(key)) {
+        toggleMention(activeItem);
+      }
+      confirmMentions();
+      e.preventDefault();
+      return;
+    }
+  }
+
+  if (e.key === 'Enter' && !e.shiftKey) {
+    sendMessage();
+    e.preventDefault();
+    return;
+  }
+
+  if (e.key === 'Escape') {
+    if (mentionVisible) {
+      hideMentionPanel();
+      e.preventDefault();
+    }
+  }
+}
+
+/* ═══════════════════
+   TEST CASE TOGGLE
+   ═══════════════════ */
+function toggleTestCase(header) {
+  const detail = header.nextElementSibling;
+  detail.classList.toggle('open');
+}
+
+/* ═══════════════════
+   KEYBOARD SHORTCUTS
+   ═══════════════════ */
+document.addEventListener('keydown', function(e) {
+  // ⌘K -> Command palette
+  if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+    e.preventDefault();
+    if (document.getElementById('cmdOverlay').classList.contains('visible')) {
+      closeCmdPalette();
+    } else {
+      openCmdPalette();
+    }
+  }
+  // Escape -> Close overlays
+  if (e.key === 'Escape') {
+    if (document.getElementById('cmdOverlay').classList.contains('visible')) {
+      closeCmdPalette();
+    } else if (canvasOpen) {
+      closeCanvas();
+    }
+  }
+});
+
+/* Close mention panel when clicking outside */
+document.addEventListener('click', function(e) {
+  const panel = document.getElementById('mentionPanel');
+  const wrapper = document.getElementById('inputWrapper');
+  if (panel.classList.contains('visible') && !wrapper.contains(e.target)) {
+    hideMentionPanel();
+  }
+});
+</script>
+</body>
+</html>
