@@ -11,6 +11,10 @@ import {
   findMentionMatch,
   type MentionMatch,
 } from "./chat-input-mentions"
+import {
+  areAllReferencesSelected,
+  toggleAllReferencesForType,
+} from "./chat-reference-selection"
 import { ReferenceSelector } from "./reference-selector"
 import type { MessageReference } from "@/types/database"
 
@@ -149,12 +153,24 @@ export function ChatInput({
     setReferences((prev) => prev.filter((r) => r.id !== id))
   }
 
+  const handleToggleAllReferences = (
+    type: "prompt" | "document",
+    items: Array<{ id: string; label: string }>
+  ) => {
+    setReferences((prev) => toggleAllReferencesForType(prev, type, items))
+  }
+
+  const promptItems = prompts.map((prompt) => ({ id: prompt.id, label: prompt.title }))
+  const documentItems = documents.map((document) => ({ id: document.id, label: document.name }))
+
   const selectedPromptIds = references
     .filter((r) => r.type === "prompt")
     .map((r) => r.id)
   const selectedDocIds = references
     .filter((r) => r.type === "document")
     .map((r) => r.id)
+  const allPromptsSelected = areAllReferencesSelected(references, "prompt", promptItems)
+  const allDocumentsSelected = areAllReferencesSelected(references, "document", documentItems)
 
   return (
     <div className="shrink-0 bg-stone-50 px-6 pb-5">
@@ -175,17 +191,21 @@ export function ChatInput({
         <div className="flex items-end gap-1 px-3 py-3">
           <ReferenceSelector
             type="prompt"
-            items={prompts.map((p) => ({ id: p.id, label: p.title }))}
+            items={promptItems}
             selectedIds={selectedPromptIds}
             onToggle={(id, label) => handleToggleReference("prompt", id, label)}
+            onToggleAll={() => handleToggleAllReferences("prompt", promptItems)}
+            allSelected={allPromptsSelected}
             icon={<FileText className="size-4" />}
             label="Prompt"
           />
           <ReferenceSelector
             type="document"
-            items={documents.map((d) => ({ id: d.id, label: d.name }))}
+            items={documentItems}
             selectedIds={selectedDocIds}
             onToggle={(id, label) => handleToggleReference("document", id, label)}
+            onToggleAll={() => handleToggleAllReferences("document", documentItems)}
+            allSelected={allDocumentsSelected}
             icon={<FolderOpen className="size-4" />}
             label="知识库"
           />

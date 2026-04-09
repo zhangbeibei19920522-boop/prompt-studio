@@ -23,6 +23,8 @@ interface ReferenceSelectorProps {
   items: Array<{ id: string; label: string }>
   selectedIds: string[]
   onToggle: (id: string, label: string) => void
+  onToggleAll?: () => void
+  allSelected?: boolean
   icon: React.ReactNode
   label: string
 }
@@ -31,6 +33,8 @@ export function ReferenceSelector({
   items,
   selectedIds,
   onToggle,
+  onToggleAll,
+  allSelected = false,
   icon,
   label,
 }: ReferenceSelectorProps) {
@@ -51,6 +55,17 @@ export function ReferenceSelector({
       <PopoverContent className="w-64 p-0" align="start" side="top">
         <Command>
           <CommandInput placeholder={`搜索${label}...`} />
+          {items.length > 0 && onToggleAll && (
+            <div className="flex items-center justify-end border-b px-3 py-2">
+              <button
+                type="button"
+                onClick={onToggleAll}
+                className="text-xs font-medium text-blue-600 transition-colors hover:text-blue-500"
+              >
+                {allSelected ? "取消全选" : "全选"}
+              </button>
+            </div>
+          )}
           <CommandList>
             <CommandEmpty>无匹配结果</CommandEmpty>
             <CommandGroup>
