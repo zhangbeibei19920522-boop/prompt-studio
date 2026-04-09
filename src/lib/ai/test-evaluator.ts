@@ -259,12 +259,12 @@ ${caseSummaries.join('\n\n')}`,
     const response = await provider.chat(messages, { temperature: 0.3 })
     const report = extractJson<TestReport>(response)
 
-    if (report && typeof report.summary === 'string' && typeof report.score === 'number') {
+    if (report && typeof report.summary === 'string') {
       return {
         summary: report.summary,
         totalCases: totalCases,
         passedCases: passedCases,
-        score: Math.max(0, Math.min(100, Math.round(report.score))),
+        score: avgScore,
         improvements: Array.isArray(report.improvements) ? report.improvements : [],
         details: report.details || '',
       }
