@@ -25,7 +25,7 @@ describe("test flow config UI", () => {
     expect(html).not.toContain("从“单 Prompt 测试”切到")
   })
 
-  it("uses prompt dropdowns instead of free-text prompt fields in the routing dialog", () => {
+  it("uses an entry prompt dropdown plus a searchable picker for target prompts", () => {
     const html = renderToStaticMarkup(
       <TestRoutingConfigForm
         prompts={[
@@ -40,12 +40,62 @@ describe("test flow config UI", () => {
         onRemoveRoute={() => {}}
       />
     )
+    const source = fs.readFileSync(
+      path.join(process.cwd(), "src/components/test/test-routing-config-dialog.tsx"),
+      "utf8"
+    )
 
     expect(html).toContain("入口 Prompt")
     expect(html).toContain("intent 值")
-    expect(html.match(/data-slot="select-trigger"/g)).toHaveLength(2)
+    expect(html.match(/data-slot="select-trigger"/g)).toHaveLength(1)
     expect(html).not.toContain('placeholder="输入 Prompt ID"')
     expect(html).not.toContain('placeholder="输入 Prompt 名称"')
+    expect(source).toContain("PromptCombobox")
+    expect(source).toContain('CommandInput placeholder="搜索 Prompt..."')
+    expect(source).toContain("PopoverTrigger asChild")
+  })
+
+  it("renders a fast bulk-generation action and keeps it disabled until entry prompt is selected", () => {
+    const html = renderToStaticMarkup(
+      <TestRoutingConfigForm
+        prompts={[
+          { id: "prompt-a", title: "PromptA · 意图识别" },
+          { id: "prompt-b", title: "after_sale" },
+        ]}
+        entryPromptId=""
+        routes={[{ intent: "", promptId: "" }]}
+        onEntryPromptChange={() => {}}
+        onRouteChange={() => {}}
+        onAddRoute={() => {}}
+        onRemoveRoute={() => {}}
+      />
+    )
+
+    expect(html).toContain("从 Prompts 生成路由")
+    expect(html).toContain("disabled")
+  })
+
+  it("keeps the routing dialog footer outside the scrolling form body", () => {
+    const source = fs.readFileSync(
+      path.join(process.cwd(), "src/components/test/test-routing-config-dialog.tsx"),
+      "utf8"
+    )
+
+    expect(source).toContain("sm:max-h-[85vh]")
+    expect(source).toContain("overflow-hidden")
+    expect(source).toContain("min-h-0 flex-1 overflow-y-auto")
+    expect(source).toContain("border-t px-6 py-4")
+  })
+
+  it("wires intent input changes through the unique prompt auto-match helper", () => {
+    const source = fs.readFileSync(
+      path.join(process.cwd(), "src/components/test/test-routing-config-dialog.tsx"),
+      "utf8"
+    )
+
+    expect(source).toContain("handleRouteIntentChange")
+    expect(source).toContain("findUniquePromptMatch")
+    expect(source).toContain("onRouteIntentChange(index, event.target.value)")
   })
 
   it("keeps route row keys independent from editable intent and prompt values", () => {
