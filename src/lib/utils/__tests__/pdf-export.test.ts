@@ -39,4 +39,38 @@ describe("pdf export routing detail", () => {
     expect(html).toContain("路由评估")
     expect(html).toContain("回复评估")
   })
+
+  it("keeps full case content without truncation", () => {
+    const input = `input-start-${"x".repeat(220)}-input-end`
+    const expectedOutput = `expected-start-${"y".repeat(220)}-expected-end`
+    const actualOutput = `actual-start-${"z".repeat(220)}-actual-end`
+
+    const html = buildCaseRowHtml(
+      0,
+      {
+        id: "case-2",
+        testSuiteId: "suite-1",
+        title: "Long content case",
+        context: "",
+        input,
+        expectedIntent: null,
+        expectedOutput,
+        sortOrder: 1,
+      },
+      {
+        testCaseId: "case-2",
+        actualOutput,
+        passed: true,
+        score: 95,
+        reason: "looks good",
+      }
+    )
+
+    expect(html).toContain(input)
+    expect(html).toContain(expectedOutput)
+    expect(html).toContain(actualOutput)
+    expect(html).not.toContain(`${input.slice(0, 200)}...`)
+    expect(html).not.toContain(`${expectedOutput.slice(0, 200)}...`)
+    expect(html).not.toContain(`${actualOutput.slice(0, 200)}...`)
+  })
 })
