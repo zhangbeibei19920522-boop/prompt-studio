@@ -651,7 +651,7 @@ export function ConversationAuditDetail({
   if (createMode || !localData) {
     return (
       <div className="flex h-full flex-1 overflow-hidden bg-muted/20">
-        <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 p-6">
+        <div className="mx-auto flex min-h-0 w-full max-w-4xl flex-1 flex-col gap-6 overflow-y-auto p-6">
           <Card>
             <CardHeader>
               <CardTitle>新建会话质检任务</CardTitle>
