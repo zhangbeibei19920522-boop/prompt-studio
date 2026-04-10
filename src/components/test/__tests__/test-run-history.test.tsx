@@ -87,7 +87,7 @@ describe("test run history routing detail", () => {
     expect(html).toContain(">P-JX<")
   })
 
-  it("includes html export actions in the history view source", () => {
+  it("includes only html export actions in the history view source", () => {
     const source = fs.readFileSync(
       path.join(process.cwd(), "src/components/test/test-run-history.tsx"),
       "utf8"
@@ -95,5 +95,6 @@ describe("test run history routing detail", () => {
 
     expect(source).toContain("exportTestRunHTML")
     expect(source).toContain("导出 HTML")
+    expect(source).not.toContain("导出 PDF")
   })
 })

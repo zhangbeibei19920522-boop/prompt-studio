@@ -29,7 +29,7 @@ import {
 } from "./conversation-output"
 import { testSuitesApi, testCasesApi } from "@/lib/utils/api-client"
 import { streamTestRun } from "@/lib/utils/sse-client"
-import { exportTestRunHTML, exportTestRunPDF } from "@/lib/utils/pdf-export"
+import { exportTestRunHTML } from "@/lib/utils/pdf-export"
 import type {
   TestSuite,
   TestCase,
@@ -277,19 +277,6 @@ export function TestSuiteDetail({
     })
     setRoutingConfigOpen(false)
     onSuiteUpdate()
-  }
-
-  async function handleExportPDF() {
-    const run = latestRun
-    if (!run) return
-    setExporting(true)
-    try {
-      await exportTestRunPDF({ suiteName: suite.name, testRun: run, testCases: cases })
-    } catch (err) {
-      console.error("PDF 导出失败:", err)
-    } finally {
-      setExporting(false)
-    }
   }
 
   async function handleExportHTML() {
@@ -627,33 +614,19 @@ export function TestSuiteDetail({
          <TabsContent value="history" className="mt-3">
            <div className="space-y-4">
              <div className="flex items-center justify-between">
-               <div className="flex items-center gap-2">
-                 <Button
-                   variant="outline"
-                   size="sm"
-                   className="shrink-0"
-                   disabled={exporting || !latestRun}
-                   onClick={handleExportHTML}
-                 >
-                   {exporting
-                     ? <Loader2 className="size-4 animate-spin mr-1" />
-                     : <Download className="size-4 mr-1" />}
-                   导出 HTML
-                 </Button>
-                 <Button
-                   variant="outline"
-                   size="sm"
-                   className="shrink-0"
-                   disabled={exporting || !latestRun}
-                   onClick={handleExportPDF}
-                 >
-                   {exporting
-                     ? <Loader2 className="size-4 animate-spin mr-1" />
-                     : <Download className="size-4 mr-1" />}
-                   导出 PDF
-                 </Button>
-               </div>
-             </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  disabled={exporting || !latestRun}
+                  onClick={handleExportHTML}
+                >
+                  {exporting
+                    ? <Loader2 className="size-4 animate-spin mr-1" />
+                    : <Download className="size-4 mr-1" />}
+                  导出 HTML
+                </Button>
+              </div>
             <TestRunHistory
               testSuiteId={suite.id}
               testCases={cases}

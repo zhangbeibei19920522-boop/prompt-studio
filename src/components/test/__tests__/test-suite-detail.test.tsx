@@ -345,14 +345,14 @@ describe("routing test result details", () => {
     expect(source).toContain("testSuitesApi.regenerateExpectedOutputs")
   })
 
-  it("shows both PDF and HTML export actions for test reports", () => {
+  it("shows only the html export action for test reports", () => {
     const source = fs.readFileSync(
       path.join(process.cwd(), "src/components/test/test-suite-detail.tsx"),
       "utf8"
     )
 
-    expect(source).toContain("导出 PDF")
     expect(source).toContain("导出 HTML")
+    expect(source).not.toContain("导出 PDF")
   })
 
   it("keeps prototype-style metrics, history count, and trend shell in suite detail", () => {
