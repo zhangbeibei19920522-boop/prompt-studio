@@ -132,6 +132,122 @@ async function collectRoutingRunEvents() {
 }
 
 describe("routing test runner", () => {
+  it("marks the current run as failed and resets the suite when aborted after test-case-start", async () => {
+    vi.resetModules()
+
+    const updateTestRun = vi.fn()
+    const updateTestSuite = vi.fn()
+
+    const testProvider = {
+      chat: vi.fn(),
+      chatStream: vi.fn(async function* () {
+        yield "should-not-run"
+      }),
+    }
+
+    const createAiProvider = vi.fn().mockReturnValue(testProvider)
+
+    vi.doMock("@/lib/ai/provider", () => ({
+      createAiProvider,
+    }))
+
+    vi.doMock("@/lib/db/repositories/settings", () => ({
+      getSettings: () => ({
+        provider: "openai",
+        apiKey: "eval-key",
+        model: "gpt-test",
+        baseUrl: "",
+      }),
+    }))
+
+    vi.doMock("@/lib/db/repositories/test-runs", () => ({
+      updateTestRun,
+    }))
+
+    vi.doMock("@/lib/db/repositories/test-suites", () => ({
+      updateTestSuite,
+    }))
+
+    const { runTestSuite } = await import("@/lib/ai/test-runner")
+
+    const suite = {
+      id: "suite-1",
+      projectId: "project-1",
+      sessionId: null,
+      name: "Single Suite",
+      description: "",
+      promptId: "prompt-a",
+      promptVersionId: null,
+      workflowMode: "single" as const,
+      routingConfig: null,
+      config: {
+        provider: "openai",
+        apiKey: "test-key",
+        model: "gpt-test",
+        baseUrl: "",
+      },
+      status: "ready" as const,
+      createdAt: "2026-04-10T00:00:00.000Z",
+      updatedAt: "2026-04-10T00:00:00.000Z",
+    }
+
+    const cases = [
+      {
+        id: "case-1",
+        testSuiteId: "suite-1",
+        title: "Case 1",
+        context: "",
+        input: "hello",
+        expectedIntent: null,
+        expectedOutput: "world",
+        sortOrder: 0,
+      },
+    ]
+
+    const prompt = {
+      id: "prompt-a",
+      projectId: "project-1",
+      title: "Prompt A",
+      content: "reply",
+      description: "",
+      tags: [],
+      variables: [],
+      version: 1,
+      status: "active" as const,
+      createdAt: "2026-04-10T00:00:00.000Z",
+      updatedAt: "2026-04-10T00:00:00.000Z",
+    }
+
+    const controller = new AbortController()
+    const generator = runTestSuite("run-1", suite, cases, prompt, {
+      signal: controller.signal,
+    })
+
+    await expect(generator.next()).resolves.toMatchObject({
+      value: { type: "test-start", data: { totalCases: 1 } },
+      done: false,
+    })
+    await expect(generator.next()).resolves.toMatchObject({
+      value: {
+        type: "test-case-start",
+        data: { caseId: "case-1", index: 0, title: "Case 1" },
+      },
+      done: false,
+    })
+
+    controller.abort()
+
+    await expect(generator.next()).resolves.toMatchObject({ done: true })
+    expect(testProvider.chatStream).not.toHaveBeenCalled()
+    expect(updateTestRun).toHaveBeenCalledWith(
+      "run-1",
+      expect.objectContaining({
+        status: "failed",
+      })
+    )
+    expect(updateTestSuite).toHaveBeenCalledWith("suite-1", { status: "ready" })
+  })
+
   it("runs entry prompt first, routes by intent, and stores split routing evaluation data", async () => {
     const { events, updateTestRun } = await collectRoutingRunEvents()
 
@@ -1281,12 +1397,12 @@ describe("routing test runner", () => {
       content: "输出参数答案",
     }
 
-    for await (const _event of runTestSuite("run-1", suite, cases, entryPrompt, {
+    for await (const event of runTestSuite("run-1", suite, cases, entryPrompt, {
       routePrompts: {
         "prompt-b": routePrompt,
       },
     })) {
-      // consume all events
+      void event
     }
 
     const debugCalls = logSpy.mock.calls
@@ -1453,8 +1569,8 @@ describe("routing test runner", () => {
       updatedAt: "2026-03-20T00:00:00.000Z",
     }
 
-    for await (const _event of runTestSuite("run-1", suite, cases, prompt)) {
-      // consume all events
+    for await (const event of runTestSuite("run-1", suite, cases, prompt)) {
+      void event
     }
 
     const debugCalls = logSpy.mock.calls

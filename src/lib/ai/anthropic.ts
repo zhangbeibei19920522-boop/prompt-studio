@@ -1,5 +1,6 @@
 import type { AiProvider, ChatMessage, ChatOptions } from '@/types/ai'
 import { proxyFetch } from './proxy-fetch'
+import { isAbortError } from '@/lib/test-run-abort'
 
 /**
  * Anthropic Claude provider.
@@ -52,6 +53,7 @@ export function createAnthropicProvider(config: {
         temperature: options?.temperature ?? 0.7,
         stream: false,
       }),
+      signal: options?.signal,
     })
 
     if (!res.ok) {
@@ -96,8 +98,12 @@ export function createAnthropicProvider(config: {
           temperature: options?.temperature ?? 0.7,
           stream: true,
         }),
+        signal: options?.signal,
       }) as Response
     } catch (fetchError) {
+      if (isAbortError(fetchError)) {
+        throw fetchError
+      }
       console.error('[Anthropic Stream] fetch() threw:', {
         error: fetchError instanceof Error ? fetchError.message : fetchError,
         stack: fetchError instanceof Error ? fetchError.stack : undefined,

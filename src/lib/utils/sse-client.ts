@@ -138,12 +138,14 @@ export async function* streamTestChat(request: {
  */
 export async function* streamTestRun(
   suiteId: string,
-  promptId: string
+  promptId: string,
+  options: { signal?: AbortSignal } = {}
 ): AsyncGenerator<TestRunEvent> {
   const res = await fetch(`/api/test-suites/${suiteId}/run`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ promptId }),
+    signal: options.signal,
   })
 
   if (!res.ok) {

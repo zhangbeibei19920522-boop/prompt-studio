@@ -4,6 +4,7 @@ import { findTestCasesBySuite } from '@/lib/db/repositories/test-cases'
 import { createTestRun, updateTestRun } from '@/lib/db/repositories/test-runs'
 import { findPromptById } from '@/lib/db/repositories/prompts'
 import { runTestSuite } from '@/lib/ai/test-runner'
+import { isAbortError } from '@/lib/test-run-abort'
 
 export async function POST(
   request: NextRequest,
@@ -77,12 +78,17 @@ export async function POST(
         try {
           const generator = runTestSuite(run.id, suite, cases, prompt, {
             routePrompts,
+            signal: request.signal,
           })
           for await (const event of generator) {
             const data = `data: ${JSON.stringify(event)}\n\n`
             controller.enqueue(encoder.encode(data))
           }
         } catch (err) {
+          if (request.signal.aborted || isAbortError(err)) {
+            return
+          }
+
           console.error('[POST /api/test-suites/[id]/run] stream error', err)
           const errorEvent = {
             type: 'test-error',
@@ -94,7 +100,11 @@ export async function POST(
           updateTestRun(run.id, { status: 'failed' })
           updateTestSuite(id, { status: 'ready' })
         } finally {
-          controller.close()
+          try {
+            controller.close()
+          } catch {
+            // Ignore closing an already-closed stream after client abort.
+          }
         }
       },
     })

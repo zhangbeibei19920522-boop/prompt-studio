@@ -1,5 +1,6 @@
 import type { AiProvider, ChatMessage } from '@/types/ai'
 import type { TestCase, TestCaseResult, TestReport, Prompt } from '@/types/database'
+import { isAbortError } from '@/lib/test-run-abort'
 
 // ---------- Helper: fill template placeholders ----------
 
@@ -135,7 +136,8 @@ export function evaluateIntentMatch(
  */
 export async function evaluateTestCase(
   provider: AiProvider,
-  data: EvaluateTestCaseInput
+  data: EvaluateTestCaseInput,
+  options: { signal?: AbortSignal } = {}
 ): Promise<SingleEvalResult> {
   const messages: ChatMessage[] = [
     {
@@ -178,7 +180,10 @@ ${data.actualOutput}`,
   ]
 
   try {
-    const response = await provider.chat(messages, { temperature: 0.1 })
+    const response = await provider.chat(messages, {
+      temperature: 0.1,
+      signal: options.signal,
+    })
     const result = extractJson<SingleEvalResult>(response)
 
     if (result && typeof result.passed === 'boolean' && typeof result.score === 'number') {
@@ -192,6 +197,9 @@ ${data.actualOutput}`,
     // Parse failed — return failure
     return { passed: false, score: 0, reason: '评估结果解析失败' }
   } catch (error) {
+    if (isAbortError(error) || options.signal?.aborted) {
+      throw error
+    }
     const message = error instanceof Error ? error.message : String(error)
     return { passed: false, score: 0, reason: `评估调用失败: ${message}` }
   }
@@ -206,7 +214,8 @@ export async function evaluateOverall(
   provider: AiProvider,
   prompt: Prompt,
   cases: TestCase[],
-  results: TestCaseResult[]
+  results: TestCaseResult[],
+  options: { signal?: AbortSignal } = {}
 ): Promise<TestReport> {
   const caseSummaries = cases.map((c, i) => {
     const r = results.find((res) => res.testCaseId === c.id)
@@ -256,7 +265,10 @@ ${caseSummaries.join('\n\n')}`,
       : 0
 
   try {
-    const response = await provider.chat(messages, { temperature: 0.3 })
+    const response = await provider.chat(messages, {
+      temperature: 0.3,
+      signal: options.signal,
+    })
     const report = extractJson<TestReport>(response)
 
     if (report && typeof report.summary === 'string') {
@@ -279,7 +291,10 @@ ${caseSummaries.join('\n\n')}`,
       improvements: [],
       details: '评估报告解析失败，以上为自动计算结果。',
     }
-  } catch {
+  } catch (error) {
+    if (isAbortError(error) || options.signal?.aborted) {
+      throw error
+    }
     return {
       summary: `共 ${totalCases} 个测试用例，通过 ${passedCases} 个，平均得分 ${avgScore}`,
       totalCases,

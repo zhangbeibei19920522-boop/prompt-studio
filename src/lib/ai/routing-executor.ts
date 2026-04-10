@@ -1,4 +1,4 @@
-import type { AiProvider, ChatMessage } from "@/types/ai"
+import type { AiProvider, ChatMessage, ChatOptions } from "@/types/ai"
 import type {
   Prompt,
   TestCase,
@@ -6,9 +6,11 @@ import type {
   TestSuite,
 } from "@/types/database"
 import { extractJson } from "./test-evaluator"
+import { throwIfAborted } from "@/lib/test-run-abort"
 
 export interface RoutingRunOptions {
   routePrompts?: Record<string, Prompt>
+  signal?: AbortSignal
 }
 
 interface PromptExecutionDebugContext {
@@ -17,6 +19,11 @@ interface PromptExecutionDebugContext {
   model?: string
   caseId?: string
   caseTitle?: string
+}
+
+interface PromptExecutionOptions {
+  debugContext?: PromptExecutionDebugContext
+  signal?: AbortSignal
 }
 
 interface PromptExecutionLogPayload {
@@ -140,13 +147,16 @@ function logPromptExecution(payload: PromptExecutionLogPayload) {
 async function executePromptMessages(
   provider: AiProvider,
   messages: ChatMessage[],
-  options = DEFAULT_PROMPT_OPTIONS
+  options: ChatOptions = DEFAULT_PROMPT_OPTIONS
 ): Promise<string> {
+  throwIfAborted(options.signal)
   let response = ""
   const stream = provider.chatStream(messages, options)
   for await (const chunk of stream) {
+    throwIfAborted(options.signal)
     response += chunk
   }
+  throwIfAborted(options.signal)
   return response
 }
 
@@ -154,8 +164,9 @@ export async function executePromptForCase(
   provider: AiProvider,
   prompt: Prompt,
   testCase: Pick<TestCase, "id" | "title" | "input" | "context">,
-  debugContext?: PromptExecutionDebugContext
+  options: PromptExecutionOptions = {}
 ): Promise<string> {
+  const { debugContext, signal } = options
   const turns = parseConversationTurns(testCase.input)
 
   if (turns) {
@@ -172,7 +183,10 @@ export async function executePromptForCase(
         conversationParts.push(`Assistant: ${turn.content}`)
       } else {
         const messages = buildConversationMessages(prompt, testCase.context, history)
-        const response = await executePromptMessages(provider, messages, DEFAULT_PROMPT_OPTIONS)
+        const response = await executePromptMessages(provider, messages, {
+          ...DEFAULT_PROMPT_OPTIONS,
+          signal,
+        })
         logPromptExecution({
           workflowMode: debugContext?.workflowMode ?? "single",
           stage: "single",
@@ -205,7 +219,10 @@ export async function executePromptForCase(
 
   messages.push({ role: "user", content: userContent })
 
-  const actualOutput = await executePromptMessages(provider, messages, DEFAULT_PROMPT_OPTIONS)
+  const actualOutput = await executePromptMessages(provider, messages, {
+    ...DEFAULT_PROMPT_OPTIONS,
+    signal,
+  })
   logPromptExecution({
     workflowMode: debugContext?.workflowMode ?? "single",
     stage: "single",
@@ -276,7 +293,10 @@ export async function executeRoutingPromptForCase(
     turnIndex: number
   ): Promise<TestCaseRoutingStep> {
     const entryMessages = buildConversationMessages(entryPrompt, testCase.context, history)
-    const intentOutput = await executePromptMessages(provider, entryMessages, ENTRY_ROUTER_OPTIONS)
+    const intentOutput = await executePromptMessages(provider, entryMessages, {
+      ...ENTRY_ROUTER_OPTIONS,
+      signal: options.signal,
+    })
     const rawIntent = extractIntentValue(intentOutput)
     const resolvedIntent = rawIntent === "G" ? lastResolvedIntent : rawIntent
     const matchedRoute = resolvedIntent
@@ -370,7 +390,10 @@ export async function executeRoutingPromptForCase(
     }
 
     const targetMessages = buildConversationMessages(matchedPrompt, testCase.context, history)
-    const actualReply = await executePromptMessages(provider, targetMessages, DEFAULT_PROMPT_OPTIONS)
+    const actualReply = await executePromptMessages(provider, targetMessages, {
+      ...DEFAULT_PROMPT_OPTIONS,
+      signal: options.signal,
+    })
 
     logPromptExecution({
       workflowMode: debugContext?.workflowMode ?? "routing",

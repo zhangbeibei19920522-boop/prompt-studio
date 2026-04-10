@@ -30,6 +30,7 @@ import {
 import { testSuitesApi, testCasesApi } from "@/lib/utils/api-client"
 import { streamTestRun } from "@/lib/utils/sse-client"
 import { exportTestRunHTML } from "@/lib/utils/pdf-export"
+import { isAbortError } from "@/lib/test-run-abort"
 import type {
   TestSuite,
   TestCase,
@@ -106,6 +107,7 @@ export function TestSuiteDetail({
   const [runProgress, setRunProgress] = useState<RunProgress | null>(null)
   const [exporting, setExporting] = useState(false)
   const [regeneratingExpectedOutputs, setRegeneratingExpectedOutputs] = useState(false)
+  const runAbortControllerRef = useRef<AbortController | null>(null)
   const actualOutputsRef = useRef<Record<string, string>>({})
   const routingMetadataRef = useRef<
     Record<
@@ -129,14 +131,18 @@ export function TestSuiteDetail({
   // --- Handlers ---
 
   async function handleRun(promptId: string) {
+    const controller = new AbortController()
     setConfigOpen(false)
     setIsRunning(true)
     setRunProgress({ phase: "running", current: 0, total: cases.length, results: [], report: null })
+    runAbortControllerRef.current = controller
     actualOutputsRef.current = {}
     routingMetadataRef.current = {}
 
     try {
-      for await (const event of streamTestRun(suite.id, promptId)) {
+      for await (const event of streamTestRun(suite.id, promptId, {
+        signal: controller.signal,
+      })) {
         switch (event.type) {
           case "test-start":
             setRunProgress((prev) =>
@@ -201,16 +207,27 @@ export function TestSuiteDetail({
             )
             break
           case "test-error":
-            console.error("测试运行错误:", event.data.error)
+            if (!controller.signal.aborted) {
+              console.error("测试运行错误:", event.data.error)
+            }
             break
         }
       }
     } catch (err) {
-      console.error("测试运行失败:", err)
+      if (!controller.signal.aborted && !isAbortError(err)) {
+        console.error("测试运行失败:", err)
+      }
     } finally {
+      if (runAbortControllerRef.current === controller) {
+        runAbortControllerRef.current = null
+      }
       setIsRunning(false)
       onSuiteUpdate()
     }
+  }
+
+  function handleStopRun() {
+    runAbortControllerRef.current?.abort()
   }
 
   async function handleAddCase(data: {
@@ -377,6 +394,15 @@ export function TestSuiteDetail({
             >
               <Play className="size-4 mr-1" />
               运行测试
+            </Button>
+          )}
+          {isRunning && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleStopRun}
+            >
+              停止测试
             </Button>
           )}
         </div>

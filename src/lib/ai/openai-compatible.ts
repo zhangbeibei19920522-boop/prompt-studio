@@ -1,5 +1,6 @@
 import type { AiProvider, ChatMessage, ChatOptions } from '@/types/ai'
 import { proxyFetch } from './proxy-fetch'
+import { isAbortError } from '@/lib/test-run-abort'
 
 /**
  * Determine which token limit parameter to use.
@@ -43,6 +44,7 @@ export function createOpenAiCompatibleProvider(config: {
         ...buildTokenLimit(model, options?.maxTokens ?? 16384),
         stream: false,
       }),
+      signal: options?.signal,
     })
 
     if (!res.ok) {
@@ -84,8 +86,12 @@ export function createOpenAiCompatibleProvider(config: {
           ...buildTokenLimit(model, options?.maxTokens ?? 16384),
           stream: true,
         }),
+        signal: options?.signal,
       }) as Response
     } catch (fetchError) {
+      if (isAbortError(fetchError)) {
+        throw fetchError
+      }
       console.error('[OpenAI Stream] fetch() threw:', {
         error: fetchError instanceof Error ? fetchError.message : fetchError,
         stack: fetchError instanceof Error ? fetchError.stack : undefined,

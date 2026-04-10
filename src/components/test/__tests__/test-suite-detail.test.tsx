@@ -355,6 +355,19 @@ describe("routing test result details", () => {
     expect(source).not.toContain("导出 PDF")
   })
 
+  it("wires an abortable stop action for the current running test session", () => {
+    const source = fs.readFileSync(
+      path.join(process.cwd(), "src/components/test/test-suite-detail.tsx"),
+      "utf8"
+    )
+
+    expect(source).toContain("停止测试")
+    expect(source).toContain("AbortController")
+    expect(source).toContain("handleStopRun")
+    expect(source).toContain("runAbortControllerRef.current?.abort()")
+    expect(source).toContain("signal: controller.signal")
+  })
+
   it("keeps prototype-style metrics, history count, and trend shell in suite detail", () => {
     const source = fs.readFileSync(
       path.join(process.cwd(), "src/components/test/test-suite-detail.tsx"),
