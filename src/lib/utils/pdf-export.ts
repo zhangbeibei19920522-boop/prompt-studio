@@ -141,6 +141,16 @@ function buildReportHtml(report: TestReport): string {
   return html
 }
 
+function getRunTime(testRun: TestRun): string {
+  return testRun.completedAt
+    ? format(new Date(testRun.completedAt), "yyyy-MM-dd HH:mm")
+    : format(new Date(testRun.startedAt), "yyyy-MM-dd HH:mm")
+}
+
+function buildExportFileName(suiteName: string, ext: "pdf" | "html"): string {
+  return `${suiteName}_运行报告_${format(new Date(), "yyyy-MM-dd_HHmm")}.${ext}`
+}
+
 function buildExportHtml({
   suiteName,
   runTime,
@@ -167,24 +177,42 @@ function buildExportHtml({
     </div>`
 }
 
-export async function exportTestRunPDF(
-  { suiteName, testRun, testCases }: ExportParams
-): Promise<void> {
-  const runTime = testRun.completedAt
-    ? format(new Date(testRun.completedAt), "yyyy-MM-dd HH:mm")
-    : format(new Date(testRun.startedAt), "yyyy-MM-dd HH:mm")
+function buildStandaloneHtmlDocument(bodyHtml: string, title: string): string {
+  return `<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${escapeHtml(title)}</title>
+    <style>
+      body {
+        margin: 0;
+        background: #f3f4f6;
+      }
+    </style>
+  </head>
+  <body>
+    ${bodyHtml}
+  </body>
+</html>`
+}
 
+function buildTestRunExportHtml({
+  suiteName,
+  testRun,
+  testCases,
+}: ExportParams): string {
+  const runTime = getRunTime(testRun)
   const casesHtml = testCases.map((tc, i) => {
     const result = testRun.results.find(r => r.testCaseId === tc.id)
     return buildCaseRowHtml(i, tc, result)
   }).join("")
-
   const reportHtml = testRun.report
     ? buildReportHtml(testRun.report) : ""
   const overviewHtml = testRun.report
     ? buildOverviewHtml(testRun.report) : ""
 
-  const html = buildExportHtml({
+  return buildExportHtml({
     suiteName,
     runTime,
     overviewHtml,
@@ -192,6 +220,38 @@ export async function exportTestRunPDF(
     reportHtml,
     testCasesCount: testCases.length,
   })
+}
+
+function downloadBlob(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+
+  link.href = url
+  link.download = fileName
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
+
+export async function exportTestRunHTML(
+  { suiteName, testRun, testCases }: ExportParams
+): Promise<void> {
+  const html = buildStandaloneHtmlDocument(
+    buildTestRunExportHtml({ suiteName, testRun, testCases }),
+    `${suiteName} - 测试报告`
+  )
+
+  downloadBlob(
+    new Blob([html], { type: "text/html;charset=utf-8" }),
+    buildExportFileName(suiteName, "html")
+  )
+}
+
+export async function exportTestRunPDF(
+  { suiteName, testRun, testCases }: ExportParams
+): Promise<void> {
+  const html = buildTestRunExportHtml({ suiteName, testRun, testCases })
 
   const container = document.createElement("div")
   container.style.cssText =
@@ -201,7 +261,7 @@ export async function exportTestRunPDF(
 
   try {
     const pdf = new jsPDF("p", "mm", "a4")
-    const fileName = `${suiteName}_运行报告_${format(new Date(), "yyyy-MM-dd_HHmm")}.pdf`
+    const fileName = buildExportFileName(suiteName, "pdf")
 
     await new Promise<void>((resolve, reject) => {
       try {

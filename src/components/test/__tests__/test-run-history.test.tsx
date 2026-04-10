@@ -1,4 +1,6 @@
 import React from "react"
+import fs from "node:fs"
+import path from "node:path"
 import { renderToStaticMarkup } from "react-dom/server"
 
 import { TestRunCaseResultCard } from "@/components/test/test-run-history"
@@ -83,5 +85,15 @@ describe("test run history routing detail", () => {
     expect(html).toContain("我想寄修一下手机。")
     expect(html).toContain("好的，请问您的手机是哪一款？比如 Find X8 Pro。")
     expect(html).toContain(">P-JX<")
+  })
+
+  it("includes html export actions in the history view source", () => {
+    const source = fs.readFileSync(
+      path.join(process.cwd(), "src/components/test/test-run-history.tsx"),
+      "utf8"
+    )
+
+    expect(source).toContain("exportTestRunHTML")
+    expect(source).toContain("导出 HTML")
   })
 })

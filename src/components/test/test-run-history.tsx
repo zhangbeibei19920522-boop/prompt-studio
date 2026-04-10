@@ -14,7 +14,7 @@ import {
   parseExpectedConversationOutput,
 } from "./conversation-output"
 import { testRunsApi } from "@/lib/utils/api-client"
-import { exportTestRunPDF } from "@/lib/utils/pdf-export"
+import { exportTestRunHTML, exportTestRunPDF } from "@/lib/utils/pdf-export"
 import type { TestRun, TestCase, TestCaseResult } from "@/types/database"
 
 interface TestRunHistoryProps {
@@ -112,6 +112,17 @@ export function TestRunHistory({ testSuiteId, testCases, suiteName }: TestRunHis
     }
   }
 
+  async function handleExportHtml(run: TestRun) {
+    setExporting(run.id)
+    try {
+      await exportTestRunHTML({ suiteName, testRun: run, testCases })
+    } catch (err) {
+      console.error("HTML 导出失败:", err)
+    } finally {
+      setExporting(null)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -149,6 +160,17 @@ export function TestRunHistory({ testSuiteId, testCases, suiteName }: TestRunHis
                 ? format(new Date(selectedRun.completedAt), "yyyy-MM-dd HH:mm")
                 : format(new Date(selectedRun.startedAt), "yyyy-MM-dd HH:mm")}
             </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={exporting === selectedRun.id}
+              onClick={() => handleExportHtml(selectedRun)}
+            >
+              {exporting === selectedRun.id
+                ? <Loader2 className="size-4 animate-spin mr-1" />
+                : <Download className="size-4 mr-1" />}
+              导出 HTML
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -233,19 +255,36 @@ export function TestRunHistory({ testSuiteId, testCases, suiteName }: TestRunHis
               </Badge>
             </span>
             {run.status === "completed" && (
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={exporting === run.id}
-                onClick={(event) => {
-                  event.stopPropagation()
-                  void handleExport(run)
-                }}
-              >
-                {exporting === run.id
-                  ? <Loader2 className="size-4 animate-spin" />
-                  : <Download className="size-4" />}
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={exporting === run.id}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    void handleExportHtml(run)
+                  }}
+                >
+                  {exporting === run.id
+                    ? <Loader2 className="size-4 animate-spin" />
+                    : <Download className="size-4" />}
+                  <span className="sr-only">导出 HTML</span>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={exporting === run.id}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    void handleExport(run)
+                  }}
+                >
+                  {exporting === run.id
+                    ? <Loader2 className="size-4 animate-spin" />
+                    : <Download className="size-4" />}
+                  <span className="sr-only">导出 PDF</span>
+                </Button>
+              </div>
             )}
           </button>
         )
