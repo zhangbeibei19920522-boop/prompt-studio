@@ -416,11 +416,12 @@ export function ConversationAuditDetail({
       return
     }
 
+    const parsingJobId = localData.job.id
     let cancelled = false
 
     async function poll() {
       try {
-        const refreshed = await onRefresh(localData.job.id)
+        const refreshed = await onRefresh(parsingJobId)
         if (!cancelled) {
           setLocalData(refreshed)
         }

@@ -110,10 +110,12 @@ export function parseExpectedConversationOutput(
       ? inputTurns[0].content
       : input.trim()
 
-  return [
+  const turns: ConversationTurn[] = [
     { role: "user", content: userContent },
     { role: "assistant", content: expectedOutput.trim() },
-  ].filter((turn) => turn.content)
+  ]
+
+  return turns.filter((turn) => turn.content)
 }
 
 export function parseConversationOutput(
@@ -188,14 +190,16 @@ export function parseConversationOutput(
     })
   }
 
-  return [
+  const fallbackTurns: ConversationTurn[] = [
     { role: "user", content: input },
     {
       role: "assistant",
       content: actualOutput,
       intent: isDisplayableIntent(fallbackIntent) ? fallbackIntent.trim() : null,
     },
-  ].filter(
+  ]
+
+  return fallbackTurns.filter(
     (turn) => turn.content && !(turn.role === "assistant" && isRoutingErrorContent(turn.content))
   )
 }

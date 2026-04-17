@@ -236,4 +236,15 @@ describe('conversation audit run routes', () => {
       testContext.cleanup()
     }
   })
+
+  it('uses a web-compatible response body for excel export', () => {
+    const routePath = path.join(
+      process.cwd(),
+      'src/app/api/conversation-audit-jobs/[id]/export/route.ts'
+    )
+    const source = fs.readFileSync(routePath, 'utf-8')
+
+    expect(source).not.toContain('new Response(buffer')
+    expect(source).toContain('new Uint8Array(buffer)')
+  })
 })

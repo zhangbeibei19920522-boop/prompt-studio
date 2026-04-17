@@ -1,4 +1,6 @@
 import React from "react"
+import fs from "node:fs"
+import path from "node:path"
 import { renderToStaticMarkup } from "react-dom/server"
 
 import * as ConversationAuditDetailModule from "@/components/audit/conversation-audit-detail"
@@ -139,6 +141,17 @@ describe("ConversationAuditDetail create mode", () => {
     expect(html).toContain("开始检查")
     expect(html).toContain("导出 Excel")
     expect((html.match(/disabled/g) ?? []).length).toBeGreaterThanOrEqual(3)
+  })
+
+  it("captures the parsing job id before polling refreshes", () => {
+    const source = fs.readFileSync(
+      path.join(process.cwd(), "src/components/audit/conversation-audit-detail.tsx"),
+      "utf8"
+    )
+
+    expect(source).toContain("const parsingJobId = localData.job.id")
+    expect(source).toContain("onRefresh(parsingJobId)")
+    expect(source).not.toContain("const refreshed = await onRefresh(localData.job.id)")
   })
 
   it("disables the start action and shows running progress when the selected job is already running", () => {
