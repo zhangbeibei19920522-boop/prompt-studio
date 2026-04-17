@@ -4,27 +4,28 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { WorkspaceFrame } from "@/components/workspace/workspace-frame"
 
 describe("WorkspaceFrame", () => {
-  it("renders the prototype-style shell with top bar, sidebar, and persistent conversation area", () => {
+  it("renders a function-first shell with module navigation and an Agent drawer trigger", () => {
     const html = renderToStaticMarkup(
       <WorkspaceFrame
         projectName="Prompt Studio"
-        sessions={[
-          { id: "s1", title: "路由策略整理", updatedLabel: "3 分钟前", active: true },
-          { id: "s2", title: "退款测试集重跑", updatedLabel: "20 分钟前", active: false },
+        modules={[
+          { id: "prompt", label: "Prompt", description: "当前 Prompt 编辑", active: false },
+          { id: "knowledge", label: "知识库", description: "文档、清洗与索引", active: true },
         ]}
-        onSessionSelect={() => {}}
-        onCreateSession={() => {}}
+        onModuleSelect={() => {}}
         onOpenCommandPalette={() => {}}
-        onOpenKnowledgeDrawer={() => {}}
+        onOpenChatDrawer={() => {}}
       >
         <div>workspace-body</div>
       </WorkspaceFrame>
     )
 
     expect(html).toContain("搜索 Prompt、测试、文档...")
-    expect(html).toContain("对话")
-    expect(html).toContain("路由策略整理")
-    expect(html).toContain("退款测试集重跑")
+    expect(html).toContain("功能")
+    expect(html).not.toContain("工作台首页")
+    expect(html).toContain("Prompt")
+    expect(html).toContain("知识库")
+    expect(html).toContain("Agent 对话")
     expect(html).toContain("workspace-body")
   })
 })

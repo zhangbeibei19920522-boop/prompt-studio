@@ -34,13 +34,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import {
-  DEFAULT_WORKSPACE_CANVAS_WIDTH,
-  WorkspaceCanvas,
-  type WorkspaceCanvasTab,
-} from "@/components/workspace/workspace-canvas"
+import { WorkspaceChatDrawer } from "@/components/workspace/workspace-chat-drawer"
 import { WorkspaceCommandPalette, type WorkspaceCommandItem } from "@/components/workspace/workspace-command-palette"
-import { WorkspaceFrame } from "@/components/workspace/workspace-frame"
+import { WorkspaceFrame, type WorkspaceModuleItem } from "@/components/workspace/workspace-frame"
 import { applyPrompt } from "@/lib/utils/sse-client"
 import {
   conversationAuditJobsApi,
@@ -73,10 +69,11 @@ import type {
   TestSuite,
 } from "@/types/database"
 
-type CanvasTabId = "prompt" | "library" | "test" | "audit" | "knowledge" | "settings"
+type ModuleId = "home" | "prompt" | "test" | "audit" | "knowledge" | "settings"
 type PromptCanvasMode = "empty" | "preview" | "edit" | "history"
 type TestCanvasView = "list" | "detail"
 type AuditCanvasView = "list" | "detail"
+type KnowledgeCanvasView = "documents" | "automation"
 type LibraryFilter = "all" | "active" | "draft"
 
 function formatUpdatedLabel(updatedAt: string): string {
@@ -387,13 +384,14 @@ export default function MainPage() {
     turns: ConversationAuditTurn[]
   } | null>(null)
 
-  const [canvasOpen, setCanvasOpen] = useState(false)
-  const [activeCanvasTab, setActiveCanvasTab] = useState<CanvasTabId>("prompt")
+  const [chatDrawerOpen, setChatDrawerOpen] = useState(false)
+  const [activeModuleId, setActiveModuleId] = useState<ModuleId>("home")
   const [promptCanvasMode, setPromptCanvasMode] = useState<PromptCanvasMode>("empty")
   const [libraryQuery, setLibraryQuery] = useState("")
   const [libraryFilter, setLibraryFilter] = useState<LibraryFilter>("all")
   const [testCanvasView, setTestCanvasView] = useState<TestCanvasView>("list")
   const [auditCanvasView, setAuditCanvasView] = useState<AuditCanvasView>("list")
+  const [knowledgeCanvasView, setKnowledgeCanvasView] = useState<KnowledgeCanvasView>("documents")
 
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
   const [createProjectOpen, setCreateProjectOpen] = useState(false)
@@ -436,24 +434,20 @@ export default function MainPage() {
     setCurrentConversationAuditData(null)
     setTestCanvasView("list")
     setAuditCanvasView("list")
-    setCanvasOpen(false)
-    setActiveCanvasTab("prompt")
+    setKnowledgeCanvasView("documents")
+    setChatDrawerOpen(false)
+    setActiveModuleId("home")
   }, [])
 
-  const openCanvas = useCallback((tab: CanvasTabId) => {
+  const openModule = useCallback((tab: Exclude<ModuleId, "home">) => {
     if (tab === "test") {
       setTestCanvasView("list")
     }
     if (tab === "audit") {
       setAuditCanvasView("list")
     }
-    setActiveCanvasTab(tab)
-    setCanvasOpen(true)
+    setActiveModuleId(tab)
   }, [])
-
-  const canvasExpanded =
-    (activeCanvasTab === "test" && testCanvasView === "detail")
-    || (activeCanvasTab === "audit" && auditCanvasView === "detail")
 
   useEffect(() => {
     projectsApi
@@ -527,7 +521,7 @@ export default function MainPage() {
         setCommandPaletteOpen((open) => !open)
       }
       if (event.key === "Escape") {
-        setCanvasOpen(false)
+        setChatDrawerOpen(false)
       }
     }
 
@@ -584,7 +578,7 @@ export default function MainPage() {
       const prompt = await promptsApi.get(id)
       setCurrentPrompt(prompt)
       setPromptCanvasMode("preview")
-      openCanvas("prompt")
+      openModule("prompt")
     } catch (error) {
       console.error(error)
     }
@@ -605,7 +599,7 @@ export default function MainPage() {
       const prompt = await promptsApi.get(created.id)
       setCurrentPrompt(prompt)
       setPromptCanvasMode("edit")
-      openCanvas("prompt")
+      openModule("prompt")
     } catch (error) {
       console.error("Create prompt failed:", error)
     }
@@ -628,7 +622,9 @@ export default function MainPage() {
       }
     }
     refreshPrompts()
-    openCanvas("library")
+    setCurrentPrompt(null)
+    setPromptCanvasMode("empty")
+    openModule("prompt")
   }
 
   const handleViewHistory = async (promptId: string) => {
@@ -640,7 +636,7 @@ export default function MainPage() {
       setCurrentPrompt(prompt)
       setVersions(versionData)
       setPromptCanvasMode("history")
-      openCanvas("prompt")
+      openModule("prompt")
     } catch (error) {
       console.error(error)
     }
@@ -655,7 +651,7 @@ export default function MainPage() {
         setVersions([])
         setPromptCanvasMode("empty")
       }
-      openCanvas("library")
+      openModule("prompt")
     } catch (error) {
       console.error("Delete prompt failed:", error)
     }
@@ -665,7 +661,7 @@ export default function MainPage() {
     try {
       const document = await documentsApi.get(id)
       setCurrentDocument(document)
-      openCanvas("knowledge")
+      openModule("knowledge")
     } catch (error) {
       console.error(error)
     }
@@ -696,7 +692,8 @@ export default function MainPage() {
         const detail = await documentsApi.get(nextDocuments[0].id)
         setCurrentDocument(detail)
       }
-      openCanvas("knowledge")
+      setKnowledgeCanvasView("documents")
+      openModule("knowledge")
     } catch (error) {
       console.error("Upload failed:", error)
     }
@@ -764,7 +761,7 @@ export default function MainPage() {
       if (existing) {
         setCurrentPrompt({ ...existing, content, title: data.title })
         setPromptCanvasMode("edit")
-        openCanvas("prompt")
+        openModule("prompt")
         return
       }
     }
@@ -785,14 +782,15 @@ export default function MainPage() {
         const prompt = await promptsApi.get(created.id)
         setCurrentPrompt(prompt)
         setPromptCanvasMode("edit")
-        openCanvas("prompt")
+        openModule("prompt")
       })
       .catch(console.error)
   }
 
   const handleNewTestSuite = () => {
     void handleNewSession({ title: "新建测试集", useTestAgent: true })
-    openCanvas("test")
+    openModule("test")
+    setChatDrawerOpen(true)
   }
 
   const handleTestSuiteClick = async (id: string) => {
@@ -804,8 +802,7 @@ export default function MainPage() {
       const runs = await testRunsApi.listBySuite(id)
       setCurrentTestRun(runs[0] ?? null)
       setTestCanvasView("detail")
-      setActiveCanvasTab("test")
-      setCanvasOpen(true)
+      setActiveModuleId("test")
     } catch (error) {
       console.error(error)
     }
@@ -835,8 +832,7 @@ export default function MainPage() {
       setCurrentTestRun(runs[0] ?? null)
       setTestMode(false)
       setTestCanvasView("detail")
-      setActiveCanvasTab("test")
-      setCanvasOpen(true)
+      setActiveModuleId("test")
     } catch (error) {
       console.error("Create test suite failed:", error)
     }
@@ -847,8 +843,7 @@ export default function MainPage() {
     setCurrentConversationAuditData(null)
     setConversationAuditCreateMode(true)
     setAuditCanvasView("detail")
-    setActiveCanvasTab("audit")
-    setCanvasOpen(true)
+    setActiveModuleId("audit")
   }
 
   const handleConversationAuditJobClick = async (id: string) => {
@@ -858,8 +853,7 @@ export default function MainPage() {
       setCurrentConversationAuditData(data)
       setConversationAuditCreateMode(false)
       setAuditCanvasView("detail")
-      setActiveCanvasTab("audit")
-      setCanvasOpen(true)
+      setActiveModuleId("audit")
     } catch (error) {
       console.error(error)
     }
@@ -867,20 +861,49 @@ export default function MainPage() {
 
   const commandActions: WorkspaceCommandItem[] = [
     { id: "new-session", title: "新建对话", description: "创建一个新的对话线程" },
-    { id: "new-prompt", title: "新建 Prompt", description: "打开 Prompt canvas 并创建空白资产" },
-    { id: "new-test-suite", title: "新建测试集", description: "创建测试生成会话并打开测试 canvas" },
-    { id: "new-audit-job", title: "新建质检任务", description: "打开质检 canvas 并开始上传文件" },
-    { id: "open-knowledge", title: "知识库", description: "打开知识库 canvas 查看和上传文档" },
-    { id: "open-settings", title: "设置", description: "打开设置 canvas 或跳转完整设置页" },
+    { id: "new-prompt", title: "新建 Prompt", description: "打开 Prompt 模块并创建空白资产" },
+    { id: "new-test-suite", title: "新建测试集", description: "创建测试生成会话并打开测试模块" },
+    { id: "new-audit-job", title: "新建质检任务", description: "打开质检模块并开始上传文件" },
+    { id: "open-knowledge", title: "知识库", description: "打开知识库模块查看和上传文档" },
+    { id: "open-settings", title: "设置", description: "打开设置模块或跳转完整设置页" },
   ]
 
-  const canvasTabs: WorkspaceCanvasTab[] = [
-    { id: "prompt", label: "Prompt", icon: <FileText className="size-3.5" /> },
-    { id: "library", label: "Prompt 库", icon: <FileText className="size-3.5" /> },
-    { id: "test", label: "测试", icon: <FlaskConical className="size-3.5" /> },
-    { id: "audit", label: "质检", icon: <ShieldCheck className="size-3.5" /> },
-    { id: "knowledge", label: "知识库", icon: <BookOpen className="size-3.5" /> },
-    { id: "settings", label: "设置", icon: <Settings2 className="size-3.5" /> },
+  const workspaceModules: WorkspaceModuleItem[] = [
+    {
+      id: "prompt",
+      label: "Prompt",
+      description: "Prompt 列表和编辑",
+      icon: <FileText className="size-4" />,
+      active: activeModuleId === "prompt",
+    },
+    {
+      id: "test",
+      label: "自动化测试",
+      description: "测试集和运行报告",
+      icon: <FlaskConical className="size-4" />,
+      active: activeModuleId === "test",
+    },
+    {
+      id: "audit",
+      label: "会话质检",
+      description: "历史对话和知识校验",
+      icon: <ShieldCheck className="size-4" />,
+      active: activeModuleId === "audit",
+    },
+    {
+      id: "knowledge",
+      label: "知识库",
+      description: "文档、清洗与索引",
+      icon: <BookOpen className="size-4" />,
+      active: activeModuleId === "knowledge",
+    },
+    {
+      id: "settings",
+      label: "设置",
+      description: "模型和业务信息",
+      icon: <Settings2 className="size-4" />,
+      active: activeModuleId === "settings",
+    },
   ]
 
   const workspaceSessions = sessions.map((session) => ({
@@ -1004,64 +1027,59 @@ export default function MainPage() {
 
   function renderPromptCanvas() {
     if (!currentPrompt) {
-      return (
-        <CanvasSection
-          title="Prompt"
-          action={
-            <Button variant="outline" size="sm" onClick={() => void handleCreatePrompt()}>
-              <Plus className="size-4" />
-              新建 Prompt
-            </Button>
-          }
-        >
-          <div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-6 text-sm text-zinc-500">
-            选择一个 Prompt，或从 Prompt 库中打开现有资产。
-          </div>
-        </CanvasSection>
-      )
+      return renderPromptListCanvas()
     }
 
     if (promptCanvasMode === "edit") {
       return (
-        <PromptEditor
-          prompt={currentPrompt}
-          onSave={async (data) => {
-            await promptsApi.update(currentPrompt.id, data)
-            refreshPrompts()
-            const updated = await promptsApi.get(currentPrompt.id)
-            setCurrentPrompt(updated)
-            setPromptCanvasMode("preview")
-          }}
-          onCancel={() => setPromptCanvasMode("preview")}
-        />
+        <>
+          <CanvasBackButton onClick={showPromptList}>返回 Prompt 列表</CanvasBackButton>
+          <PromptEditor
+            prompt={currentPrompt}
+            onSave={async (data) => {
+              await promptsApi.update(currentPrompt.id, data)
+              refreshPrompts()
+              const updated = await promptsApi.get(currentPrompt.id)
+              setCurrentPrompt(updated)
+              setPromptCanvasMode("preview")
+            }}
+            onCancel={() => setPromptCanvasMode("preview")}
+          />
+        </>
       )
     }
 
     if (promptCanvasMode === "history") {
       return (
-        <VersionHistory
-          versions={versions}
-          currentVersion={currentPrompt.version}
-          onRestore={(versionId) => console.log("Restore:", versionId)}
-        />
+        <>
+          <CanvasBackButton onClick={showPromptList}>返回 Prompt 列表</CanvasBackButton>
+          <VersionHistory
+            versions={versions}
+            currentVersion={currentPrompt.version}
+            onRestore={(versionId) => console.log("Restore:", versionId)}
+          />
+        </>
       )
     }
 
     return (
-      <PromptPreview
-        prompt={currentPrompt}
-        onEdit={() => setPromptCanvasMode("edit")}
-        onViewHistory={() => void handleViewHistory(currentPrompt.id)}
-        onDelete={() => void handleDeletePrompt(currentPrompt.id)}
-      />
+      <>
+        <CanvasBackButton onClick={showPromptList}>返回 Prompt 列表</CanvasBackButton>
+        <PromptPreview
+          prompt={currentPrompt}
+          onEdit={() => setPromptCanvasMode("edit")}
+          onViewHistory={() => void handleViewHistory(currentPrompt.id)}
+          onDelete={() => void handleDeletePrompt(currentPrompt.id)}
+        />
+      </>
     )
   }
 
-  function renderLibraryCanvas() {
+  function renderPromptListCanvas() {
     return (
       <div>
         <CanvasDetailHeader
-          title="Prompt 库"
+          title="Prompt"
           subtitle={`${filteredPrompts.length} 个资产`}
           actions={
             <>
@@ -1118,6 +1136,12 @@ export default function MainPage() {
         )}
       </div>
     )
+  }
+
+  function showPromptList() {
+    setCurrentPrompt(null)
+    setPromptCanvasMode("empty")
+    setVersions([])
   }
 
   function renderTestCanvasList() {
@@ -1309,53 +1333,76 @@ export default function MainPage() {
       <>
         <CanvasDetailHeader
           title="知识库"
-          subtitle={`${documents.length} 份文档`}
-          actions={
-            <Button variant="outline" size="sm" onClick={() => setUploadDialogOpen(true)}>
-              <Plus className="size-4" />
-              上传文档
-            </Button>
-          }
+          subtitle={`${documents.length} 份文档 · 清洗与索引工作台`}
         />
-        <button
-          type="button"
-          onClick={() => setUploadDialogOpen(true)}
-          className="mb-4 flex w-full flex-col items-center justify-center rounded-xl border-2 border-dashed border-zinc-200 bg-zinc-50 px-6 py-8 text-center text-zinc-500 transition-colors hover:border-blue-300 hover:bg-blue-50"
-        >
-          <Upload className="mb-2 size-7" />
-          <span className="text-sm font-medium text-zinc-700">拖拽文件到此处，或点击上传</span>
-          <span className="mt-1 text-xs text-zinc-500">支持 PDF、Word、TXT、Markdown</span>
-        </button>
-        <CanvasSection title={`已上传文档 (${documents.length})`}>
-          {documents.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-6 text-sm text-zinc-500">
-              还没有知识文档。
-            </div>
-          ) : (
-            documents.map((document) => (
-              <CanvasListCard
-                key={document.id}
-                icon={<BookOpen className="size-4" />}
-                tone="knowledge"
-                title={document.name}
-                meta={`${document.type.toUpperCase()} · ${formatCanvasTimeLabel(document.createdAt, "上传于")}`}
-                status={document.type.toUpperCase()}
-                active={currentDocument?.id === document.id}
-                onClick={() => void handleDocumentClick(document.id)}
-              />
-            ))
-          )}
-        </CanvasSection>
 
-        {currentDocument && (
-          <CanvasSection title="文档预览">
-            <div className="rounded-lg border border-zinc-200">
-              <DocumentPreview
-                document={currentDocument}
-                onDelete={() => void handleDeleteDocument(currentDocument.id)}
-              />
-            </div>
-          </CanvasSection>
+        <div className="mb-4 flex rounded-lg border border-zinc-200 bg-zinc-50 p-1">
+          {([
+            ["documents", "文档库"],
+            ["automation", "清洗与索引"],
+          ] as const).map(([viewId, label]) => (
+            <button
+              key={viewId}
+              type="button"
+              onClick={() => setKnowledgeCanvasView(viewId)}
+              className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                knowledgeCanvasView === viewId
+                  ? "bg-white text-zinc-950 shadow-sm"
+                  : "text-zinc-500 hover:text-zinc-900"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {knowledgeCanvasView === "documents" ? (
+          <>
+            <button
+              type="button"
+              onClick={() => setUploadDialogOpen(true)}
+              className="mb-4 flex w-full flex-col items-center justify-center rounded-xl border-2 border-dashed border-zinc-200 bg-zinc-50 px-6 py-8 text-center text-zinc-500 transition-colors hover:border-blue-300 hover:bg-blue-50"
+            >
+              <Upload className="mb-2 size-7" />
+              <span className="text-sm font-medium text-zinc-700">拖拽文件到此处，或点击上传</span>
+              <span className="mt-1 text-xs text-zinc-500">支持 PDF、Word、TXT、Markdown</span>
+            </button>
+            <CanvasSection title={`已上传文档 (${documents.length})`}>
+              {documents.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-6 text-sm text-zinc-500">
+                  还没有知识文档。
+                </div>
+              ) : (
+                documents.map((document) => (
+                  <CanvasListCard
+                    key={document.id}
+                    icon={<BookOpen className="size-4" />}
+                    tone="knowledge"
+                    title={document.name}
+                    meta={`${document.type.toUpperCase()} · ${formatCanvasTimeLabel(document.createdAt, "上传于")}`}
+                    status={document.type.toUpperCase()}
+                    active={currentDocument?.id === document.id}
+                    onClick={() => void handleDocumentClick(document.id)}
+                  />
+                ))
+              )}
+            </CanvasSection>
+
+            {currentDocument && (
+              <CanvasSection title="文档预览">
+                <div className="rounded-lg border border-zinc-200">
+                  <DocumentPreview
+                    document={currentDocument}
+                    onDelete={() => void handleDeleteDocument(currentDocument.id)}
+                  />
+                </div>
+              </CanvasSection>
+            )}
+          </>
+        ) : (
+          <div className="flex min-h-[280px] items-center justify-center rounded-lg border border-dashed border-zinc-300 bg-white px-6 py-12 text-center">
+            <p className="text-base font-semibold text-zinc-950">功能开发中</p>
+          </div>
         )}
       </>
     )
@@ -1408,12 +1455,28 @@ export default function MainPage() {
     )
   }
 
-  function renderCanvasBody() {
-    switch (activeCanvasTab) {
+  function renderHomeModule() {
+    return (
+      <div className="flex min-h-full items-center justify-center">
+        <div className="max-w-xl rounded-lg border border-dashed border-zinc-300 bg-white px-8 py-10 text-center shadow-sm">
+          <div className="mx-auto mb-4 grid size-12 place-items-center rounded-md bg-zinc-100">
+            <Search className="size-6 text-zinc-500" />
+          </div>
+          <h2 className="text-xl font-semibold text-zinc-950">从左侧选择一个功能开始。</h2>
+          <p className="mt-3 text-sm leading-6 text-zinc-600">
+            Prompt、测试、质检和知识库现在作为主工作台展示；需要协助时，点击右上角打开 Agent 对话。
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  function renderModuleBody() {
+    switch (activeModuleId) {
+      case "home":
+        return renderHomeModule()
       case "prompt":
         return renderPromptCanvas()
-      case "library":
-        return renderLibraryCanvas()
       case "test":
         return renderTestCanvas()
       case "audit":
@@ -1425,80 +1488,76 @@ export default function MainPage() {
     }
   }
 
+  function handleModuleSelect(id: string) {
+    const nextModule = id as ModuleId
+    if (nextModule === "prompt") {
+      showPromptList()
+    }
+    if (nextModule === "test") {
+      setTestCanvasView("list")
+    }
+    if (nextModule === "audit") {
+      setAuditCanvasView("list")
+    }
+    setActiveModuleId(nextModule)
+  }
+
   return (
     <>
       <WorkspaceFrame
         projectName={currentProject?.name ?? "Prompt Studio"}
         projectSwitcher={projectSwitcher}
+        modules={workspaceModules}
+        onModuleSelect={handleModuleSelect}
+        onOpenCommandPalette={() => setCommandPaletteOpen(true)}
+        onOpenChatDrawer={() => setChatDrawerOpen(true)}
+        onToggleSidebar={() => setSidebarCollapsed((value) => !value)}
+        sidebarCollapsed={sidebarCollapsed}
+      >
+        <div className="h-full overflow-y-auto bg-stone-50 p-5">{renderModuleBody()}</div>
+      </WorkspaceFrame>
+
+      <WorkspaceChatDrawer
+        open={chatDrawerOpen}
         sessions={workspaceSessions}
+        onClose={() => setChatDrawerOpen(false)}
+        onCreateSession={() => void handleNewSession()}
         onSessionSelect={(id) => {
           setCurrentSessionId(id)
           setTestMode(false)
         }}
-        onCreateSession={() => void handleNewSession()}
-        onOpenCommandPalette={() => setCommandPaletteOpen(true)}
-        onOpenKnowledgeDrawer={() => openCanvas("knowledge")}
-        onOpenSettings={() => openCanvas("settings")}
-        onToggleSidebar={() => setSidebarCollapsed((value) => !value)}
-        sidebarCollapsed={sidebarCollapsed}
       >
-        <div
-          className={`conversation h-full bg-stone-50 transition-[margin] duration-200 ${canvasExpanded ? "hidden-by-canvas hidden" : ""}`}
-          style={{ marginRight: canvasOpen && !canvasExpanded ? `${DEFAULT_WORKSPACE_CANVAS_WIDTH}px` : "0" }}
-        >
-          <ChatArea
-            messages={currentSessionId ? messages : []}
-            sessionId={currentSessionId}
-            prompts={prompts.map((prompt) => ({ id: prompt.id, title: prompt.title }))}
-            documents={documents.map((document) => ({ id: document.id, name: document.name }))}
-            onMessagesChange={refreshMessages}
-            onApplyPreview={handleApplyPreview}
-            onApplyDiff={handleApplyDiff}
-            onEditInPanel={handleEditInPanel}
-            onViewHistory={(promptId) => {
-              const byId = prompts.find((prompt) => prompt.id === promptId)
-              const resolved = byId ?? prompts.find((prompt) => prompt.title === promptId)
-              if (resolved) {
-                void handleViewHistory(resolved.id)
-              }
-            }}
-            onNewSession={() => void handleNewSession({ useTestAgent: testMode })}
-            onMemoryCommand={(data) => {
-              if (data.command === "create" || data.command === "delete") {
-                refreshProjectMemories()
-              }
-            }}
-            onConfirmTestSuite={handleConfirmTestSuite}
-            onSessionTitleUpdate={(sessionId, title) => {
-              setSessions((prev) =>
-                prev.map((session) => (session.id === sessionId ? { ...session, title } : session))
-              )
-            }}
-            useTestAgent={testMode}
-          />
-        </div>
-      </WorkspaceFrame>
-
-      <WorkspaceCanvas
-        open={canvasOpen}
-        activeTab={activeCanvasTab}
-        tabs={canvasTabs}
-        onTabChange={(tabId) => {
-          const nextTab = tabId as CanvasTabId
-          if (nextTab === "test") {
-            setTestCanvasView("list")
-          }
-          if (nextTab === "audit") {
-            setAuditCanvasView("list")
-          }
-          setActiveCanvasTab(nextTab)
-        }}
-        onClose={() => setCanvasOpen(false)}
-        expanded={canvasExpanded}
-        hideOverlay={canvasExpanded}
-      >
-        {renderCanvasBody()}
-      </WorkspaceCanvas>
+        <ChatArea
+          messages={currentSessionId ? messages : []}
+          sessionId={currentSessionId}
+          prompts={prompts.map((prompt) => ({ id: prompt.id, title: prompt.title }))}
+          documents={documents.map((document) => ({ id: document.id, name: document.name }))}
+          onMessagesChange={refreshMessages}
+          onApplyPreview={handleApplyPreview}
+          onApplyDiff={handleApplyDiff}
+          onEditInPanel={handleEditInPanel}
+          onViewHistory={(promptId) => {
+            const byId = prompts.find((prompt) => prompt.id === promptId)
+            const resolved = byId ?? prompts.find((prompt) => prompt.title === promptId)
+            if (resolved) {
+              void handleViewHistory(resolved.id)
+            }
+          }}
+          onNewSession={() => void handleNewSession({ useTestAgent: testMode })}
+          onMemoryCommand={(data) => {
+            if (data.command === "create" || data.command === "delete") {
+              refreshProjectMemories()
+            }
+          }}
+          onConfirmTestSuite={handleConfirmTestSuite}
+          onSessionTitleUpdate={(sessionId, title) => {
+            setSessions((prev) =>
+              prev.map((session) => (session.id === sessionId ? { ...session, title } : session))
+            )
+          }}
+          useTestAgent={testMode}
+        />
+      </WorkspaceChatDrawer>
 
       <WorkspaceCommandPalette
         open={commandPaletteOpen}
@@ -1529,6 +1588,7 @@ export default function MainPage() {
           switch (id) {
             case "new-session":
               void handleNewSession()
+              setChatDrawerOpen(true)
               return
             case "new-prompt":
               void handleCreatePrompt()
@@ -1540,10 +1600,10 @@ export default function MainPage() {
               handleNewConversationAuditJob()
               return
             case "open-knowledge":
-              openCanvas("knowledge")
+              openModule("knowledge")
               return
             case "open-settings":
-              openCanvas("settings")
+              openModule("settings")
           }
         }}
         onPromptSelect={(id) => {

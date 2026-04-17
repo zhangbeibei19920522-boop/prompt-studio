@@ -1,54 +1,37 @@
 "use client"
 
 import * as React from "react"
-import { BookOpen, Menu, Plus, Search, Settings } from "lucide-react"
+import { Menu, MessageSquareText, Search } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
-export interface WorkspaceSessionItem {
-  id: string
-  title: string
-  updatedLabel: string
-  active: boolean
-}
-
-export interface WorkspaceTabItem {
+export interface WorkspaceModuleItem {
   id: string
   label: string
+  description?: string
+  icon?: React.ReactNode
   active: boolean
 }
 
 interface WorkspaceFrameProps {
   projectName: string
   projectSwitcher?: React.ReactNode
-  sessions: WorkspaceSessionItem[]
-  onSessionSelect: (id: string) => void
-  onCreateSession: () => void
+  modules: WorkspaceModuleItem[]
+  onModuleSelect: (id: string) => void
   onOpenCommandPalette: () => void
-  onOpenKnowledgeDrawer: () => void
-  onOpenSettings?: () => void
+  onOpenChatDrawer: () => void
   onToggleSidebar?: () => void
   sidebarCollapsed?: boolean
   children: React.ReactNode
-  workspace?: string
-  workspaceTitle?: string
-  workspaceDescription?: string
-  workspaceTabs?: WorkspaceTabItem[]
-  onWorkspaceChange?: (id: string) => void
-  statusLabel?: string
-  sideContent?: React.ReactNode
 }
 
 export function WorkspaceFrame({
   projectName,
   projectSwitcher,
-  sessions,
-  onSessionSelect,
-  onCreateSession,
+  modules,
+  onModuleSelect,
   onOpenCommandPalette,
-  onOpenKnowledgeDrawer,
-  onOpenSettings,
+  onOpenChatDrawer,
   onToggleSidebar,
   sidebarCollapsed = false,
   children,
@@ -94,22 +77,12 @@ export function WorkspaceFrame({
         <div className="flex items-center gap-1">
           <button
             type="button"
-            onClick={onOpenKnowledgeDrawer}
-            className="flex size-8 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
-            aria-label="知识库"
+            onClick={onOpenChatDrawer}
+            className="flex h-8 items-center gap-2 rounded-md border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 hover:text-zinc-950"
           >
-            <BookOpen className="size-4.5" />
+            <MessageSquareText className="size-4" />
+            <span>Agent 对话</span>
           </button>
-          {onOpenSettings && (
-            <button
-              type="button"
-              onClick={onOpenSettings}
-              className="flex size-8 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
-              aria-label="设置"
-            >
-              <Settings className="size-4.5" />
-            </button>
-          )}
         </div>
       </header>
 
@@ -120,36 +93,31 @@ export function WorkspaceFrame({
             sidebarCollapsed ? "w-0 border-r-0 opacity-0" : "w-[260px] opacity-100"
           )}
         >
-          <div className="flex items-center justify-between px-3 py-3">
-            <h2 className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500">对话</h2>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              onClick={onCreateSession}
-              className="rounded-md text-zinc-500 hover:bg-zinc-200 hover:text-zinc-900"
-              aria-label="新建对话"
-            >
-              <Plus className="size-4" />
-            </Button>
+          <div className="px-3 py-3">
+            <h2 className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500">功能</h2>
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
-            {sessions.length === 0 ? (
-              <div className="px-2 py-3 text-sm text-zinc-500">暂无对话</div>
+            {modules.length === 0 ? (
+              <div className="px-2 py-3 text-sm text-zinc-500">暂无功能模块</div>
             ) : (
-              sessions.map((session) => (
+              modules.map((module) => (
                 <button
-                  key={session.id}
+                  key={module.id}
                   type="button"
-                  onClick={() => onSessionSelect(session.id)}
+                  onClick={() => onModuleSelect(module.id)}
                   className={cn(
-                    "group relative mb-1 flex w-full items-center gap-2 rounded-md px-3 py-2 text-left transition-colors",
-                    session.active ? "bg-zinc-200" : "hover:bg-zinc-100"
+                    "group relative mb-1 flex w-full items-start gap-3 rounded-md px-3 py-3 text-left transition-colors",
+                    module.active ? "bg-zinc-200 text-zinc-950" : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950"
                   )}
                 >
-                  <span className="min-w-0 flex-1 truncate text-sm">{session.title}</span>
-                  <span className="text-[11px] text-zinc-400 group-hover:hidden">{session.updatedLabel}</span>
-                  <span className="hidden text-sm text-zinc-400 group-hover:inline">×</span>
+                  {module.icon && <span className="mt-0.5 shrink-0 text-zinc-500">{module.icon}</span>}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">{module.label}</span>
+                    {module.description && (
+                      <span className="mt-1 block truncate text-xs text-zinc-500">{module.description}</span>
+                    )}
+                  </span>
                 </button>
               ))
             )}
