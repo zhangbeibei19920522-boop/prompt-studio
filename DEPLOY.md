@@ -4,52 +4,87 @@
 
 - Windows / macOS / Linux
 - Node.js >= 18
-- Git（可选，也可以下载 ZIP）
+- Git
+- npm
 
-## 方式一：命令行部署
+> 用户数据保存在项目目录的 `data/` 中。安装和更新命令不会删除 `data/`，只会更新代码、依赖和 `.next` 构建产物。
 
-打开终端（Windows 用 PowerShell 或 CMD），依次执行：
+## 一条命令安装
+
+macOS / Linux 终端执行：
 
 ```bash
-# 1. 安装 Git（如果没装过，已装跳过）
-winget install Git.Git
+curl -fsSL https://raw.githubusercontent.com/zhangbeibei19920522-boop/prompt-studio/master/scripts/install.sh | bash
+```
 
-# 2. 安装 Node.js（如果没装过，已装跳过）
-winget install OpenJS.NodeJS.LTS
+Windows PowerShell 执行：
 
-# 3. 关闭终端，重新打开（让环境变量生效）
+```powershell
+irm https://raw.githubusercontent.com/zhangbeibei19920522-boop/prompt-studio/master/scripts/install.ps1 | iex
+```
 
-# 4. 验证安装
-node -v
-git --version
+默认安装到当前用户目录下的 `prompt-studio`：
 
-# 5. 克隆项目
-git clone https://github.com/zhangbeibei19920522-boop/prompt-studio.git
+- macOS / Linux：`~/prompt-studio`
+- Windows：`%USERPROFILE%\prompt-studio`
 
-# 6. 进入目录
-cd prompt-studio
+启动：
 
-# 7. 安装依赖
-npm install
-
-# 8. 启动
+```bash
+cd ~/prompt-studio
 node bin/cli.js
 ```
 
-启动后浏览器打开 http://localhost:3000 即可使用。
+Windows PowerShell：
 
-## 方式二：下载 ZIP 部署（不需要 Git）
-
-1. 打开 https://github.com/zhangbeibei19920522-boop/prompt-studio
-2. 点击绿色按钮 "Code" → "Download ZIP"
-3. 解压到任意目录
-4. 打开终端，进入解压后的目录
-5. 执行：
-
-```bash
-npm install
+```powershell
+cd "$HOME\prompt-studio"
 node bin/cli.js
 ```
+
+浏览器打开 http://localhost:3000 即可使用。
+
+## 一条命令更新
+
+如果 Prompt Studio 正在运行，先在运行服务的终端按 `Ctrl + C` 停止。
+
+macOS / Linux：
+
+```bash
+cd ~/prompt-studio && node bin/cli.js update
+```
+
+Windows PowerShell：
+
+```powershell
+cd "$HOME\prompt-studio"; node bin/cli.js update
+```
+
+更新命令会自动执行：
+
+```bash
+git pull --ff-only origin master
+npm install
+npm run build
+```
+
+它会清理并重建 `.next`，保证页面使用最新代码；不会删除 `data/` 里的历史项目、对话、Prompt、知识库文档和记忆数据。
+
+## 自定义安装目录
+
+macOS / Linux：
+
+```bash
+PROMPT_STUDIO_DIR="$HOME/apps/prompt-studio" curl -fsSL https://raw.githubusercontent.com/zhangbeibei19920522-boop/prompt-studio/master/scripts/install.sh | bash
+```
+
+Windows PowerShell：
+
+```powershell
+$env:PROMPT_STUDIO_DIR="$HOME\apps\prompt-studio"; irm https://raw.githubusercontent.com/zhangbeibei19920522-boop/prompt-studio/master/scripts/install.ps1 | iex
+```
+
+自定义目录后，启动和更新时进入对应目录执行 `node bin/cli.js` 或 `node bin/cli.js update`。
 
 ## 自定义端口
 
@@ -59,18 +94,53 @@ node bin/cli.js start -p 8080
 
 ## 常见问题
 
+### 更新后页面没有变化
+
+执行：
+
+```bash
+node bin/cli.js update
+```
+
+`update` 会重新构建 `.next`，不会再使用旧页面产物。
+
+### update 提示本地代码有修改
+
+更新命令不会自动覆盖本地代码修改。先执行：
+
+```bash
+git status
+```
+
+确认这些修改是否需要保留。`data/` 是用户数据目录，不会影响更新。
+
 ### npm install 报错
-确认 Node.js 版本 >= 18：`node -v`
+
+确认 Node.js 版本 >= 18：
+
+```bash
+node -v
+```
 
 ### 端口被占用
-换一个端口：`node bin/cli.js start -p 3001`
+
+换一个端口：
+
+```bash
+node bin/cli.js start -p 3001
+```
 
 ### macOS / Linux 安装 Node.js
-```bash
-# macOS
-brew install node
 
-# Ubuntu / Debian
+macOS：
+
+```bash
+brew install node
+```
+
+Ubuntu / Debian：
+
+```bash
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt-get install -y nodejs
 ```
