@@ -67,4 +67,15 @@ describe("main page workspace layout", () => {
     expect(source).toContain("功能开发中")
     expect(source).not.toContain("KnowledgeAutomationPanel")
   })
+
+  it("keeps project memory management as a top-level workspace module", () => {
+    const pagePath = path.join(process.cwd(), "src", "app", "(main)", "page.tsx")
+    const source = fs.readFileSync(pagePath, "utf8")
+
+    expect(source).toContain('label: "记忆"')
+    expect(source).toContain("renderMemoryCanvas")
+    expect(source).toContain("MemoryList")
+    expect(source).toContain("memoriesApi.createForProject")
+    expect(source).toContain("memoriesApi.promote")
+  })
 })

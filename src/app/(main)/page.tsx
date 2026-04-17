@@ -6,6 +6,7 @@ import { zhCN } from "date-fns/locale"
 import { useRouter } from "next/navigation"
 import {
   BookOpen,
+  Brain,
   ChevronLeft,
   FileText,
   FlaskConical,
@@ -20,6 +21,7 @@ import { ConversationAuditDetail } from "@/components/audit/conversation-audit-d
 import { ChatArea } from "@/components/chat/chat-area"
 import { DocumentPreview } from "@/components/knowledge/document-preview"
 import { UploadDialog } from "@/components/knowledge/upload-dialog"
+import { MemoryList } from "@/components/memory/memory-list"
 import { BatchUploadDialog } from "@/components/prompt/batch-upload-dialog"
 import { PromptEditor } from "@/components/prompt/prompt-editor"
 import { PromptPreview } from "@/components/prompt/prompt-preview"
@@ -69,7 +71,7 @@ import type {
   TestSuite,
 } from "@/types/database"
 
-type ModuleId = "home" | "prompt" | "test" | "audit" | "knowledge" | "settings"
+type ModuleId = "home" | "prompt" | "test" | "audit" | "knowledge" | "memory" | "settings"
 type PromptCanvasMode = "empty" | "preview" | "edit" | "history"
 type TestCanvasView = "list" | "detail"
 type AuditCanvasView = "list" | "detail"
@@ -865,6 +867,7 @@ export default function MainPage() {
     { id: "new-test-suite", title: "新建测试集", description: "创建测试生成会话并打开测试模块" },
     { id: "new-audit-job", title: "新建质检任务", description: "打开质检模块并开始上传文件" },
     { id: "open-knowledge", title: "知识库", description: "打开知识库模块查看和上传文档" },
+    { id: "open-memory", title: "记忆", description: "打开当前项目的记忆管理" },
     { id: "open-settings", title: "设置", description: "打开设置模块或跳转完整设置页" },
   ]
 
@@ -896,6 +899,16 @@ export default function MainPage() {
       description: "文档、清洗与索引",
       icon: <BookOpen className="size-4" />,
       active: activeModuleId === "knowledge",
+    },
+    {
+      id: "memory",
+      label: "记忆",
+      description:
+        memoryBadgeCount > 0
+          ? `${projectMemories.length} 条，新增 ${memoryBadgeCount} 条`
+          : `${projectMemories.length} 条项目记忆`,
+      icon: <Brain className="size-4" />,
+      active: activeModuleId === "memory",
     },
     {
       id: "settings",
@@ -1408,6 +1421,50 @@ export default function MainPage() {
     )
   }
 
+  function renderMemoryCanvas() {
+    return (
+      <div>
+        <CanvasDetailHeader
+          title="记忆"
+          subtitle={`${projectMemories.length} 条项目记忆`}
+          actions={
+            <Button variant="outline" size="sm" onClick={() => router.push("/settings")}>
+              全局记忆
+            </Button>
+          }
+        />
+        {!currentProjectId ? (
+          <div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-6 text-sm text-zinc-500">
+            请选择一个项目后管理记忆。
+          </div>
+        ) : (
+          <MemoryList
+            memories={projectMemories}
+            scope="project"
+            onAdd={async (data) => {
+              await memoriesApi.createForProject(currentProjectId, data)
+              refreshProjectMemories()
+              setMemoryBadgeCount(0)
+            }}
+            onEdit={async (id, data) => {
+              await memoriesApi.update(id, data)
+              refreshProjectMemories()
+            }}
+            onDelete={async (id) => {
+              await memoriesApi.delete(id)
+              refreshProjectMemories()
+              setMemoryBadgeCount(0)
+            }}
+            onPromote={async (id) => {
+              await memoriesApi.promote(id)
+              refreshProjectMemories()
+            }}
+          />
+        )}
+      </div>
+    )
+  }
+
   function renderSettingsCanvas() {
     return (
       <div>
@@ -1483,6 +1540,8 @@ export default function MainPage() {
         return renderAuditCanvas()
       case "knowledge":
         return renderKnowledgeCanvas()
+      case "memory":
+        return renderMemoryCanvas()
       case "settings":
         return renderSettingsCanvas()
     }
@@ -1498,6 +1557,9 @@ export default function MainPage() {
     }
     if (nextModule === "audit") {
       setAuditCanvasView("list")
+    }
+    if (nextModule === "memory") {
+      setMemoryBadgeCount(0)
     }
     setActiveModuleId(nextModule)
   }
@@ -1601,6 +1663,10 @@ export default function MainPage() {
               return
             case "open-knowledge":
               openModule("knowledge")
+              return
+            case "open-memory":
+              openModule("memory")
+              setMemoryBadgeCount(0)
               return
             case "open-settings":
               openModule("settings")
