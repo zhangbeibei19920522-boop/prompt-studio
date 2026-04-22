@@ -230,6 +230,7 @@ CREATE TABLE IF NOT EXISTS test_suites (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+  section TEXT NOT NULL DEFAULT 'full-flow' CHECK(section IN ('full-flow', 'unit')),
   name TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
   prompt_id TEXT REFERENCES prompts(id) ON DELETE SET NULL,
@@ -265,9 +266,24 @@ CREATE TABLE IF NOT EXISTS test_runs (
   completed_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS test_suite_generation_jobs (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  suite_id TEXT NOT NULL REFERENCES test_suites(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'queued' CHECK(status IN ('queued', 'running', 'completed', 'failed')),
+  generated_count INTEGER NOT NULL DEFAULT 0,
+  total_count INTEGER NOT NULL DEFAULT 0,
+  error_message TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  completed_at TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_test_suites_project ON test_suites(project_id);
 CREATE INDEX IF NOT EXISTS idx_test_cases_suite ON test_cases(test_suite_id);
 CREATE INDEX IF NOT EXISTS idx_test_runs_suite ON test_runs(test_suite_id);
+CREATE INDEX IF NOT EXISTS idx_test_suite_generation_jobs_project ON test_suite_generation_jobs(project_id);
+CREATE INDEX IF NOT EXISTS idx_test_suite_generation_jobs_suite ON test_suite_generation_jobs(suite_id);
 
 -- 会话质检
 CREATE TABLE IF NOT EXISTS conversation_audit_jobs (

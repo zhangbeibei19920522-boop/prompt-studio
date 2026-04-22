@@ -46,6 +46,7 @@ interface TestSuiteDetailProps {
   cases: TestCase[]
   latestRun: TestRun | null
   prompts: Array<{ id: string; title: string }>
+  indexVersions: Array<{ id: string; title: string }>
   onSuiteUpdate: () => void
   onCaseUpdate: () => void
 }
@@ -95,6 +96,7 @@ export function TestSuiteDetail({
   cases,
   latestRun,
   prompts,
+  indexVersions,
   onSuiteUpdate,
   onCaseUpdate,
 }: TestSuiteDetailProps) {
@@ -688,6 +690,7 @@ export function TestSuiteDetail({
           open={routingConfigOpen}
           onOpenChange={setRoutingConfigOpen}
           prompts={prompts}
+          indexVersions={indexVersions}
           value={
             suite.routingConfig ?? {
               entryPromptId: "",

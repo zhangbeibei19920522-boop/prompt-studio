@@ -33,8 +33,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  getTestRouteTargetId,
+  getTestRouteTargetType,
+  isTestSuiteRouteComplete,
+  normalizeTestSuiteRoute,
+} from "@/lib/test-suite-routing"
 import { cn } from "@/lib/utils"
-import type { TestSuiteRoutingConfig } from "@/types/database"
+import type {
+  TestRoutingTargetType,
+  TestSuiteRoute,
+  TestSuiteRoutingConfig,
+} from "@/types/database"
 import {
   buildRoutesFromPrompts,
   findUniquePromptMatch,
@@ -43,6 +53,7 @@ import {
 interface TestRoutingConfigDialogProps {
   open: boolean
   prompts: Array<{ id: string; title: string }>
+  indexVersions: Array<{ id: string; title: string }>
   value: TestSuiteRoutingConfig
   onOpenChange: (open: boolean) => void
   onSave: (value: TestSuiteRoutingConfig) => void
@@ -50,11 +61,20 @@ interface TestRoutingConfigDialogProps {
 
 interface TestRoutingConfigFormProps {
   prompts: Array<{ id: string; title: string }>
+  indexVersions: Array<{ id: string; title: string }>
   entryPromptId: string
-  routes: Array<{ id?: string; intent: string; promptId: string }>
+  routes: Array<TestSuiteRoute & { id?: string }>
   onEntryPromptChange: (value: string) => void
   onRouteIntentChange?: (index: number, intent: string) => void
-  onRouteChange: (index: number, patch: { intent?: string; promptId?: string }) => void
+  onRouteChange: (
+    index: number,
+    patch: {
+      intent?: string
+      promptId?: string
+      targetType?: TestRoutingTargetType
+      targetId?: string
+    }
+  ) => void
   onGenerateRoutes?: () => void
   onAddRoute: () => void
   onRemoveRoute: (index: number) => void
@@ -64,31 +84,44 @@ interface RouteDraft {
   id: string
   intent: string
   promptId: string
+  targetType: TestRoutingTargetType
+  targetId: string
 }
 
 let nextRouteDraftId = 0
 
-function createRouteDraft(route?: Partial<Omit<RouteDraft, "id">>): RouteDraft {
-  return {
-    id: `route-${nextRouteDraftId++}`,
+function createRouteDraft(route?: Partial<RouteDraft>): RouteDraft {
+  const normalizedRoute = normalizeTestSuiteRoute({
     intent: route?.intent ?? "",
     promptId: route?.promptId ?? "",
+    targetType: route?.targetType,
+    targetId: route?.targetId,
+  })
+
+  return {
+    id: route?.id ?? `route-${nextRouteDraftId++}`,
+    intent: normalizedRoute.intent,
+    promptId: normalizedRoute.promptId,
+    targetType: normalizedRoute.targetType ?? "prompt",
+    targetId: getTestRouteTargetId(normalizedRoute),
   }
 }
 
-function createRouteDrafts(routes: Array<{ intent: string; promptId: string }>) {
+function createRouteDrafts(routes: TestSuiteRoute[]) {
   return routes.length > 0 ? routes.map((route) => createRouteDraft(route)) : [createRouteDraft()]
 }
 
-function isEmptyRouteDraft(route: { intent: string; promptId: string }): boolean {
-  return route.intent.trim().length === 0 && route.promptId.length === 0
+function isEmptyRouteDraft(route: RouteDraft): boolean {
+  return route.intent.trim().length === 0 && getTestRouteTargetId(route).length === 0
 }
 
-function normalizeFormRoutes(routes: Array<{ id?: string; intent: string; promptId: string }>) {
+function normalizeFormRoutes(routes: Array<RouteDraft | (TestSuiteRoute & { id?: string })>) {
   return routes.map((route, index) => ({
     id: route.id ?? `route-preview-${index}`,
     intent: route.intent,
     promptId: route.promptId,
+    targetType: getTestRouteTargetType(route),
+    targetId: getTestRouteTargetId(route),
   }))
 }
 
@@ -161,6 +194,7 @@ function PromptCombobox({
 export function TestRoutingConfigDialog({
   open,
   prompts,
+  indexVersions,
   value,
   onOpenChange,
   onSave,
@@ -177,24 +211,40 @@ export function TestRoutingConfigDialog({
     setEntryPromptId(nextEntryPromptId)
     setRoutes((current) =>
       current.map((route) => {
-        const shouldReevaluate = route.promptId.length === 0 || route.promptId === nextEntryPromptId
+        const shouldReevaluate =
+          route.targetType === "prompt" &&
+          (route.targetId.length === 0 || route.targetId === nextEntryPromptId)
         if (!shouldReevaluate) {
           return route
         }
 
         const matchedPrompt = findUniquePromptMatch(route.intent, prompts, nextEntryPromptId)
-        return {
+        return createRouteDraft({
           ...route,
+          targetType: "prompt",
+          targetId: matchedPrompt?.id ?? "",
           promptId: matchedPrompt?.id ?? "",
-        }
+        })
       })
     )
   }
 
-  function updateRoute(index: number, patch: { intent?: string; promptId?: string }) {
+  function updateRoute(
+    index: number,
+    patch: { intent?: string; promptId?: string; targetType?: TestRoutingTargetType; targetId?: string }
+  ) {
     setRoutes((current) =>
       current.map((route, routeIndex) =>
-        routeIndex === index ? { ...route, ...patch } : route
+        routeIndex === index
+          ? createRouteDraft({
+              ...route,
+              ...patch,
+              promptId:
+                patch.targetType === "index-version"
+                  ? ""
+                  : patch.promptId ?? route.promptId,
+            })
+          : route
       )
     )
   }
@@ -206,16 +256,18 @@ export function TestRoutingConfigDialog({
           return route
         }
 
-        if (route.promptId.length > 0) {
+        if (route.targetType !== "prompt" || route.targetId.length > 0) {
           return { ...route, intent }
         }
 
         const matchedPrompt = findUniquePromptMatch(intent, prompts, entryPromptId)
-        return {
+        return createRouteDraft({
           ...route,
           intent,
+          targetType: "prompt",
+          targetId: matchedPrompt?.id ?? "",
           promptId: matchedPrompt?.id ?? "",
-        }
+        })
       })
     )
   }
@@ -249,18 +301,22 @@ export function TestRoutingConfigDialog({
     onSave({
       entryPromptId,
       routes: routes
-        .map((route) => ({
-          intent: route.intent.trim(),
-          promptId: route.promptId,
-        }))
-        .filter((route) => route.intent.length > 0 && route.promptId.length > 0),
+        .map((route) =>
+          normalizeTestSuiteRoute({
+            intent: route.intent.trim(),
+            promptId: route.promptId,
+            targetType: route.targetType,
+            targetId: route.targetId,
+          })
+        )
+        .filter((route) => isTestSuiteRouteComplete(route)),
     })
   }
 
   const canSave =
     entryPromptId.length > 0 &&
     routes.length > 0 &&
-    routes.every((route) => route.intent.trim().length > 0 && route.promptId.length > 0)
+    routes.every((route) => isTestSuiteRouteComplete(normalizeTestSuiteRoute(route)))
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -269,13 +325,14 @@ export function TestRoutingConfigDialog({
           <DialogHeader className="px-6 pt-6">
             <DialogTitle>配置业务流程</DialogTitle>
             <DialogDescription>
-              选择固定入口 Prompt，并配置 intent 到目标 Prompt 的映射。
+              选择固定入口 Prompt，并配置 intent 到 Prompt 或索引版本的映射。
             </DialogDescription>
           </DialogHeader>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
             <TestRoutingConfigForm
               prompts={prompts}
+              indexVersions={indexVersions}
               entryPromptId={entryPromptId}
               routes={routes}
               onEntryPromptChange={handleEntryPromptChange}
@@ -311,6 +368,7 @@ export function TestRoutingConfigDialog({
 
 export function TestRoutingConfigForm({
   prompts,
+  indexVersions,
   entryPromptId,
   routes,
   onEntryPromptChange,
@@ -343,11 +401,11 @@ export function TestRoutingConfigForm({
       </div>
 
       <div className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-sm font-medium">路由规则</p>
             <p className="text-xs text-muted-foreground">
-              用户自定义 intent 值，命中后跳转到对应 Prompt。
+              用户自定义 intent 值，命中后跳转到对应 Prompt 或索引版本。
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -376,7 +434,7 @@ export function TestRoutingConfigForm({
           {normalizedRoutes.map((route, index) => (
             <div
               key={route.id}
-              className="grid gap-3 rounded-lg border bg-muted/30 p-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_auto]"
+              className="grid gap-3 rounded-lg border bg-muted/30 p-3 md:grid-cols-[minmax(0,1fr)_160px_minmax(0,1.2fr)_auto]"
             >
               <div className="space-y-2">
                 <label className="text-xs font-medium text-muted-foreground">
@@ -391,14 +449,75 @@ export function TestRoutingConfigForm({
 
               <div className="space-y-2">
                 <label className="text-xs font-medium text-muted-foreground">
-                  目标 Prompt
+                  目标类型
                 </label>
-                <PromptCombobox
-                  prompts={prompts}
-                  entryPromptId={entryPromptId}
-                  value={route.promptId}
-                  onValueChange={(promptId) => onRouteChange(index, { promptId })}
-                />
+                <Select
+                  value={route.targetType}
+                  onValueChange={(value) => {
+                    const nextTargetType = value as TestRoutingTargetType
+                    if (nextTargetType === "prompt") {
+                      const matchedPrompt = findUniquePromptMatch(route.intent, prompts, entryPromptId)
+                      onRouteChange(index, {
+                        targetType: nextTargetType,
+                        targetId: matchedPrompt?.id ?? "",
+                        promptId: matchedPrompt?.id ?? "",
+                      })
+                      return
+                    }
+
+                    onRouteChange(index, {
+                      targetType: nextTargetType,
+                      targetId: indexVersions[0]?.id ?? "",
+                      promptId: "",
+                    })
+                  }}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="选择目标类型" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="prompt">Prompt</SelectItem>
+                    <SelectItem value="index-version">索引版本</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground">
+                  目标内容
+                </label>
+                {route.targetType === "prompt" ? (
+                  <PromptCombobox
+                    prompts={prompts}
+                    entryPromptId={entryPromptId}
+                    value={route.targetId}
+                    onValueChange={(promptId) =>
+                      onRouteChange(index, { targetType: "prompt", targetId: promptId, promptId })
+                    }
+                  />
+                ) : (
+                  <Select
+                    value={route.targetId}
+                    onValueChange={(targetId) =>
+                      onRouteChange(index, {
+                        targetType: "index-version",
+                        targetId,
+                        promptId: "",
+                      })
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="选择索引版本" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {indexVersions.map((indexVersion) => (
+                        <SelectItem key={indexVersion.id} value={indexVersion.id}>
+                          {indexVersion.title}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
 
               <div className="flex items-end">

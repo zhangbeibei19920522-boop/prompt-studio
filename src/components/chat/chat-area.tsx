@@ -67,6 +67,7 @@ interface ChatAreaProps {
   sessionId: string | null
   prompts: Array<{ id: string; title: string }>
   documents: Array<{ id: string; name: string }>
+  indexVersions: Array<{ id: string; title: string }>
   onMessagesChange: () => void
   onApplyPreview?: (data: PreviewData) => void
   onApplyDiff?: (data: DiffData) => void
@@ -84,6 +85,7 @@ export function ChatArea({
   sessionId,
   prompts,
   documents,
+  indexVersions,
   onMessagesChange,
   onApplyPreview,
   onApplyDiff,
@@ -308,6 +310,7 @@ export function ChatArea({
         <TestRoutingConfigDialog
           open={routingDialogOpen}
           prompts={prompts}
+          indexVersions={indexVersions}
           value={routingConfig}
           onOpenChange={setRoutingDialogOpen}
           onSave={(value) => {

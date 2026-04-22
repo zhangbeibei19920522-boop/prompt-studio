@@ -74,6 +74,40 @@ async function setupTestSuiteRouteTest() {
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run("prompt-c", "project-1", "Repair Reply", "repair reply", "", "[]", "[]", 1, "active", now, now)
 
+  db.prepare(`
+    INSERT INTO prompts (
+      id,
+      project_id,
+      title,
+      content,
+      description,
+      tags,
+      variables,
+      version,
+      status,
+      created_at,
+      updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run("prompt-d", "project-1", "客服主 Prompt", "single prompt", "", "[]", "[]", 1, "active", now, now)
+
+  db.prepare(`
+    INSERT INTO documents (
+      id,
+      project_id,
+      name,
+      type,
+      content,
+      created_at
+    ) VALUES (?, ?, ?, ?, ?, ?)
+  `).run(
+    "doc-1",
+    "project-1",
+    "退款政策.docx",
+    "docx",
+    "退款政策说明：7 天无理由、退款到账时效、物流要求。",
+    now
+  )
+
   return {
     cleanup() {
       db.close()
@@ -83,7 +117,327 @@ async function setupTestSuiteRouteTest() {
   }
 }
 
+async function waitFor<T>(
+  getter: () => Promise<T>,
+  predicate: (value: T) => boolean,
+  timeoutMs: number = 1500
+) {
+  const startedAt = Date.now()
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const value = await getter()
+    if (predicate(value)) {
+      return value
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  }
+
+  throw new Error("Timed out waiting for async generation state")
+}
+
 describe("test suite routes", () => {
+  it("creates a configured single-prompt generation job and persists the generated suite", async () => {
+    const testContext = await setupTestSuiteRouteTest()
+    vi.resetModules()
+
+    const handleTestAgentChat = vi.fn(async function* (_sessionId: string, content: string, references: Array<{ type: string; id: string; title: string }>) {
+      expect(content).toContain("单 Prompt")
+      expect(content).toContain("客服主 Prompt")
+      expect(content).toContain("生成 4 个测试用例")
+      expect(content).toContain("多轮对话")
+      expect(content).toContain("2-4")
+      expect(references).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: "prompt", id: "prompt-d", title: "客服主 Prompt" }),
+          expect.objectContaining({ type: "document", id: "doc-1", title: "退款政策.docx" }),
+        ])
+      )
+
+      yield {
+        type: "test-suite-progress",
+        data: {
+          generated: 2,
+          total: 4,
+        },
+      }
+
+      yield {
+        type: "test-suite",
+        data: {
+          name: "客服主 Prompt 全流程测试",
+          description: "覆盖退款与售后咨询场景",
+          workflowMode: "single",
+          cases: [
+            {
+              title: "退款政策咨询",
+              context: "用户想了解退款时效",
+              input: "User: 退款多久能到账？\nAssistant:\nUser: 物流寄回有什么要求？\nAssistant:",
+              expectedOutput: "说明退款到账时效和物流要求",
+            },
+          ],
+        },
+      }
+    })
+
+    vi.doMock("@/lib/ai/agent", () => ({
+      handleTestAgentChat,
+    }))
+
+    try {
+      const generateRoute = await import("@/app/api/projects/[id]/test-suites/generate/route")
+      const detailRoute = await import("@/app/api/test-suites/[id]/route")
+      const jobsRoute = await import("@/app/api/projects/[id]/test-suite-generation-jobs/route")
+
+      const response = await generateRoute.POST(
+        new Request("http://localhost", {
+          method: "POST",
+          body: JSON.stringify({
+            section: "full-flow",
+            structure: "single",
+            promptId: "prompt-d",
+            routingConfig: null,
+            targetType: "prompt",
+            targetId: null,
+            caseCount: 4,
+            conversationMode: "multi-turn",
+            minTurns: 2,
+            maxTurns: 4,
+            generationSourceIds: ["document:doc-1"],
+          }),
+        }),
+        { params: Promise.resolve({ id: "project-1" }) }
+      )
+
+      const payload = await response.json()
+
+      expect(response.status).toBe(202)
+      expect(payload.data.suite).toMatchObject({
+        section: "full-flow",
+        name: "客服主 Prompt 测试集",
+        workflowMode: "single",
+        promptId: "prompt-d",
+      })
+
+      expect(payload.data.job).toMatchObject({
+        suiteId: payload.data.suite.id,
+        status: "queued",
+        generatedCount: 0,
+        totalCount: 4,
+      })
+
+      const completedJobsPayload = await waitFor(
+        async () => {
+          const jobsResponse = await jobsRoute.GET(new Request("http://localhost"), {
+            params: Promise.resolve({ id: "project-1" }),
+          })
+          return jobsResponse.json()
+        },
+        (jobsPayload) =>
+          Array.isArray(jobsPayload.data) &&
+          jobsPayload.data.some(
+            (job: { id: string; status: string; generatedCount: number }) =>
+              job.id === payload.data.job.id && job.status === "completed" && job.generatedCount === 1
+          )
+      )
+
+      expect(completedJobsPayload.data).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: payload.data.job.id,
+            status: "completed",
+            generatedCount: 1,
+            totalCount: 1,
+          }),
+        ])
+      )
+
+      const detailResponse = await detailRoute.GET(new Request("http://localhost"), {
+        params: Promise.resolve({ id: payload.data.suite.id }),
+      })
+      const detailPayload = await detailResponse.json()
+
+      expect(detailPayload.data.promptId).toBe("prompt-d")
+      expect(detailPayload.data.section).toBe("full-flow")
+      expect(detailPayload.data.name).toBe("客服主 Prompt 全流程测试")
+      expect(detailPayload.data.cases).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            title: "退款政策咨询",
+            expectedOutput: "说明退款到账时效和物流要求",
+          }),
+        ])
+      )
+      expect(handleTestAgentChat).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.doUnmock("@/lib/ai/agent")
+      testContext.cleanup()
+    }
+  })
+
+  it("creates a configured routing generation job and persists the generated suite", async () => {
+    const testContext = await setupTestSuiteRouteTest()
+    vi.resetModules()
+
+    const handleTestAgentChat = vi.fn(async function* (
+      _sessionId: string,
+      content: string,
+      references: Array<{ type: string; id: string; title: string }>,
+      options?: { routingConfig?: { entryPromptId: string; routes: Array<{ intent: string; promptId: string }> } | null }
+    ) {
+      expect(content).toContain("多 Prompt")
+      expect(content).toContain("生成 3 个测试用例")
+      expect(options?.routingConfig).toEqual({
+        entryPromptId: "prompt-a",
+        routes: [
+          { intent: "P-SQ", promptId: "prompt-b" },
+          { intent: "P-JX", promptId: "prompt-c" },
+        ],
+      })
+      expect(references).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: "prompt", id: "prompt-a", title: "Intent Router" }),
+          expect.objectContaining({ type: "prompt", id: "prompt-b", title: "Reply Prompt" }),
+          expect.objectContaining({ type: "prompt", id: "prompt-c", title: "Repair Reply" }),
+          expect.objectContaining({ type: "document", id: "doc-1", title: "退款政策.docx" }),
+        ])
+      )
+
+      yield {
+        type: "test-suite-progress",
+        data: {
+          generated: 1,
+          total: 3,
+        },
+      }
+
+      yield {
+        type: "test-suite",
+        data: {
+          name: "售后路由测试",
+          description: "覆盖咨询和寄修 intent",
+          workflowMode: "routing",
+          routingConfig: options?.routingConfig ?? null,
+          cases: [
+            {
+              title: "先咨询再寄修",
+              context: "用户先问政策再追问寄修",
+              input: "User: 退款多久到账？\nAssistant:\nUser: 如果商品坏了怎么寄修？\nAssistant:",
+              expectedIntent: "P-SQ",
+              expectedOutput: "先回答退款时效，再回答寄修流程",
+            },
+          ],
+        },
+      }
+    })
+
+    vi.doMock("@/lib/ai/agent", () => ({
+      handleTestAgentChat,
+    }))
+
+    try {
+      const generateRoute = await import("@/app/api/projects/[id]/test-suites/generate/route")
+      const detailRoute = await import("@/app/api/test-suites/[id]/route")
+      const jobsRoute = await import("@/app/api/projects/[id]/test-suite-generation-jobs/route")
+
+      const response = await generateRoute.POST(
+        new Request("http://localhost", {
+          method: "POST",
+          body: JSON.stringify({
+            section: "full-flow",
+            structure: "multi",
+            promptId: null,
+            routingConfig: {
+              entryPromptId: "prompt-a",
+              routes: [
+                { intent: "P-SQ", promptId: "prompt-b" },
+                { intent: "P-JX", promptId: "prompt-c" },
+              ],
+            },
+            targetType: "prompt",
+            targetId: null,
+            caseCount: 3,
+            conversationMode: "single-turn",
+            minTurns: null,
+            maxTurns: null,
+            generationSourceIds: ["document:doc-1"],
+          }),
+        }),
+        { params: Promise.resolve({ id: "project-1" }) }
+      )
+
+      const payload = await response.json()
+
+      expect(response.status).toBe(202)
+      expect(payload.data.suite).toMatchObject({
+        section: "full-flow",
+        name: "Intent Router 全流程测试集",
+        workflowMode: "routing",
+        promptId: null,
+        routingConfig: {
+          entryPromptId: "prompt-a",
+          routes: [
+            { intent: "P-SQ", promptId: "prompt-b" },
+            { intent: "P-JX", promptId: "prompt-c" },
+          ],
+        },
+      })
+
+      const completedJobsPayload = await waitFor(
+        async () => {
+          const jobsResponse = await jobsRoute.GET(new Request("http://localhost"), {
+            params: Promise.resolve({ id: "project-1" }),
+          })
+          return jobsResponse.json()
+        },
+        (jobsPayload) =>
+          Array.isArray(jobsPayload.data) &&
+          jobsPayload.data.some(
+            (job: { id: string; status: string; generatedCount: number }) =>
+              job.id === payload.data.job.id && job.status === "completed" && job.generatedCount === 1
+          )
+      )
+
+      expect(completedJobsPayload.data).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: payload.data.job.id,
+            status: "completed",
+          }),
+        ])
+      )
+
+      const detailResponse = await detailRoute.GET(new Request("http://localhost"), {
+        params: Promise.resolve({ id: payload.data.suite.id }),
+      })
+      const detailPayload = await detailResponse.json()
+
+      expect(detailPayload.data).toMatchObject({
+        section: "full-flow",
+        name: "售后路由测试",
+        workflowMode: "routing",
+        promptId: null,
+        routingConfig: {
+          entryPromptId: "prompt-a",
+          routes: [
+            { intent: "P-SQ", promptId: "prompt-b" },
+            { intent: "P-JX", promptId: "prompt-c" },
+          ],
+        },
+      })
+      expect(detailPayload.data.cases).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            expectedIntent: "P-SQ",
+          }),
+        ])
+      )
+      expect(handleTestAgentChat).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.doUnmock("@/lib/ai/agent")
+      testContext.cleanup()
+    }
+  })
+
   it("creates and returns routing suites with expected intents", async () => {
     const testContext = await setupTestSuiteRouteTest()
 
@@ -112,6 +466,7 @@ describe("test suite routes", () => {
 
       expect(createResponse.status).toBe(201)
       expect(createdPayload.data).toMatchObject({
+        section: "full-flow",
         name: "Routing Suite",
         workflowMode: "routing",
         routingConfig: {
@@ -169,6 +524,44 @@ describe("test suite routes", () => {
           }),
         ])
       )
+    } finally {
+      testContext.cleanup()
+    }
+  })
+
+  it("stores unit suites under the unit section", async () => {
+    const testContext = await setupTestSuiteRouteTest()
+
+    try {
+      const projectRoute = await import("@/app/api/projects/[id]/test-suites/route")
+      const detailRoute = await import("@/app/api/test-suites/[id]/route")
+
+      const createResponse = await projectRoute.POST(
+        new Request("http://localhost", {
+          method: "POST",
+          body: JSON.stringify({
+            section: "unit",
+            name: "索引版本单元测试",
+            description: "验证索引版本召回内容",
+          }),
+        }),
+        { params: Promise.resolve({ id: "project-1" }) }
+      )
+
+      const createdPayload = await createResponse.json()
+
+      expect(createResponse.status).toBe(201)
+      expect(createdPayload.data).toMatchObject({
+        section: "unit",
+        name: "索引版本单元测试",
+      })
+
+      const detailResponse = await detailRoute.GET(new Request("http://localhost"), {
+        params: Promise.resolve({ id: createdPayload.data.id }),
+      })
+      const detailPayload = await detailResponse.json()
+
+      expect(detailPayload.data.section).toBe("unit")
     } finally {
       testContext.cleanup()
     }

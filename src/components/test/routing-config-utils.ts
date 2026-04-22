@@ -24,12 +24,14 @@ export function normalizeRoutingKey(value: string): string {
 export function buildRoutesFromPrompts(
   prompts: PromptOption[],
   entryPromptId: string
-): Array<{ intent: string; promptId: string }> {
+): Array<{ intent: string; promptId: string; targetType: "prompt"; targetId: string }> {
   return prompts
     .filter((prompt) => prompt.id !== entryPromptId)
     .map((prompt) => ({
       intent: prompt.title,
       promptId: prompt.id,
+      targetType: "prompt",
+      targetId: prompt.id,
     }))
 }
 

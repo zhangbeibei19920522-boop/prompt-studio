@@ -11,6 +11,11 @@ export interface WorkspaceModuleItem {
   description?: string
   icon?: React.ReactNode
   active: boolean
+  children?: Array<{
+    id: string
+    label: string
+    active: boolean
+  }>
 }
 
 interface WorkspaceFrameProps {
@@ -18,6 +23,7 @@ interface WorkspaceFrameProps {
   projectSwitcher?: React.ReactNode
   modules: WorkspaceModuleItem[]
   onModuleSelect: (id: string) => void
+  onModuleChildSelect?: (moduleId: string, childId: string) => void
   onOpenCommandPalette: () => void
   onOpenChatDrawer: () => void
   onToggleSidebar?: () => void
@@ -30,6 +36,7 @@ export function WorkspaceFrame({
   projectSwitcher,
   modules,
   onModuleSelect,
+  onModuleChildSelect,
   onOpenCommandPalette,
   onOpenChatDrawer,
   onToggleSidebar,
@@ -102,23 +109,42 @@ export function WorkspaceFrame({
               <div className="px-2 py-3 text-sm text-zinc-500">暂无功能模块</div>
             ) : (
               modules.map((module) => (
-                <button
-                  key={module.id}
-                  type="button"
-                  onClick={() => onModuleSelect(module.id)}
-                  className={cn(
-                    "group relative mb-1 flex w-full items-start gap-3 rounded-md px-3 py-3 text-left transition-colors",
-                    module.active ? "bg-zinc-200 text-zinc-950" : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950"
-                  )}
-                >
-                  {module.icon && <span className="mt-0.5 shrink-0 text-zinc-500">{module.icon}</span>}
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">{module.label}</span>
-                    {module.description && (
-                      <span className="mt-1 block truncate text-xs text-zinc-500">{module.description}</span>
+                <div key={module.id} className="mb-1">
+                  <button
+                    type="button"
+                    onClick={() => onModuleSelect(module.id)}
+                    className={cn(
+                      "group relative flex w-full items-start gap-3 rounded-md px-3 py-3 text-left transition-colors",
+                      module.active ? "bg-zinc-200 text-zinc-950" : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950"
                     )}
-                  </span>
-                </button>
+                  >
+                    {module.icon && <span className="mt-0.5 shrink-0 text-zinc-500">{module.icon}</span>}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">{module.label}</span>
+                      {module.description && (
+                        <span className="mt-1 block truncate text-xs text-zinc-500">{module.description}</span>
+                      )}
+                    </span>
+                  </button>
+
+                  {module.active && module.children?.length ? (
+                    <div className="mt-1 space-y-1 pl-10">
+                      {module.children.map((child) => (
+                        <button
+                          key={child.id}
+                          type="button"
+                          onClick={() => onModuleChildSelect?.(module.id, child.id)}
+                          className={cn(
+                            "flex w-full rounded-md px-3 py-2 text-left text-sm transition-colors",
+                            child.active ? "bg-white text-zinc-950 shadow-sm" : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"
+                          )}
+                        >
+                          {child.label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
               ))
             )}
           </div>

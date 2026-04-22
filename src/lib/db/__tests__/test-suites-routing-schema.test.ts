@@ -112,6 +112,7 @@ describe('test suite routing schema', () => {
 
       expect(updated).toMatchObject({
         id: suite.id,
+        section: 'full-flow',
         promptId: 'prompt-a',
         workflowMode: 'routing',
         routingConfig: {
@@ -185,6 +186,7 @@ describe('test suite routing schema', () => {
 
       expect(testContext.repositories.findTestSuiteById('legacy-suite')).toMatchObject({
         id: 'legacy-suite',
+        section: 'full-flow',
         promptId: 'prompt-a',
         workflowMode: 'single',
         routingConfig: null,

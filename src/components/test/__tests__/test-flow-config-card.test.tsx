@@ -32,8 +32,9 @@ describe("test flow config UI", () => {
           { id: "prompt-a", title: "PromptA · 意图识别" },
           { id: "prompt-b", title: "PromptB · 售后回复" },
         ]}
+        indexVersions={[{ id: "kb-index-1", title: "kb-index-1" }]}
         entryPromptId="prompt-a"
-        routes={[{ intent: "after_sale", promptId: "prompt-b" }]}
+        routes={[{ intent: "after_sale", promptId: "prompt-b", targetType: "prompt", targetId: "prompt-b" }]}
         onEntryPromptChange={() => {}}
         onRouteChange={() => {}}
         onAddRoute={() => {}}
@@ -47,7 +48,9 @@ describe("test flow config UI", () => {
 
     expect(html).toContain("入口 Prompt")
     expect(html).toContain("intent 值")
-    expect(html.match(/data-slot="select-trigger"/g)).toHaveLength(1)
+    expect(html).toContain("目标类型")
+    expect(html).toContain("目标内容")
+    expect(html.match(/data-slot="select-trigger"/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
     expect(html).not.toContain('placeholder="输入 Prompt ID"')
     expect(html).not.toContain('placeholder="输入 Prompt 名称"')
     expect(source).toContain("PromptCombobox")
@@ -62,8 +65,9 @@ describe("test flow config UI", () => {
           { id: "prompt-a", title: "PromptA · 意图识别" },
           { id: "prompt-b", title: "after_sale" },
         ]}
+        indexVersions={[{ id: "kb-index-1", title: "kb-index-1" }]}
         entryPromptId=""
-        routes={[{ intent: "", promptId: "" }]}
+        routes={[{ intent: "", promptId: "", targetType: "prompt", targetId: "" }]}
         onEntryPromptChange={() => {}}
         onRouteChange={() => {}}
         onAddRoute={() => {}}

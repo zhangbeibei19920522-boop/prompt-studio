@@ -1,5 +1,8 @@
 import type { StreamEvent, MemoryCommandData, TestSuiteGenerationData, TestSuiteBatchData } from '@/types/ai'
 import type { MessageReference, TestSuiteRoutingConfig } from '@/types/database'
+import { findKnowledgeIndexVersionById } from '@/lib/db/repositories/knowledge-index-versions'
+import { findPromptById } from '@/lib/db/repositories/prompts'
+import { getTestRouteTargetId, getTestRouteTargetType } from '@/lib/test-suite-routing'
 import { collectAgentContext } from './context-collector'
 import { createAiProvider } from './provider'
 import { getSettings } from '@/lib/db/repositories/settings'
@@ -265,7 +268,15 @@ export async function* handleTestAgentChat(
     const shouldPersistUserMessage = options.persistUserMessage ?? content.trim().length > 0
     const effectiveUserMessage = options.routingConfig
       ? `用户已完成多 Prompt 路由配置。请基于已有需求继续生成测试集。\n入口 Prompt: ${options.routingConfig.entryPromptId}\n路由规则:\n${options.routingConfig.routes
-          .map((route) => `- ${route.intent} -> ${route.promptId}`)
+          .map((route) => {
+            const targetType = getTestRouteTargetType(route)
+            const targetId = getTestRouteTargetId(route)
+            const targetLabel =
+              targetType === 'index-version'
+                ? `索引版本 ${findKnowledgeIndexVersionById(targetId)?.name ?? targetId}`
+                : `Prompt ${findPromptById(targetId)?.title ?? targetId}`
+            return `- ${route.intent} -> ${targetLabel}`
+          })
           .join('\n')}`
       : content
 

@@ -35,6 +35,7 @@ export async function POST(
 
     const data = createTestSuite({
       projectId: id,
+      section: body.section,
       name: body.name,
       description: body.description,
       sessionId: body.sessionId,

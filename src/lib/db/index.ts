@@ -268,6 +268,12 @@ export function getDb(): Database.Database {
   migrateConversationAuditJobsTable(db)
   repairConversationAuditChildTableReferences(db)
   ensureConversationAuditConversationColumns(db)
+  ensureColumn(
+    db,
+    'test_suites',
+    'section',
+    "TEXT NOT NULL DEFAULT 'full-flow' CHECK(section IN ('full-flow', 'unit'))"
+  )
   ensureColumn(db, 'test_suites', 'workflow_mode', "TEXT NOT NULL DEFAULT 'single'")
   ensureColumn(db, 'test_suites', 'routing_config', 'TEXT')
   ensureColumn(db, 'test_cases', 'expected_output_diagnostics', 'TEXT')

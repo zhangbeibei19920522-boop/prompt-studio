@@ -6,6 +6,8 @@ import type {
   CreateMemoryRequest,
   UpdateMemoryRequest,
   CreateTestSuiteRequest,
+  GenerateConfiguredTestSuiteRequest,
+  GenerateConfiguredTestSuiteResponse,
   KnowledgeVersionPushResponse,
   UpdateTestSuiteRequest,
   CreateTestCaseRequest,
@@ -25,6 +27,7 @@ import type {
   Memory,
   PromptVersion,
   TestSuite,
+  TestSuiteGenerationJob,
   TestCase,
   TestRun,
   ConversationAuditJob,
@@ -206,6 +209,11 @@ export const testSuitesApi = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+  generateConfigured: (projectId: string, data: GenerateConfiguredTestSuiteRequest) =>
+    fetchApi<GenerateConfiguredTestSuiteResponse>(`/api/projects/${projectId}/test-suites/generate`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
   update: (id: string, data: UpdateTestSuiteRequest) =>
     fetchApi<TestSuite>(`/api/test-suites/${id}`, {
       method: 'PUT',
@@ -219,6 +227,10 @@ export const testSuitesApi = {
     fetchApi<null>(`/api/test-suites/${id}`, { method: 'DELETE' }),
 }
 
+export const testSuiteGenerationJobsApi = {
+  listByProject: (projectId: string) =>
+    fetchApi<TestSuiteGenerationJob[]>(`/api/projects/${projectId}/test-suite-generation-jobs`),
+}
 
 // Test Cases
 export const testCasesApi = {

@@ -1,6 +1,7 @@
 import { getDb } from '@/lib/db'
 import { nanoid } from 'nanoid'
 import type {
+  TestGenerationSection,
   TestSuite,
   TestSuiteConfig,
   TestSuiteRoutingConfig,
@@ -11,6 +12,7 @@ interface TestSuiteRow {
   id: string
   project_id: string
   session_id: string | null
+  section: TestGenerationSection | null
   name: string
   description: string
   prompt_id: string | null
@@ -28,6 +30,7 @@ function mapRowToTestSuite(row: TestSuiteRow): TestSuite {
     id: row.id,
     projectId: row.project_id,
     sessionId: row.session_id,
+    section: row.section ?? 'full-flow',
     name: row.name,
     description: row.description,
     promptId: row.prompt_id,
@@ -60,25 +63,35 @@ export function findTestSuiteById(id: string): TestSuite | null {
 export function createTestSuite(data: {
   projectId: string
   sessionId?: string
+  section?: TestGenerationSection
   name: string
   description?: string
+  promptId?: string | null
+  promptVersionId?: string | null
   workflowMode?: TestSuiteWorkflowMode
   routingConfig?: TestSuiteRoutingConfig | null
+  config?: TestSuiteConfig
+  status?: 'draft' | 'ready' | 'running' | 'completed'
 }): TestSuite {
   const db = getDb()
   const id = nanoid()
   const now = new Date().toISOString()
-  const defaultConfig: TestSuiteConfig = { provider: '', model: '', apiKey: '', baseUrl: '' }
+  const defaultConfig: TestSuiteConfig = data.config ?? { provider: '', model: '', apiKey: '', baseUrl: '' }
+  const section = data.section ?? 'full-flow'
   const workflowMode = data.workflowMode ?? 'single'
   const routingConfig = data.routingConfig ?? null
+  const status = data.status ?? 'draft'
 
   db.prepare(`
     INSERT INTO test_suites (
       id,
       project_id,
       session_id,
+      section,
       name,
       description,
+      prompt_id,
+      prompt_version_id,
       workflow_mode,
       routing_config,
       config,
@@ -86,17 +99,20 @@ export function createTestSuite(data: {
       created_at,
       updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     data.projectId,
     data.sessionId ?? null,
+    section,
     data.name,
     data.description ?? '',
+    data.promptId ?? null,
+    data.promptVersionId ?? null,
     workflowMode,
     routingConfig ? JSON.stringify(routingConfig) : null,
     JSON.stringify(defaultConfig),
-    'draft',
+    status,
     now,
     now
   )
@@ -105,14 +121,15 @@ export function createTestSuite(data: {
     id,
     projectId: data.projectId,
     sessionId: data.sessionId ?? null,
+    section,
     name: data.name,
     description: data.description ?? '',
-    promptId: null,
-    promptVersionId: null,
+    promptId: data.promptId ?? null,
+    promptVersionId: data.promptVersionId ?? null,
     workflowMode,
     routingConfig,
     config: defaultConfig,
-    status: 'draft',
+    status,
     createdAt: now,
     updatedAt: now,
   }
@@ -121,6 +138,7 @@ export function createTestSuite(data: {
 export function updateTestSuite(
   id: string,
   data: {
+    section?: TestGenerationSection
     name?: string
     description?: string
     promptId?: string | null
@@ -142,6 +160,10 @@ export function updateTestSuite(
   if (data.name !== undefined) {
     fields.push('name = ?')
     values.push(data.name)
+  }
+  if (data.section !== undefined) {
+    fields.push('section = ?')
+    values.push(data.section)
   }
   if (data.description !== undefined) {
     fields.push('description = ?')

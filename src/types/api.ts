@@ -12,9 +12,15 @@ import type {
   MessageReference,
   Project,
   Prompt,
+  TestConversationMode,
+  TestGenerationTargetType,
+  TestGenerationSection,
+  TestGenerationStructure,
   TestSuiteConfig,
+  TestSuiteGenerationJob,
   TestSuiteRoutingConfig,
   TestSuiteWorkflowMode,
+  TestSuite,
 } from './database'
 
 // 通用 API 响应
@@ -61,11 +67,31 @@ export interface ApplyPromptRequest {
 
 // 测试集请求类型
 export interface CreateTestSuiteRequest {
+  section?: TestGenerationSection
   name: string
   description?: string
   sessionId?: string
   workflowMode?: TestSuiteWorkflowMode
   routingConfig?: TestSuiteRoutingConfig | null
+}
+
+export interface GenerateConfiguredTestSuiteRequest {
+  section: TestGenerationSection
+  structure: TestGenerationStructure
+  promptId: string | null
+  routingConfig: TestSuiteRoutingConfig | null
+  targetType: TestGenerationTargetType
+  targetId: string | null
+  caseCount: number
+  conversationMode: TestConversationMode
+  minTurns: number | null
+  maxTurns: number | null
+  generationSourceIds: string[]
+}
+
+export interface GenerateConfiguredTestSuiteResponse {
+  suite: TestSuite
+  job: TestSuiteGenerationJob
 }
 
 export interface UpdateTestSuiteRequest {

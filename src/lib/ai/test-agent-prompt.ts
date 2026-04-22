@@ -1,5 +1,8 @@
 import type { AgentContext, ChatMessage, TestSuiteBatchData } from '@/types/ai'
 import type { TestSuiteRoutingConfig } from '@/types/database'
+import { findKnowledgeIndexVersionById } from '@/lib/db/repositories/knowledge-index-versions'
+import { findPromptById } from '@/lib/db/repositories/prompts'
+import { getTestRouteTargetId, getTestRouteTargetType } from '@/lib/test-suite-routing'
 
 const INITIAL_TEST_SYSTEM_PROMPT = `你是一个专业的 Prompt 测试专家。你的任务是帮助用户创建高质量的测试集，用于评估 Prompt 的质量和效果。
 
@@ -192,7 +195,15 @@ function appendSharedContext(system: string, context: AgentContext): string {
 
 function appendRoutingConfig(system: string, routingConfig: TestSuiteRoutingConfig): string {
   const routeLines = routingConfig.routes
-    .map((route) => `- ${route.intent} -> ${route.promptId}`)
+    .map((route) => {
+      const targetType = getTestRouteTargetType(route)
+      const targetId = getTestRouteTargetId(route)
+      const targetLabel =
+        targetType === 'index-version'
+          ? `索引版本 ${findKnowledgeIndexVersionById(targetId)?.name ?? targetId}`
+          : `Prompt ${findPromptById(targetId)?.title ?? targetId}`
+      return `- ${route.intent} -> ${targetLabel}`
+    })
     .join('\n')
 
   return `${system}

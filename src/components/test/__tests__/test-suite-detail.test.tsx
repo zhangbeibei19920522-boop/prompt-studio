@@ -245,6 +245,7 @@ describe("routing test result details", () => {
       id: "suite-1",
       projectId: "project-1",
       sessionId: null,
+      section: "full-flow" as const,
       name: "Suite",
       description: "",
       promptId: "prompt-a",
@@ -276,6 +277,7 @@ describe("routing test result details", () => {
           { id: "prompt-a", title: "PromptA" },
           { id: "prompt-b", title: "PromptB" },
         ]}
+        indexVersions={[{ id: "kb-index-1", title: "kb-index-1" }]}
         onSuiteUpdate={() => {}}
         onCaseUpdate={() => {}}
       />
@@ -291,6 +293,7 @@ describe("routing test result details", () => {
         cases={[]}
         latestRun={null}
         prompts={[{ id: "prompt-a", title: "PromptA" }]}
+        indexVersions={[{ id: "kb-index-1", title: "kb-index-1" }]}
         onSuiteUpdate={() => {}}
         onCaseUpdate={() => {}}
       />

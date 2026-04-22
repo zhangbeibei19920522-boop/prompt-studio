@@ -335,9 +335,18 @@ export interface TestSuiteConfig {
 }
 
 export type TestSuiteWorkflowMode = 'single' | 'routing'
+export type TestGenerationSection = 'full-flow' | 'unit'
+export type TestGenerationStructure = 'single' | 'multi'
+export type TestConversationMode = 'single-turn' | 'multi-turn'
+export type TestGenerationTargetType = 'prompt' | 'index-version'
+export type TestRoutingTargetType = 'prompt' | 'index-version'
+export type TestSuiteGenerationJobStatus = 'queued' | 'running' | 'completed' | 'failed'
+
 export interface TestSuiteRoute {
   intent: string
   promptId: string
+  targetType?: TestRoutingTargetType
+  targetId?: string
 }
 
 export interface TestSuiteRoutingConfig {
@@ -362,6 +371,7 @@ export interface TestSuite {
   id: string
   projectId: string
   sessionId: string | null
+  section: TestGenerationSection
   name: string
   description: string
   promptId: string | null
@@ -372,6 +382,19 @@ export interface TestSuite {
   status: 'draft' | 'ready' | 'running' | 'completed'
   createdAt: string
   updatedAt: string
+}
+
+export interface TestSuiteGenerationJob {
+  id: string
+  projectId: string
+  suiteId: string
+  status: TestSuiteGenerationJobStatus
+  generatedCount: number
+  totalCount: number
+  errorMessage: string | null
+  createdAt: string
+  updatedAt: string
+  completedAt: string | null
 }
 
 // 测试用例

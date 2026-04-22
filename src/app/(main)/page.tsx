@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { formatDistanceToNow } from "date-fns"
 import { zhCN } from "date-fns/locale"
 import { useRouter } from "next/navigation"
@@ -28,7 +28,12 @@ import { PromptEditor } from "@/components/prompt/prompt-editor"
 import { PromptPreview } from "@/components/prompt/prompt-preview"
 import { VersionHistory } from "@/components/prompt/version-history"
 import { CreateProjectDialog } from "@/components/project/create-project-dialog"
+import {
+  TestSuiteConfigDrawer,
+  type TestSuiteConfigSubmitPayload,
+} from "@/components/test/test-suite-config-drawer"
 import { TestSuiteDetail } from "@/components/test/test-suite-detail"
+import { TestSuiteGenerationStatus } from "@/components/test/test-suite-generation-status"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -40,6 +45,7 @@ import {
 import { WorkspaceChatDrawer } from "@/components/workspace/workspace-chat-drawer"
 import { WorkspaceCommandPalette, type WorkspaceCommandItem } from "@/components/workspace/workspace-command-palette"
 import { WorkspaceFrame, type WorkspaceModuleItem } from "@/components/workspace/workspace-frame"
+import { historyVersionRows } from "@/components/knowledge-automation/prototype-data"
 import { applyPrompt } from "@/lib/utils/sse-client"
 import {
   conversationAuditJobsApi,
@@ -50,6 +56,7 @@ import {
   promptsApi,
   sessionsApi,
   testCasesApi,
+  testSuiteGenerationJobsApi,
   testRunsApi,
   testSuitesApi,
 } from "@/lib/utils/api-client"
@@ -70,13 +77,15 @@ import type {
   TestCase,
   TestRun,
   TestSuite,
+  TestSuiteGenerationJob,
 } from "@/types/database"
 
 type ModuleId = "home" | "prompt" | "test" | "audit" | "knowledge" | "memory" | "settings"
 type PromptCanvasMode = "empty" | "preview" | "edit" | "history"
 type TestCanvasView = "list" | "detail"
+type TestCanvasSection = "full-flow" | "unit"
 type AuditCanvasView = "list" | "detail"
-type KnowledgeCanvasView = "documents" | "tasks" | "versions"
+type KnowledgeCanvasView = "documents" | "versions" | "tasks"
 type LibraryFilter = "all" | "active" | "draft"
 
 function formatUpdatedLabel(updatedAt: string): string {
@@ -118,6 +127,10 @@ function getTestStatusLabel(status: string): string {
   }
 }
 
+function shouldShowGenerationJobStatus(status: TestSuiteGenerationJob["status"]) {
+  return status === "queued" || status === "running" || status === "failed"
+}
+
 function getAuditStatusLabel(status: string): string {
   switch (status) {
     case "completed":
@@ -133,6 +146,10 @@ function getAuditStatusLabel(status: string): string {
     default:
       return status
   }
+}
+
+function getTestSectionLabel(section: TestCanvasSection): string {
+  return section === "unit" ? "单元测试" : "全流程测试"
 }
 
 function getLibraryBadgeClass(status: string): string {
@@ -219,6 +236,7 @@ function CanvasListCard({
   title,
   meta,
   status,
+  statusNode,
   active = false,
   onClick,
 }: {
@@ -227,6 +245,7 @@ function CanvasListCard({
   title: string
   meta: string
   status: string
+  statusNode?: React.ReactNode
   active?: boolean
   onClick: () => void
 }) {
@@ -247,9 +266,11 @@ function CanvasListCard({
         <div className="truncate text-sm font-medium text-zinc-950">{title}</div>
         <div className="mt-1 truncate text-xs text-zinc-500">{meta}</div>
       </div>
-      <span className={`rounded-full px-2 py-1 text-[11px] font-medium ${getLibraryBadgeClass(status)}`}>
-        {status}
-      </span>
+      {statusNode ?? (
+        <span className={`rounded-full px-2 py-1 text-[11px] font-medium ${getLibraryBadgeClass(status)}`}>
+          {status}
+        </span>
+      )}
     </button>
   )
 }
@@ -372,6 +393,7 @@ export default function MainPage() {
   const [projectMemories, setProjectMemories] = useState<Memory[]>([])
 
   const [testSuites, setTestSuites] = useState<TestSuite[]>([])
+  const [testSuiteGenerationJobs, setTestSuiteGenerationJobs] = useState<TestSuiteGenerationJob[]>([])
   const [currentTestSuiteId, setCurrentTestSuiteId] = useState<string | null>(null)
   const [currentTestCases, setCurrentTestCases] = useState<TestCase[]>([])
   const [currentTestRun, setCurrentTestRun] = useState<TestRun | null>(null)
@@ -393,6 +415,8 @@ export default function MainPage() {
   const [libraryQuery, setLibraryQuery] = useState("")
   const [libraryFilter, setLibraryFilter] = useState<LibraryFilter>("all")
   const [testCanvasView, setTestCanvasView] = useState<TestCanvasView>("list")
+  const [testCanvasSection, setTestCanvasSection] = useState<TestCanvasSection>("full-flow")
+  const [testSuiteConfigDrawerOpen, setTestSuiteConfigDrawerOpen] = useState(false)
   const [auditCanvasView, setAuditCanvasView] = useState<AuditCanvasView>("list")
   const [knowledgeCanvasView, setKnowledgeCanvasView] = useState<KnowledgeCanvasView>("documents")
 
@@ -409,6 +433,32 @@ export default function MainPage() {
 
   const currentProject = projects.find((project) => project.id === currentProjectId) ?? null
   const currentSuite = testSuites.find((suite) => suite.id === currentTestSuiteId) ?? null
+  const visibleTestSuites = useMemo(
+    () =>
+      testSuites.filter(
+        (suite) => (suite.section ?? "full-flow") === testCanvasSection
+      ),
+    [testCanvasSection, testSuites]
+  )
+  const generationJobsBySuiteId = useMemo(() => {
+    const nextMap = new Map<string, TestSuiteGenerationJob>()
+    for (const job of testSuiteGenerationJobs) {
+      if (!shouldShowGenerationJobStatus(job.status)) continue
+      if (!nextMap.has(job.suiteId)) {
+        nextMap.set(job.suiteId, job)
+      }
+    }
+    return nextMap
+  }, [testSuiteGenerationJobs])
+  const hasActiveTestSuiteGenerationJob = testSuiteGenerationJobs.some(
+    (job) => job.status === "queued" || job.status === "running"
+  )
+  const indexVersionOptions = historyVersionRows
+    .filter((row) => row.indexVersionId !== "待生成")
+    .map((row) => ({
+      id: row.indexVersionId,
+      title: `${row.indexVersionId} · ${row.knowledgeVersionId}`,
+    }))
   const filteredPrompts = prompts.filter((prompt) => {
     const matchesQuery =
       libraryQuery.trim().length === 0
@@ -428,6 +478,7 @@ export default function MainPage() {
     setPromptCanvasMode("empty")
     setVersions([])
     setCurrentDocument(null)
+    setTestSuiteGenerationJobs([])
     setCurrentTestSuiteId(null)
     setCurrentTestCases([])
     setCurrentTestRun(null)
@@ -436,6 +487,8 @@ export default function MainPage() {
     setConversationAuditCreateMode(false)
     setCurrentConversationAuditData(null)
     setTestCanvasView("list")
+    setTestCanvasSection("full-flow")
+    setTestSuiteConfigDrawerOpen(false)
     setAuditCanvasView("list")
     setKnowledgeCanvasView("documents")
     setChatDrawerOpen(false)
@@ -445,6 +498,7 @@ export default function MainPage() {
   const openModule = useCallback((tab: Exclude<ModuleId, "home">) => {
     if (tab === "test") {
       setTestCanvasView("list")
+      setTestCanvasSection("full-flow")
     }
     if (tab === "audit") {
       setAuditCanvasView("list")
@@ -483,6 +537,7 @@ export default function MainPage() {
       })
       .catch(console.error)
     testSuitesApi.listByProject(currentProjectId).then(setTestSuites).catch(console.error)
+    testSuiteGenerationJobsApi.listByProject(currentProjectId).then(setTestSuiteGenerationJobs).catch(console.error)
     conversationAuditJobsApi.listByProject(currentProjectId).then(setConversationAuditJobs).catch(console.error)
   }, [currentProjectId])
 
@@ -547,10 +602,26 @@ export default function MainPage() {
     testSuitesApi.listByProject(currentProjectId).then(setTestSuites).catch(console.error)
   }, [currentProjectId])
 
+  const refreshTestSuiteGenerationJobs = useCallback(() => {
+    if (!currentProjectId) return
+    testSuiteGenerationJobsApi.listByProject(currentProjectId).then(setTestSuiteGenerationJobs).catch(console.error)
+  }, [currentProjectId])
+
   const refreshConversationAuditJobs = useCallback(() => {
     if (!currentProjectId) return
     conversationAuditJobsApi.listByProject(currentProjectId).then(setConversationAuditJobs).catch(console.error)
   }, [currentProjectId])
+
+  useEffect(() => {
+    if (!currentProjectId || !hasActiveTestSuiteGenerationJob) return
+
+    const timer = window.setInterval(() => {
+      refreshTestSuites()
+      refreshTestSuiteGenerationJobs()
+    }, 1200)
+
+    return () => window.clearInterval(timer)
+  }, [currentProjectId, hasActiveTestSuiteGenerationJob, refreshTestSuiteGenerationJobs, refreshTestSuites])
 
   const handleCreateProject = async (data: Omit<Project, "id" | "createdAt" | "updatedAt">) => {
     try {
@@ -791,9 +862,38 @@ export default function MainPage() {
   }
 
   const handleNewTestSuite = () => {
-    void handleNewSession({ title: "新建测试集", useTestAgent: true })
-    openModule("test")
-    setChatDrawerOpen(true)
+    setCurrentTestSuiteId(null)
+    setCurrentTestCases([])
+    setCurrentTestRun(null)
+    setTestCanvasView("list")
+    setActiveModuleId("test")
+    setTestSuiteConfigDrawerOpen(true)
+  }
+
+  const handleCreateConfiguredTestSuite = async (data: TestSuiteConfigSubmitPayload) => {
+    if (!currentProjectId) return
+
+    try {
+      const generated = await testSuitesApi.generateConfigured(currentProjectId, data)
+      setTestSuites((current) => [
+        generated.suite,
+        ...current.filter((suite) => suite.id !== generated.suite.id),
+      ])
+      setTestSuiteGenerationJobs((current) => [
+        generated.job,
+        ...current.filter((job) => job.id !== generated.job.id),
+      ])
+      setCurrentTestSuiteId(generated.suite.id)
+      setCurrentTestCases([])
+      setCurrentTestRun(null)
+      setTestMode(false)
+      setTestCanvasView("list")
+      setActiveModuleId("test")
+      setTestSuiteConfigDrawerOpen(false)
+    } catch (error) {
+      console.error("Create configured test suite failed:", error)
+      alert(`生成测试集失败: ${error instanceof Error ? error.message : "未知错误"}`)
+    }
   }
 
   const handleTestSuiteClick = async (id: string) => {
@@ -815,6 +915,7 @@ export default function MainPage() {
     if (!currentProjectId || !currentSessionId) return
     try {
       const suite = await testSuitesApi.create(currentProjectId, {
+        section: testCanvasSection,
         name: data.name,
         description: data.description,
         sessionId: currentSessionId,
@@ -865,7 +966,7 @@ export default function MainPage() {
   const commandActions: WorkspaceCommandItem[] = [
     { id: "new-session", title: "新建对话", description: "创建一个新的对话线程" },
     { id: "new-prompt", title: "新建 Prompt", description: "打开 Prompt 模块并创建空白资产" },
-    { id: "new-test-suite", title: "新建测试集", description: "创建测试生成会话并打开测试模块" },
+    { id: "new-test-suite", title: "新建测试集", description: "打开右侧抽屉并配置测试集" },
     { id: "new-audit-job", title: "新建质检任务", description: "打开质检模块并开始上传文件" },
     { id: "open-knowledge", title: "知识库", description: "打开知识库模块查看和上传文档" },
     { id: "open-memory", title: "记忆", description: "打开当前项目的记忆管理" },
@@ -886,6 +987,10 @@ export default function MainPage() {
       description: "测试集和运行报告",
       icon: <FlaskConical className="size-4" />,
       active: activeModuleId === "test",
+      children: [
+        { id: "full-flow", label: "全流程测试", active: activeModuleId === "test" && testCanvasSection === "full-flow" },
+        { id: "unit", label: "单元测试", active: activeModuleId === "test" && testCanvasSection === "unit" },
+      ],
     },
     {
       id: "audit",
@@ -897,9 +1002,14 @@ export default function MainPage() {
     {
       id: "knowledge",
       label: "知识库",
-      description: "文档、清洗与索引",
+      description: "文档、版本和任务",
       icon: <BookOpen className="size-4" />,
       active: activeModuleId === "knowledge",
+      children: [
+        { id: "documents", label: "文档库", active: activeModuleId === "knowledge" && knowledgeCanvasView === "documents" },
+        { id: "tasks", label: "清洗任务", active: activeModuleId === "knowledge" && knowledgeCanvasView === "tasks" },
+        { id: "versions", label: "版本管理", active: activeModuleId === "knowledge" && knowledgeCanvasView === "versions" },
+      ],
     },
     {
       id: "memory",
@@ -1162,8 +1272,8 @@ export default function MainPage() {
     return (
       <div>
         <CanvasDetailHeader
-          title="测试套件"
-          subtitle={`${testSuites.length} 个测试资产`}
+          title={getTestSectionLabel(testCanvasSection)}
+          subtitle={`${visibleTestSuites.length} 个测试资产`}
           actions={
             <Button variant="outline" size="sm" onClick={handleNewTestSuite}>
               <Plus className="size-4" />
@@ -1171,12 +1281,12 @@ export default function MainPage() {
             </Button>
           }
         />
-        {testSuites.length === 0 ? (
+        {visibleTestSuites.length === 0 ? (
           <div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-6 text-sm text-zinc-500">
-            还没有测试集。你可以先在对话区生成，再在这里查看详情。
+            还没有测试集。点击右上角新建测试集后，在右侧抽屉里完成配置。
           </div>
         ) : (
-          testSuites.map((suite) => (
+          visibleTestSuites.map((suite) => (
             <CanvasListCard
               key={suite.id}
               icon={<FlaskConical className="size-4" />}
@@ -1184,6 +1294,11 @@ export default function MainPage() {
               title={suite.name}
               meta={getTestSuiteMeta(suite)}
               status={getTestStatusLabel(suite.status)}
+              statusNode={
+                generationJobsBySuiteId.has(suite.id) ? (
+                  <TestSuiteGenerationStatus job={generationJobsBySuiteId.get(suite.id)!} />
+                ) : undefined
+              }
               active={currentTestSuiteId === suite.id}
               onClick={() => void handleTestSuiteClick(suite.id)}
             />
@@ -1194,7 +1309,7 @@ export default function MainPage() {
   }
 
   function renderTestCanvasDetail() {
-    if (!currentSuite) {
+    if (!currentSuite || (currentSuite.section ?? "full-flow") !== testCanvasSection) {
       return renderTestCanvasList()
     }
 
@@ -1220,6 +1335,7 @@ export default function MainPage() {
           cases={currentTestCases}
           latestRun={currentTestRun}
           prompts={prompts.map((prompt) => ({ id: prompt.id, title: prompt.title }))}
+          indexVersions={indexVersionOptions}
           onSuiteUpdate={() => {
             refreshTestSuites()
             if (currentTestSuiteId) {
@@ -1350,27 +1466,6 @@ export default function MainPage() {
           subtitle={`${documents.length} 份文档`}
         />
 
-        <div className="mb-4 flex rounded-lg border border-zinc-200 bg-zinc-50 p-1">
-          {([
-            ["documents", "文档库"],
-            ["tasks", "清洗任务"],
-            ["versions", "版本管理"],
-          ] as const).map(([viewId, label]) => (
-            <button
-              key={viewId}
-              type="button"
-              onClick={() => setKnowledgeCanvasView(viewId)}
-              className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                knowledgeCanvasView === viewId
-                  ? "bg-white text-zinc-950 shadow-sm"
-                  : "text-zinc-500 hover:text-zinc-900"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
         {knowledgeCanvasView === "documents" ? (
           <>
             <button
@@ -1416,6 +1511,7 @@ export default function MainPage() {
           </>
         ) : knowledgeCanvasView === "versions" ? (
           <KnowledgeAutomationPanel
+            key={knowledgeCanvasView}
             projectId={currentProject?.id ?? null}
             projectName={currentProject?.name ?? "当前项目"}
             section="versions"
@@ -1427,6 +1523,7 @@ export default function MainPage() {
           />
         ) : (
           <KnowledgeAutomationPanel
+            key={knowledgeCanvasView}
             projectId={currentProject?.id ?? null}
             projectName={currentProject?.name ?? "当前项目"}
             section="tasks"
@@ -1574,6 +1671,7 @@ export default function MainPage() {
     }
     if (nextModule === "test") {
       setTestCanvasView("list")
+      setTestCanvasSection("full-flow")
     }
     if (nextModule === "audit") {
       setAuditCanvasView("list")
@@ -1581,7 +1679,27 @@ export default function MainPage() {
     if (nextModule === "memory") {
       setMemoryBadgeCount(0)
     }
+    if (nextModule !== "test") {
+      setTestSuiteConfigDrawerOpen(false)
+    }
     setActiveModuleId(nextModule)
+  }
+
+  function handleModuleChildSelect(moduleId: string, childId: string) {
+    if (moduleId === "test") {
+      setActiveModuleId("test")
+      setTestCanvasSection(childId as TestCanvasSection)
+      setTestCanvasView("list")
+      setCurrentTestSuiteId(null)
+      setCurrentTestCases([])
+      setCurrentTestRun(null)
+      setTestSuiteConfigDrawerOpen(false)
+      return
+    }
+    if (moduleId === "knowledge") {
+      setActiveModuleId("knowledge")
+      setKnowledgeCanvasView(childId as KnowledgeCanvasView)
+    }
   }
 
   return (
@@ -1591,6 +1709,7 @@ export default function MainPage() {
         projectSwitcher={projectSwitcher}
         modules={workspaceModules}
         onModuleSelect={handleModuleSelect}
+        onModuleChildSelect={handleModuleChildSelect}
         onOpenCommandPalette={() => setCommandPaletteOpen(true)}
         onOpenChatDrawer={() => setChatDrawerOpen(true)}
         onToggleSidebar={() => setSidebarCollapsed((value) => !value)}
@@ -1614,6 +1733,7 @@ export default function MainPage() {
           sessionId={currentSessionId}
           prompts={prompts.map((prompt) => ({ id: prompt.id, title: prompt.title }))}
           documents={documents.map((document) => ({ id: document.id, name: document.name }))}
+          indexVersions={indexVersionOptions}
           onMessagesChange={refreshMessages}
           onApplyPreview={handleApplyPreview}
           onApplyDiff={handleApplyDiff}
@@ -1709,6 +1829,18 @@ export default function MainPage() {
           void handleDocumentClick(id)
         }}
       />
+
+      {testSuiteConfigDrawerOpen ? (
+        <TestSuiteConfigDrawer
+          open={testSuiteConfigDrawerOpen}
+          section={testCanvasSection}
+          prompts={prompts.map((prompt) => ({ id: prompt.id, title: prompt.title }))}
+          documents={documents.map((document) => ({ id: document.id, name: document.name }))}
+          indexVersions={indexVersionOptions}
+          onClose={() => setTestSuiteConfigDrawerOpen(false)}
+          onSubmit={(payload) => void handleCreateConfiguredTestSuite(payload)}
+        />
+      ) : null}
 
       <CreateProjectDialog
         open={createProjectOpen}
