@@ -42,6 +42,8 @@ export interface TestSuiteConfigSubmitPayload {
   routingConfig: TestSuiteRoutingConfig | null
   targetType: UnitTestTarget
   targetId: string | null
+  embeddingRequestUrl: string | null
+  embeddingModelName: string | null
   caseCount: number
   conversationMode: TestConversationMode
   minTurns: number | null
@@ -98,6 +100,8 @@ export function TestSuiteConfigDrawer({
   })
   const [targetType, setTargetType] = useState<UnitTestTarget>("prompt")
   const [targetId, setTargetId] = useState(prompts[0]?.id ?? indexVersions[0]?.id ?? "")
+  const [embeddingRequestUrl, setEmbeddingRequestUrl] = useState("")
+  const [embeddingModelName, setEmbeddingModelName] = useState("")
   const [caseCount, setCaseCount] = useState("10")
   const [conversationMode, setConversationMode] = useState<TestConversationMode>("single-turn")
   const [minTurns, setMinTurns] = useState("2")
@@ -167,7 +171,10 @@ export function TestSuiteConfigDrawer({
   const canSubmit =
     section === "full-flow"
       ? isBaseValid && isRoutingConfigComplete(routingConfig)
-      : isBaseValid && targetId.length > 0
+      : isBaseValid &&
+        targetId.length > 0 &&
+        (targetType !== "index-version" ||
+          (embeddingRequestUrl.trim().length > 0 && embeddingModelName.trim().length > 0))
 
   function handleSubmit() {
     if (!canSubmit) return
@@ -179,6 +186,14 @@ export function TestSuiteConfigDrawer({
       routingConfig: section === "full-flow" ? routingConfig : null,
       targetType,
       targetId: section === "unit" ? targetId : null,
+      embeddingRequestUrl:
+        section === "unit" && targetType === "index-version"
+          ? embeddingRequestUrl.trim()
+          : null,
+      embeddingModelName:
+        section === "unit" && targetType === "index-version"
+          ? embeddingModelName.trim()
+          : null,
       caseCount: numericCaseCount,
       conversationMode,
       minTurns: needsTurnRange ? numericMinTurns : null,
@@ -358,6 +373,28 @@ export function TestSuiteConfigDrawer({
                     </SelectContent>
                   </Select>
                 </div>
+
+                {targetType === "index-version" ? (
+                  <>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Embedding 请求 URL</label>
+                      <Input
+                        value={embeddingRequestUrl}
+                        onChange={(event) => setEmbeddingRequestUrl(event.target.value)}
+                        placeholder="输入 embedding 服务请求 URL"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Embedding 模型名称</label>
+                      <Input
+                        value={embeddingModelName}
+                        onChange={(event) => setEmbeddingModelName(event.target.value)}
+                        placeholder="输入 embedding 模型名称"
+                      />
+                    </div>
+                  </>
+                ) : null}
               </>
             )}
 

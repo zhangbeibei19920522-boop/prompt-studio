@@ -204,6 +204,15 @@ export function buildGenerationContent(
     )
   }
 
+  if (body.section === 'unit' && body.targetType === 'index-version') {
+    if (body.embeddingRequestUrl) {
+      parts.push(`Embedding 请求 URL：${body.embeddingRequestUrl}。`)
+    }
+    if (body.embeddingModelName) {
+      parts.push(`Embedding 模型名称：${body.embeddingModelName}。`)
+    }
+  }
+
   if (sourceSummary.length > 0) {
     parts.push(`请优先结合这些生成来源设计用例：${sourceSummary}。`)
   }

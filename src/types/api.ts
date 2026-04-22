@@ -82,6 +82,8 @@ export interface GenerateConfiguredTestSuiteRequest {
   routingConfig: TestSuiteRoutingConfig | null
   targetType: TestGenerationTargetType
   targetId: string | null
+  embeddingRequestUrl?: string | null
+  embeddingModelName?: string | null
   caseCount: number
   conversationMode: TestConversationMode
   minTurns: number | null

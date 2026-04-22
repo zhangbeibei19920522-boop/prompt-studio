@@ -74,6 +74,9 @@ describe("TestSuiteConfigDrawer", () => {
     expect(source).toContain("Prompt")
     expect(source).toContain("索引版本")
     expect(source).toContain("搜索 Prompt 或文档")
+    expect(source).toContain("Embedding 请求 URL")
+    expect(source).toContain("Embedding 模型名称")
+    expect(source).toContain('targetType === "index-version"')
   })
 
   it("reuses the existing routing config form for multi-prompt configuration", () => {

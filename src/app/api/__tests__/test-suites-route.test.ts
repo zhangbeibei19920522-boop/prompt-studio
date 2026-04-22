@@ -438,6 +438,106 @@ describe("test suite routes", () => {
     }
   })
 
+  it("passes embedding config through configured unit index-version generation", async () => {
+    const testContext = await setupTestSuiteRouteTest()
+    vi.resetModules()
+
+    const handleTestAgentChat = vi.fn(async function* (
+      _sessionId: string,
+      content: string
+    ) {
+      expect(content).toContain("请为索引版本")
+      expect(content).toContain("Embedding 请求 URL：https://embedding.example.com/v1/embeddings。")
+      expect(content).toContain("Embedding 模型名称：text-embedding-v4。")
+
+      yield {
+        type: "test-suite",
+        data: {
+          name: "索引版本单元测试",
+          description: "覆盖索引版本检索能力",
+          workflowMode: "single",
+          cases: [
+            {
+              title: "FAQ 检索",
+              context: "验证知识问答检索",
+              input: "如何申请退款？",
+              expectedOutput: "命中退款相关知识并返回正确要点",
+            },
+          ],
+        },
+      }
+    })
+
+    vi.doMock("@/lib/ai/agent", () => ({
+      handleTestAgentChat,
+    }))
+
+    try {
+      const generateRoute = await import("@/app/api/projects/[id]/test-suites/generate/route")
+      const detailRoute = await import("@/app/api/test-suites/[id]/route")
+      const jobsRoute = await import("@/app/api/projects/[id]/test-suite-generation-jobs/route")
+
+      const response = await generateRoute.POST(
+        new Request("http://localhost", {
+          method: "POST",
+          body: JSON.stringify({
+            section: "unit",
+            structure: "single",
+            promptId: null,
+            routingConfig: null,
+            targetType: "index-version",
+            targetId: "kb-index-2024-04-20",
+            embeddingRequestUrl: "https://embedding.example.com/v1/embeddings",
+            embeddingModelName: "text-embedding-v4",
+            caseCount: 6,
+            conversationMode: "single-turn",
+            minTurns: null,
+            maxTurns: null,
+            generationSourceIds: ["document:doc-1"],
+          }),
+        }),
+        { params: Promise.resolve({ id: "project-1" }) }
+      )
+
+      const payload = await response.json()
+
+      expect(response.status).toBe(202)
+      expect(payload.data.suite).toMatchObject({
+        section: "unit",
+        name: "kb-index-2024-04-20 单元测试",
+        promptId: null,
+        workflowMode: "single",
+      })
+
+      await waitFor(
+        async () => {
+          const jobsResponse = await jobsRoute.GET(new Request("http://localhost"), {
+            params: Promise.resolve({ id: "project-1" }),
+          })
+          return jobsResponse.json()
+        },
+        (jobsPayload) =>
+          Array.isArray(jobsPayload.data) &&
+          jobsPayload.data.some(
+            (job: { id: string; status: string; generatedCount: number }) =>
+              job.id === payload.data.job.id && job.status === "completed" && job.generatedCount === 1
+          )
+      )
+
+      const detailResponse = await detailRoute.GET(new Request("http://localhost"), {
+        params: Promise.resolve({ id: payload.data.suite.id }),
+      })
+      const detailPayload = await detailResponse.json()
+
+      expect(detailPayload.data.section).toBe("unit")
+      expect(detailPayload.data.name).toBe("索引版本单元测试")
+      expect(handleTestAgentChat).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.doUnmock("@/lib/ai/agent")
+      testContext.cleanup()
+    }
+  })
+
   it("creates and returns routing suites with expected intents", async () => {
     const testContext = await setupTestSuiteRouteTest()
 

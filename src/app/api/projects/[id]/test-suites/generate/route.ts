@@ -73,6 +73,21 @@ export async function POST(
       )
     }
 
+    if (
+      body.section === 'unit' &&
+      body.targetType === 'index-version' &&
+      (!body.targetId || !body.embeddingRequestUrl || !body.embeddingModelName)
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          data: null,
+          error: 'targetId, embeddingRequestUrl, and embeddingModelName are required for index version unit tests',
+        },
+        { status: 400 }
+      )
+    }
+
     const generationRequest = body as GenerateConfiguredTestSuiteRequest
     const suite = createTestSuite({
       projectId,
