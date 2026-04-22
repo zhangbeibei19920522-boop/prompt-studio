@@ -19,6 +19,7 @@ import {
 
 import { ConversationAuditDetail } from "@/components/audit/conversation-audit-detail"
 import { ChatArea } from "@/components/chat/chat-area"
+import { KnowledgeAutomationPanel } from "@/components/knowledge-automation/knowledge-automation-panel"
 import { DocumentPreview } from "@/components/knowledge/document-preview"
 import { UploadDialog } from "@/components/knowledge/upload-dialog"
 import { MemoryList } from "@/components/memory/memory-list"
@@ -75,7 +76,7 @@ type ModuleId = "home" | "prompt" | "test" | "audit" | "knowledge" | "memory" | 
 type PromptCanvasMode = "empty" | "preview" | "edit" | "history"
 type TestCanvasView = "list" | "detail"
 type AuditCanvasView = "list" | "detail"
-type KnowledgeCanvasView = "documents" | "automation"
+type KnowledgeCanvasView = "documents" | "tasks" | "versions"
 type LibraryFilter = "all" | "active" | "draft"
 
 function formatUpdatedLabel(updatedAt: string): string {
@@ -1346,13 +1347,14 @@ export default function MainPage() {
       <>
         <CanvasDetailHeader
           title="知识库"
-          subtitle={`${documents.length} 份文档 · 清洗与索引工作台`}
+          subtitle={`${documents.length} 份文档`}
         />
 
         <div className="mb-4 flex rounded-lg border border-zinc-200 bg-zinc-50 p-1">
           {([
             ["documents", "文档库"],
-            ["automation", "清洗与索引"],
+            ["tasks", "清洗任务"],
+            ["versions", "版本管理"],
           ] as const).map(([viewId, label]) => (
             <button
               key={viewId}
@@ -1412,10 +1414,28 @@ export default function MainPage() {
               </CanvasSection>
             )}
           </>
+        ) : knowledgeCanvasView === "versions" ? (
+          <KnowledgeAutomationPanel
+            projectId={currentProject?.id ?? null}
+            projectName={currentProject?.name ?? "当前项目"}
+            section="versions"
+            documents={documents.map((document) => ({
+              id: document.id,
+              name: document.name,
+              type: document.type,
+            }))}
+          />
         ) : (
-          <div className="flex min-h-[280px] items-center justify-center rounded-lg border border-dashed border-zinc-300 bg-white px-6 py-12 text-center">
-            <p className="text-base font-semibold text-zinc-950">功能开发中</p>
-          </div>
+          <KnowledgeAutomationPanel
+            projectId={currentProject?.id ?? null}
+            projectName={currentProject?.name ?? "当前项目"}
+            section="tasks"
+            documents={documents.map((document) => ({
+              id: document.id,
+              name: document.name,
+              type: document.type,
+            }))}
+          />
         )}
       </>
     )

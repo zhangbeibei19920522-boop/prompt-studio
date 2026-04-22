@@ -65,6 +65,183 @@ export interface Document {
   createdAt: string
 }
 
+export type KnowledgeTaskType = 'batch' | 'manual' | 'repair' | 'full'
+export type KnowledgeBuildTaskStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+export type KnowledgeVersionStatus = 'draft' | 'stg' | 'prod' | 'archived'
+export type KnowledgeIndexVersionStatus = 'draft' | 'ready' | 'stg' | 'prod' | 'archived'
+export type KnowledgeReviewStatus = 'approved' | 'pending' | 'blocked'
+
+export interface KnowledgeManualDraftInput {
+  title: string
+  content: string
+  source: string
+}
+
+export interface KnowledgeRepairQuestionInput {
+  query: string
+  problem: string
+  direction: string
+}
+
+export interface KnowledgeTaskInput {
+  documentIds: string[]
+  manualDrafts: KnowledgeManualDraftInput[]
+  repairQuestions: KnowledgeRepairQuestionInput[]
+}
+
+export interface KnowledgeStageCount {
+  stage: string
+  value: string
+}
+
+export interface KnowledgeCoverageAudit {
+  coverage: number
+  auditStatus: 'normal' | 'warning'
+  reasons: string[]
+  orphanRecords: string[]
+  ambiguityRecords: string[]
+}
+
+export interface KnowledgeStageSummary {
+  sourceCount: number
+  excludedCount: number
+  rawRecordCount: number
+  cleanedCount: number
+  includeCount: number
+  highRiskCount: number
+  conflictCount: number
+  pendingCount: number
+  blockedCount: number
+  approvedCount: number
+  parentCount: number
+  chunkCount: number
+  coverage: number
+  orphanCount: number
+  ambiguityCount: number
+  stageCounts: KnowledgeStageCount[]
+}
+
+export interface KnowledgeProfileConfig {
+  sourceAdapters: Record<string, unknown>
+  cleaningRules: Record<string, unknown>
+  riskRules: Record<string, unknown>
+  promotionRules: Record<string, unknown>
+  mergeRules: Record<string, unknown>
+  conflictRules: Record<string, unknown>
+  metadataSchema: string[]
+  entityDictionary: Record<string, string[]>
+}
+
+export interface KnowledgeBase {
+  id: string
+  projectId: string
+  name: string
+  profileKey: string
+  profileConfig: KnowledgeProfileConfig
+  repairConfig: Record<string, unknown>
+  currentDraftVersionId: string | null
+  currentStgVersionId: string | null
+  currentProdVersionId: string | null
+  currentStgIndexVersionId: string | null
+  currentProdIndexVersionId: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface KnowledgeBuildTask {
+  id: string
+  projectId: string
+  knowledgeBaseId: string
+  knowledgeVersionId: string | null
+  knowledgeIndexVersionId: string | null
+  name: string
+  taskType: KnowledgeTaskType
+  status: KnowledgeBuildTaskStatus
+  currentStep: string
+  progress: number
+  baseVersionId: string | null
+  input: KnowledgeTaskInput
+  stageSummary: KnowledgeStageSummary | null
+  errorMessage: string | null
+  createdAt: string
+  updatedAt: string
+  startedAt: string | null
+  completedAt: string | null
+}
+
+export interface KnowledgeParent {
+  id: string
+  knowledgeVersionId: string
+  question: string
+  answer: string
+  questionAliases: string[]
+  metadata: Record<string, unknown>
+  sourceFiles: string[]
+  sourceRecordIds: string[]
+  reviewStatus: KnowledgeReviewStatus
+  recordKind: string
+  isHighRisk: boolean
+  inheritedRiskReason: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface KnowledgeChunk {
+  id: string
+  knowledgeVersionId: string
+  parentId: string
+  chunkOrder: number
+  sectionTitle: string
+  chunkText: string
+  embeddingText: string
+  chunkType: string
+  metadata: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
+}
+
+export interface KnowledgeVersion {
+  id: string
+  knowledgeBaseId: string
+  taskId: string | null
+  name: string
+  status: KnowledgeVersionStatus
+  buildProfile: string
+  sourceSummary: Record<string, unknown>
+  stageSummary: KnowledgeStageSummary
+  coverageAudit: KnowledgeCoverageAudit
+  qaPairCount: number
+  parentCount: number
+  chunkCount: number
+  pendingCount: number
+  blockedCount: number
+  parentsFilePath: string
+  chunksFilePath: string
+  manifestFilePath: string
+  createdAt: string
+  updatedAt: string
+  publishedAt: string | null
+  parents?: KnowledgeParent[]
+  chunks?: KnowledgeChunk[]
+}
+
+export interface KnowledgeIndexVersion {
+  id: string
+  knowledgeBaseId: string
+  knowledgeVersionId: string
+  name: string
+  status: KnowledgeIndexVersionStatus
+  profileKey: string
+  parentCount: number
+  chunkCount: number
+  stageSummary: KnowledgeStageSummary
+  manifestFilePath: string
+  createdAt: string
+  updatedAt: string
+  builtAt: string | null
+  publishedAt: string | null
+}
+
 // 对话会话
 export interface Session {
   id: string
@@ -158,7 +335,6 @@ export interface TestSuiteConfig {
 }
 
 export type TestSuiteWorkflowMode = 'single' | 'routing'
-
 export interface TestSuiteRoute {
   intent: string
   promptId: string

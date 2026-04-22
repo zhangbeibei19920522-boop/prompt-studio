@@ -60,12 +60,21 @@ describe("main page workspace layout", () => {
     expect(source).not.toMatch(/title="知识库"[\s\S]{0,200}actions=\{/)
   })
 
-  it("keeps the cleaning and indexing page as a development placeholder in the formal app", () => {
+  it("mounts the cleaning and indexing workflow inside the formal knowledge module", () => {
     const pagePath = path.join(process.cwd(), "src", "app", "(main)", "page.tsx")
     const source = fs.readFileSync(pagePath, "utf8")
 
-    expect(source).toContain("功能开发中")
-    expect(source).not.toContain("KnowledgeAutomationPanel")
+    expect(source).toContain("KnowledgeAutomationPanel")
+    expect(source).toContain("projectId={currentProject?.id ?? null}")
+    expect(source).toContain('projectName={currentProject?.name ?? "当前项目"}')
+    expect(source).toContain('subtitle={`${documents.length} 份文档`}')
+    expect(source).toContain('["documents", "文档库"]')
+    expect(source).toContain('["tasks", "清洗任务"]')
+    expect(source).toContain('["versions", "版本管理"]')
+    expect(source).toContain('section="tasks"')
+    expect(source).toContain('section="versions"')
+    expect(source).not.toContain("功能开发中")
+    expect(source).not.toContain("清洗与索引工作台")
   })
 
   it("keeps project memory management as a top-level workspace module", () => {

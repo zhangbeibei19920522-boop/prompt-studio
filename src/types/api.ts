@@ -1,4 +1,13 @@
 import type {
+  KnowledgeBase,
+  KnowledgeBuildTask,
+  KnowledgeCoverageAudit,
+  KnowledgeIndexVersion,
+  KnowledgeManualDraftInput,
+  KnowledgeRepairQuestionInput,
+  KnowledgeStageSummary,
+  KnowledgeTaskType,
+  KnowledgeVersion,
   Memory,
   MessageReference,
   Project,
@@ -108,4 +117,65 @@ export interface CreateConversationAuditJobRequest {
 export interface RunConversationAuditResponse {
   jobId: string
   status: 'running'
+}
+
+export interface CreateKnowledgeBaseRequest {
+  name: string
+  profileKey?: string
+  profileConfig?: Partial<KnowledgeBase['profileConfig']>
+  repairConfig?: Record<string, unknown>
+}
+
+export interface UpdateKnowledgeBaseRequest {
+  name?: string
+  profileKey?: string
+  profileConfig?: Partial<KnowledgeBase['profileConfig']>
+  repairConfig?: Record<string, unknown>
+  currentDraftVersionId?: string | null
+  currentStgVersionId?: string | null
+  currentProdVersionId?: string | null
+  currentStgIndexVersionId?: string | null
+  currentProdIndexVersionId?: string | null
+}
+
+export interface CreateKnowledgeBuildTaskRequest {
+  name: string
+  taskType: KnowledgeTaskType
+  baseVersionId?: string | null
+  documentIds?: string[]
+  manualDrafts?: KnowledgeManualDraftInput[]
+  repairQuestions?: KnowledgeRepairQuestionInput[]
+}
+
+export interface CreateKnowledgeBuildTaskResponse {
+  task: KnowledgeBuildTask
+  version: KnowledgeVersion
+}
+
+export interface UpdateKnowledgeBuildTaskRequest {
+  status?: KnowledgeBuildTask['status']
+  currentStep?: string
+  progress?: number
+  knowledgeVersionId?: string | null
+  knowledgeIndexVersionId?: string | null
+  stageSummary?: KnowledgeStageSummary | null
+  errorMessage?: string | null
+}
+
+export interface UpdateKnowledgeVersionRequest {
+  status?: KnowledgeVersion['status']
+  stageSummary?: KnowledgeStageSummary
+  coverageAudit?: KnowledgeCoverageAudit
+  publishedAt?: string | null
+}
+
+export interface CreateKnowledgeIndexVersionRequest {
+  knowledgeVersionId: string
+  name: string
+}
+
+export interface KnowledgeVersionPushResponse {
+  knowledgeBase: KnowledgeBase
+  version: KnowledgeVersion
+  indexVersion: KnowledgeIndexVersion
 }

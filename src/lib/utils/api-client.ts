@@ -1,8 +1,12 @@
 import type {
   ApiResponse,
+  CreateKnowledgeBaseRequest,
+  CreateKnowledgeBuildTaskRequest,
+  CreateKnowledgeBuildTaskResponse,
   CreateMemoryRequest,
   UpdateMemoryRequest,
   CreateTestSuiteRequest,
+  KnowledgeVersionPushResponse,
   UpdateTestSuiteRequest,
   CreateTestCaseRequest,
   UpdateTestCaseRequest,
@@ -12,6 +16,10 @@ import type {
   Project,
   Prompt,
   Document,
+  KnowledgeBase,
+  KnowledgeBuildTask,
+  KnowledgeIndexVersion,
+  KnowledgeVersion,
   Session,
   Message,
   Memory,
@@ -33,6 +41,26 @@ async function fetchApi<T>(url: string, options?: RequestInit): Promise<T> {
       ...options?.headers,
     },
   })
+  const json: ApiResponse<T> = await res.json()
+  if (!json.success) {
+    throw new Error(json.error ?? '请求失败')
+  }
+  return json.data as T
+}
+
+async function fetchNullableApi<T>(url: string, options?: RequestInit): Promise<T | null> {
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options?.headers,
+    },
+  })
+
+  if (res.status === 404) {
+    return null
+  }
+
   const json: ApiResponse<T> = await res.json()
   if (!json.success) {
     throw new Error(json.error ?? '请求失败')
@@ -191,6 +219,7 @@ export const testSuitesApi = {
     fetchApi<null>(`/api/test-suites/${id}`, { method: 'DELETE' }),
 }
 
+
 // Test Cases
 export const testCasesApi = {
   listBySuite: (suiteId: string) =>
@@ -264,4 +293,39 @@ export const conversationAuditJobsApi = {
   },
   delete: (id: string) =>
     fetchApi<null>(`/api/conversation-audit-jobs/${id}`, { method: 'DELETE' }),
+}
+
+export const knowledgeApi = {
+  getKnowledgeBase: (projectId: string) =>
+    fetchNullableApi<KnowledgeBase>(`/api/projects/${projectId}/knowledge-base`),
+  createKnowledgeBase: (projectId: string, data: CreateKnowledgeBaseRequest) =>
+    fetchApi<KnowledgeBase>(`/api/projects/${projectId}/knowledge-base`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  listKnowledgeTasks: (projectId: string) =>
+    fetchApi<KnowledgeBuildTask[]>(`/api/projects/${projectId}/knowledge-build-tasks`),
+  createKnowledgeTask: (projectId: string, data: CreateKnowledgeBuildTaskRequest) =>
+    fetchApi<CreateKnowledgeBuildTaskResponse>(`/api/projects/${projectId}/knowledge-build-tasks`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  listKnowledgeVersions: (projectId: string) =>
+    fetchApi<KnowledgeVersion[]>(`/api/projects/${projectId}/knowledge-versions`),
+  listKnowledgeIndexVersions: (projectId: string) =>
+    fetchApi<KnowledgeIndexVersion[]>(`/api/projects/${projectId}/knowledge-index-versions`),
+  getKnowledgeVersion: (id: string) =>
+    fetchApi<KnowledgeVersion>(`/api/knowledge-versions/${id}`),
+  pushStg: (id: string) =>
+    fetchApi<KnowledgeVersionPushResponse>(`/api/knowledge-versions/${id}/push-stg`, {
+      method: 'POST',
+    }),
+  pushProd: (id: string) =>
+    fetchApi<KnowledgeVersionPushResponse>(`/api/knowledge-versions/${id}/push-prod`, {
+      method: 'POST',
+    }),
+  rollback: (id: string) =>
+    fetchApi<KnowledgeVersionPushResponse>(`/api/knowledge-versions/${id}/rollback`, {
+      method: 'POST',
+    }),
 }

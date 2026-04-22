@@ -61,6 +61,114 @@ CREATE TABLE IF NOT EXISTS documents (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS knowledge_bases (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL UNIQUE REFERENCES projects(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  profile_key TEXT NOT NULL DEFAULT 'generic_customer_service',
+  profile_config_json TEXT NOT NULL DEFAULT '{"sourceAdapters":{},"cleaningRules":{},"riskRules":{},"promotionRules":{},"mergeRules":{},"conflictRules":{},"metadataSchema":[],"entityDictionary":{}}',
+  repair_config_json TEXT NOT NULL DEFAULT '{}',
+  current_draft_version_id TEXT,
+  current_stg_version_id TEXT,
+  current_prod_version_id TEXT,
+  current_stg_index_version_id TEXT,
+  current_prod_index_version_id TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS knowledge_build_tasks (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  knowledge_base_id TEXT NOT NULL REFERENCES knowledge_bases(id) ON DELETE CASCADE,
+  knowledge_version_id TEXT REFERENCES knowledge_versions(id) ON DELETE SET NULL,
+  knowledge_index_version_id TEXT REFERENCES knowledge_index_versions(id) ON DELETE SET NULL,
+  name TEXT NOT NULL,
+  task_type TEXT NOT NULL CHECK(task_type IN ('batch', 'manual', 'repair', 'full')),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'running', 'succeeded', 'failed', 'cancelled')),
+  current_step TEXT NOT NULL DEFAULT 'queued',
+  progress INTEGER NOT NULL DEFAULT 0,
+  base_version_id TEXT,
+  input_json TEXT NOT NULL DEFAULT '{"documentIds":[],"manualDrafts":[],"repairQuestions":[]}',
+  stage_summary_json TEXT,
+  error_message TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  started_at TEXT,
+  completed_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS knowledge_versions (
+  id TEXT PRIMARY KEY,
+  knowledge_base_id TEXT NOT NULL REFERENCES knowledge_bases(id) ON DELETE CASCADE,
+  task_id TEXT REFERENCES knowledge_build_tasks(id) ON DELETE SET NULL,
+  name TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft', 'stg', 'prod', 'archived')),
+  build_profile TEXT NOT NULL DEFAULT 'generic_customer_service',
+  source_summary_json TEXT NOT NULL DEFAULT '{}',
+  stage_summary_json TEXT NOT NULL,
+  coverage_audit_json TEXT NOT NULL,
+  qa_pair_count INTEGER NOT NULL DEFAULT 0,
+  parent_count INTEGER NOT NULL DEFAULT 0,
+  chunk_count INTEGER NOT NULL DEFAULT 0,
+  pending_count INTEGER NOT NULL DEFAULT 0,
+  blocked_count INTEGER NOT NULL DEFAULT 0,
+  parents_file_path TEXT NOT NULL,
+  chunks_file_path TEXT NOT NULL,
+  manifest_file_path TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  published_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS knowledge_parents (
+  id TEXT PRIMARY KEY,
+  knowledge_version_id TEXT NOT NULL REFERENCES knowledge_versions(id) ON DELETE CASCADE,
+  question TEXT NOT NULL,
+  answer TEXT NOT NULL,
+  question_aliases_json TEXT NOT NULL DEFAULT '[]',
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  source_files_json TEXT NOT NULL DEFAULT '[]',
+  source_record_ids_json TEXT NOT NULL DEFAULT '[]',
+  review_status TEXT NOT NULL DEFAULT 'approved' CHECK(review_status IN ('approved', 'pending', 'blocked')),
+  record_kind TEXT NOT NULL DEFAULT 'merge_ready_faq',
+  is_high_risk INTEGER NOT NULL DEFAULT 0,
+  inherited_risk_reason TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS knowledge_chunks (
+  id TEXT PRIMARY KEY,
+  knowledge_version_id TEXT NOT NULL REFERENCES knowledge_versions(id) ON DELETE CASCADE,
+  parent_id TEXT NOT NULL REFERENCES knowledge_parents(id) ON DELETE CASCADE,
+  chunk_order INTEGER NOT NULL DEFAULT 0,
+  section_title TEXT NOT NULL DEFAULT '概述',
+  chunk_text TEXT NOT NULL,
+  embedding_text TEXT NOT NULL,
+  chunk_type TEXT NOT NULL DEFAULT 'answer',
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS knowledge_index_versions (
+  id TEXT PRIMARY KEY,
+  knowledge_base_id TEXT NOT NULL REFERENCES knowledge_bases(id) ON DELETE CASCADE,
+  knowledge_version_id TEXT NOT NULL REFERENCES knowledge_versions(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft', 'ready', 'stg', 'prod', 'archived')),
+  profile_key TEXT NOT NULL DEFAULT 'generic_customer_service',
+  parent_count INTEGER NOT NULL DEFAULT 0,
+  chunk_count INTEGER NOT NULL DEFAULT 0,
+  stage_summary_json TEXT NOT NULL,
+  manifest_file_path TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  built_at TEXT,
+  published_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -82,6 +190,15 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE INDEX IF NOT EXISTS idx_prompts_project ON prompts(project_id);
 CREATE INDEX IF NOT EXISTS idx_prompt_versions_prompt ON prompt_versions(prompt_id);
 CREATE INDEX IF NOT EXISTS idx_documents_project ON documents(project_id);
+CREATE INDEX IF NOT EXISTS idx_knowledge_tasks_project ON knowledge_build_tasks(project_id);
+CREATE INDEX IF NOT EXISTS idx_knowledge_tasks_base ON knowledge_build_tasks(knowledge_base_id);
+CREATE INDEX IF NOT EXISTS idx_knowledge_versions_base ON knowledge_versions(knowledge_base_id);
+CREATE INDEX IF NOT EXISTS idx_knowledge_versions_task ON knowledge_versions(task_id);
+CREATE INDEX IF NOT EXISTS idx_knowledge_parents_version ON knowledge_parents(knowledge_version_id);
+CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_version ON knowledge_chunks(knowledge_version_id);
+CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_parent ON knowledge_chunks(parent_id);
+CREATE INDEX IF NOT EXISTS idx_knowledge_index_versions_base ON knowledge_index_versions(knowledge_base_id);
+CREATE INDEX IF NOT EXISTS idx_knowledge_index_versions_version ON knowledge_index_versions(knowledge_version_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id);
 CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id);
 
