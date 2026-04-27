@@ -103,4 +103,26 @@ describe("conversation output parsing", () => {
       },
     ])
   })
+
+  it("shows long routing intents in parsed conversation output", () => {
+    const turns = parseConversationOutput(
+      "The warranty is one year and the remote is included.",
+      "For model 43H6570G, how long is the warranty?",
+      {
+        actualIntent: "P-TV_Cdmtv_Warranty_Accessories_Power_Compliance",
+      }
+    )
+
+    expect(turns).toEqual([
+      {
+        role: "user",
+        content: "For model 43H6570G, how long is the warranty?",
+      },
+      {
+        role: "assistant",
+        intent: "P-TV_Cdmtv_Warranty_Accessories_Power_Compliance",
+        content: "The warranty is one year and the remote is included.",
+      },
+    ])
+  })
 })

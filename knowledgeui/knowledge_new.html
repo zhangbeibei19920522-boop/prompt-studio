@@ -1,0 +1,2455 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>知识库自动化 - CQIL Studio</title>
+    <style>
+        /* ================= CSS Variables & Theming ================= */
+        :root {
+            --bg-body: #f3f6f9;
+            --bg-surface: #ffffff;
+            --primary: #009ef7;
+            --primary-hover: #008be1;
+            --success: #50cd89;
+            --warning: #ffc700;
+            --danger: #f1416c;
+            --text-dark: #181c32;
+            --text-muted: #667085;
+            --text-subtle: #98a2b3;
+            --border: #e4e6ef;
+            --sidebar-bg: #1e1e2d;
+            --sidebar-text: #9899ac;
+        }
+
+        /* ================= Basic Reset & Typography ================= */
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', Inter, sans-serif; }
+        body { background-color: var(--bg-body); color: var(--text-dark); display: flex; height: 100vh; overflow: hidden; }
+        a { text-decoration: none; color: var(--primary); cursor: pointer; }
+        a:hover { text-decoration: underline; }
+        button { cursor: pointer; font-weight: 500; border-radius: 6px; padding: 8px 16px; border: none; font-size: 13px; line-height: 1.35; transition: all 0.2s; }
+        .btn-primary { background-color: var(--primary); color: white; }
+        .btn-primary:hover { background-color: var(--primary-hover); }
+        .btn-outline { background-color: transparent; border: 1px solid var(--border); color: var(--text-dark); }
+        .btn-outline:hover { background-color: #f8fbff; border-color: #cbd5e1; }
+        .btn-danger { background-color: var(--danger); color: white; }
+        .btn-success { background-color: var(--success); color: white; }
+        .btn-sm { padding: 6px 10px; font-size: 12px; }
+        button:disabled { cursor: not-allowed; opacity: 0.55; }
+        #view-detail.published-readonly #tab-pipeline button,
+        #view-detail.published-readonly #tab-risk button,
+        #view-detail.published-readonly #tab-risk a,
+        #view-detail.published-readonly #tab-cleaned button,
+        #view-detail.published-readonly #tab-attempts button,
+        #view-detail.published-readonly #tab-debug button {
+            display: none !important;
+        }
+        #view-detail.published-readonly #tab-cleaned input,
+        #view-detail.published-readonly #tab-cleaned select,
+        #view-detail.published-readonly #tab-cleaned textarea,
+        #view-detail.published-readonly #tab-debug input,
+        #view-detail.published-readonly #tab-debug select {
+            pointer-events: none;
+            background: #f8fafc;
+            color: var(--text-muted);
+        }
+        #view-detail.published-readonly #tab-cleaned .review-item {
+            pointer-events: none;
+            color: var(--text-muted);
+        }
+
+        /* ================= Layout ================= */
+        .sidebar { width: 250px; background-color: var(--sidebar-bg); color: var(--sidebar-text); padding: 20px 0; display: flex; flex-direction: column; flex-shrink: 0; }
+        .sidebar-logo { padding: 0 20px 20px; font-size: 18px; font-weight: bold; color: white; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 20px; }
+        .menu-item { padding: 12px 20px; cursor: pointer; display: flex; align-items: center; gap: 10px; font-size: 14px; }
+        .menu-item.active { background-color: rgba(255,255,255,0.05); color: var(--primary); border-right: 3px solid var(--primary); }
+
+        .main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        .topbar { height: 60px; background: var(--bg-surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 30px; justify-content: space-between; font-size: 13px; flex-shrink: 0; }
+        .content-area { flex: 1; overflow-y: auto; padding: 30px; }
+
+        /* ================= Typography & Utilities ================= */
+        .page-title { font-size: 20px; font-weight: 600; margin-bottom: 5px; }
+        .page-subtitle { color: var(--text-muted); font-size: 13px; margin-bottom: 20px; }
+        .flex { display: flex; } .justify-between { justify-content: space-between; } .align-center { align-items: center; } .gap-2 { gap: 10px; } .gap-4 { gap: 20px; }
+        .mt-4 { margin-top: 20px; } .mb-4 { margin-bottom: 20px; }
+        .hidden { display: none !important; }
+        .published-only { display: none; }
+        #view-detail.published-readonly .pending-only { display: none !important; }
+        #view-detail.published-readonly .published-only { display: inline-block; }
+        #view-detail.published-readonly .review-item.published-only { display: block; }
+        #view-detail.risk-blocked .cleaned-tab,
+        #view-detail.risk-blocked .cleaned-entry {
+            display: none !important;
+        }
+        .text-danger { color: var(--danger) !important; }
+        .text-success { color: var(--success) !important; }
+        .text-warning { color: var(--warning) !important; }
+        .text-primary { color: var(--primary) !important; }
+
+        /* ================= Cards & Tables ================= */
+        .card { background: var(--bg-surface); border-radius: 8px; box-shadow: 0 0 20px rgba(0,0,0,0.03); padding: 20px; margin-bottom: 20px; }
+        .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px; }
+        .summary-card { padding: 15px; background: var(--bg-surface); border-radius: 8px; border: 1px solid var(--border); font-size: 13px; }
+        .summary-value { font-size: 22px; font-weight: bold; margin-top: 8px; color: var(--primary); }
+
+        .table-responsive { width: 100%; overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 1000px; }
+        th, td { padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: middle; line-height: 1.55; }
+        th { font-weight: 600; color: var(--text-muted); background-color: #f8fafc; font-size: 12px; white-space: nowrap; }
+        tr:hover { background-color: #f8fbff; }
+
+        /* ================= Badges ================= */
+        .badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+        .badge-running { background: #e8fff3; color: var(--success); }
+        .badge-review { background: #fff8dd; color: var(--warning); }
+        .badge-passed { background: #e1f0ff; color: var(--primary); }
+        .badge-published { background: #e8fff3; color: var(--success); border: 1px solid var(--success); }
+        .badge-failed { background: #fff5f8; color: var(--danger); }
+        .badge-gray { background: #f1f1f4; color: var(--text-muted); }
+
+        /* ================= Forms & Stepper ================= */
+        .form-group { margin-bottom: 15px; }
+        .form-label { display: block; margin-bottom: 5px; font-weight: 600; font-size: 13px; }
+        .form-control { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; outline: none; font-size: 13px; }
+        .form-control:focus { border-color: var(--primary); }
+        .field-hint { font-size: 12px; color: var(--text-muted); margin-top: 6px; line-height: 1.6; }
+
+        .stepper { display: flex; justify-content: space-between; margin-bottom: 30px; position: relative; }
+        .stepper::before { content: ''; position: absolute; top: 15px; left: 0; right: 0; height: 2px; background: var(--border); z-index: 1; }
+        .step { position: relative; z-index: 2; background: var(--bg-body); padding: 0 10px; display: flex; flex-direction: column; align-items: center; width: 25%; }
+        .step-circle { width: 32px; height: 32px; border-radius: 50%; background: var(--bg-surface); border: 2px solid var(--border); display: flex; align-items: center; justify-content: center; font-weight: bold; margin-bottom: 8px; color: var(--text-muted); }
+        .step.active .step-circle { border-color: var(--primary); background: var(--primary); color: white; }
+        .step-label { font-size: 12px; font-weight: 500; color: var(--text-muted); }
+        .step.active .step-label { color: var(--text-dark); font-weight: bold; }
+
+        /* ================= Tabs ================= */
+        .tabs { border-bottom: 1px solid var(--border); display: flex; gap: 20px; margin-bottom: 20px; overflow-x: auto; }
+        .tab { padding: 10px 0; font-size: 13px; font-weight: 500; color: var(--text-muted); cursor: pointer; position: relative; white-space: nowrap; }
+        .tab.active { color: var(--primary); font-weight: bold; }
+        .tab.active::after { content: ''; position: absolute; bottom: -1px; left: 0; right: 0; height: 2px; background: var(--primary); }
+
+        .sub-tabs { display: flex; gap: 10px; margin-bottom: 15px; }
+        .sub-tab { padding: 6px 12px; background: var(--bg-body); border-radius: 20px; font-size: 12px; cursor: pointer; border: 1px solid var(--border); }
+        .sub-tab.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+        /* ================= Pipeline Visualizer ================= */
+        .pipeline-container { display: flex; overflow-x: auto; padding: 20px 0; gap: 10px; align-items: center; }
+        .pipe-stage { min-width: 110px; padding: 8px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 6px; text-align: center; font-size: 11px; position: relative; cursor: pointer; }
+        .pipe-stage.done { border-color: var(--success); border-left: 3px solid var(--success); }
+        .pipe-stage.active { border-color: var(--primary); border-left: 3px solid var(--primary); box-shadow: 0 0 10px rgba(0,158,247,0.2); }
+        .pipe-stage.pending { color: var(--text-muted); border-style: dashed; }
+        .pipe-arrow { color: var(--text-muted); font-size: 14px; }
+
+        /* ================= Drawer & Modal ================= */
+        .drawer-overlay, .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+        .drawer-overlay.open, .modal-overlay.open { opacity: 1; pointer-events: auto; }
+
+        .drawer { position: fixed; top: 0; right: -850px; width: 850px; height: 100vh; background: var(--bg-surface); z-index: 1001; transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1); display: flex; flex-direction: column; box-shadow: -5px 0 20px rgba(0,0,0,0.1); }
+        .drawer.open { right: 0; }
+        .drawer-header { padding: 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+        .drawer-body { flex: 1; display: flex; overflow: hidden; }
+        .drawer-left { width: 220px; border-right: 1px solid var(--border); overflow-y: auto; padding: 10px 0; }
+        .drawer-right { flex: 1; padding: 20px; overflow-y: auto; background: #f9f9f9; }
+        .review-item { padding: 10px 20px; cursor: pointer; font-size: 12px; border-left: 3px solid transparent; }
+        .review-item:hover { background: var(--bg-body); }
+        .review-item.active { border-left-color: var(--primary); background: #e1f0ff; color: var(--primary); font-weight: 500; }
+
+        .modal { background: var(--bg-surface); width: 550px; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); position: absolute; top: 50%; left: 50%; transform: translate(-50%, -60%); transition: transform 0.2s; z-index: 2001; }
+        .modal-overlay.open .modal { transform: translate(-50%, -50%); }
+        .modal-header { padding: 20px; border-bottom: 1px solid var(--border); font-size: 16px; font-weight: 600; }
+        .modal-body { padding: 20px; font-size: 13px; line-height: 1.6; }
+        .modal-footer { padding: 15px 20px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; background: #f9f9f9; border-radius: 0 0 8px 8px; }
+
+        .diff-box { background: white; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 15px; }
+        .diff-header { padding: 8px 12px; background: var(--bg-body); border-bottom: 1px solid var(--border); font-weight: 600; font-size: 12px; }
+        .diff-content { padding: 12px; font-size: 12px; line-height: 1.5; }
+        .diff-remove { background: #ffebee; color: #c62828; text-decoration: line-through; }
+        .diff-add { background: #e8f5e9; color: #2e7d32; font-weight: bold; }
+
+        /* Toast */
+        #toast { position: fixed; top: 20px; left: 50%; transform: translate(-50%, -20px); background: #181c32; color: white; padding: 12px 24px; border-radius: 6px; font-size: 13px; opacity: 0; transition: all 0.3s; z-index: 9999; pointer-events: none; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+    </style>
+</head>
+<body>
+
+    <!-- Sidebar 侧边栏 -->
+    <div class="sidebar">
+        <div class="sidebar-logo">CQIL Studio</div>
+        <div class="menu-item">仪表盘</div>
+        <div class="menu-item">Agent 构建器</div>
+        <div class="menu-item active">知识库自动化</div>
+        <div class="menu-item">数据分析</div>
+        <div class="menu-item">系统设置</div>
+    </div>
+
+    <!-- Main Content 主内容区 -->
+    <div class="main-content">
+        <!-- Topbar 全局客户上下文 -->
+        <div class="topbar">
+            <div class="flex align-center gap-4">
+                <div><span style="color: var(--text-muted)">机器人管理</span> / <b>知识库自动化</b></div>
+                <div style="border-left: 1px solid var(--border); height: 20px;"></div>
+                <div class="flex gap-2 align-center">
+                    <span style="color:var(--text-muted)">当前客户：</span>
+                    <select id="customer-select" class="form-control" style="width: 150px; padding: 5px; height: auto;" onchange="handleCustomerChange(this.value)">
+                        <option>Acme Corp</option>
+                        <option>TechFlow Inc</option>
+                    </select>
+                    <span class="badge badge-gray" id="topbar-kb-badge">客户支持知识库</span>
+                    <span class="badge badge-published" id="topbar-version-badge" style="margin-left: 10px;">当前线上版本：HR 2024 已发布内容</span>
+                </div>
+            </div>
+            <div class="flex align-center gap-2">
+                <div style="width:30px;height:30px;border-radius:50%;background:var(--primary);color:white;text-align:center;line-height:30px;font-size:12px;">Admin</div>
+            </div>
+        </div>
+
+        <div class="content-area" id="main-container">
+
+            <!-- VIEW 1: BUILD TASKS LIST 任务列表视图 -->
+            <div id="view-list">
+                <div id="kb-empty-state" class="card hidden" style="text-align:center; padding:50px 20px;">
+                    <div class="badge badge-gray" style="margin-bottom:14px;">尚未创建知识库</div>
+                    <h2 style="font-size:20px; margin-bottom:10px;">当前客户还没有知识库</h2>
+                    <p style="font-size:13px; color:var(--text-muted); line-height:1.8; max-width:520px; margin:0 auto 22px;">
+                        先创建该客户的第一版知识库。创建时只需要填写知识库名称并上传完整原文件，发布成功后才能进行批量更新、人工补充和内容修复。
+                    </p>
+                    <button class="btn-primary" onclick="startCreateKnowledgeBase()">创建知识库</button>
+                </div>
+
+                <div class="flex justify-end align-center mb-4 kb-ready-only">
+                    <div class="flex gap-2">
+                        <button class="btn-outline" onclick="showToast('数据已刷新')">刷新</button>
+                        <button class="btn-primary" onclick="startMaintenanceTask()">新建维护任务</button>
+                    </div>
+                </div>
+
+                <div class="summary-grid kb-ready-only">
+                    <div class="summary-card"><div>正在处理</div><div class="summary-value text-warning">6</div></div>
+                    <div class="summary-card"><div>待人工确认</div><div class="summary-value text-danger">45</div></div>
+                    <div class="summary-card"><div>可发布任务</div><div class="summary-value text-success">8</div></div>
+                    <div class="summary-card">
+                        <div>当前线上版本</div>
+                        <a class="summary-value" id="current-online-link" style="font-size: 14px; margin-top: 14px; display:inline-block;" onclick="openCurrentOnlineFromList()">HR 2024 已发布内容</a>
+                    </div>
+                </div>
+
+                <div class="card kb-ready-only">
+                    <div class="flex gap-2 mb-4">
+                        <select class="form-control" style="width:150px"><option>状态：所有</option><option>需要确认</option></select>
+                        <select class="form-control" style="width:150px"><option>任务类型：全部</option><option>批量文件更新</option><option>人工补充</option><option>内容修复</option><option>全量重建</option></select>
+                        <input type="text" class="form-control" style="width:250px" placeholder="搜索任务名或上传内容...">
+                    </div>
+                    <div class="table-responsive">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>任务名称</th>
+                                    <th>任务类型</th>
+                                    <th>知识库 / 内容来源</th>
+                                    <th>状态</th>
+                                    <th>当前阶段</th>
+                                    <th>待确认</th>
+                                    <th>本轮产出</th>
+                                    <th>最终发布版本</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Row 1 -->
+                                <tr>
+                                    <td><b>第四季度帮助中心增量</b><br><span style="color:var(--text-muted);font-size:12px">今天 10:24</span></td>
+                                    <td>批量文件更新</td>
+                                    <td>客户支持知识库<br><span style="color:var(--text-muted);font-size:12px">Q4 更新批次</span></td>
+                                    <td><span class="badge badge-review">需要确认</span></td>
+                                    <td>风险与冲突确认</td>
+                                    <td><b class="text-danger">24</b></td>
+                                    <td>Q4 第 2 轮内容草稿</td>
+                                    <td>--</td>
+                                    <td><a onclick="openDetailView('第四季度帮助中心增量', 'review')">去处理</a></td>
+                                </tr>
+                                <!-- Row 2 -->
+                                <tr>
+                                    <td><b>产品手册 v3 重建</b></td>
+                                    <td>全量重建</td>
+                                    <td>客户支持知识库<br><span style="color:var(--text-muted);font-size:12px">V3 全量批次</span></td>
+                                    <td><span class="badge badge-running">处理中</span></td>
+                                    <td>解析与清洗</td>
+                                    <td>0</td>
+                                    <td>正在清洗</td>
+                                    <td>--</td>
+                                    <td><a onclick="openDetailView('产品手册 v3 重建', 'running')">看进度</a></td>
+                                </tr>
+                                <!-- Row 3 -->
+                                <tr>
+                                    <td><b>售后 FAQ 补充</b><br><span style="color:var(--text-muted);font-size:12px">今天 09:40</span></td>
+                                    <td>批量文件更新</td>
+                                    <td>客户支持知识库<br><span style="color:var(--text-muted);font-size:12px">售后问答批次</span></td>
+                                    <td><span class="badge badge-running">处理中</span></td>
+                                    <td>解析与清洗</td>
+                                    <td>0</td>
+                                    <td>正在解析文件</td>
+                                    <td>--</td>
+                                    <td><a onclick="openDetailView('售后 FAQ 补充', 'running')">看进度</a></td>
+                                </tr>
+                                <!-- Row 4 -->
+                                <tr>
+                                    <td><b>海外站点帮助中心</b><br><span style="color:var(--text-muted);font-size:12px">昨天 18:10</span></td>
+                                    <td>批量文件更新</td>
+                                    <td>客户支持知识库<br><span style="color:var(--text-muted);font-size:12px">海外内容批次</span></td>
+                                    <td><span class="badge badge-review">需要确认</span></td>
+                                    <td>风险与冲突确认</td>
+                                    <td><b class="text-danger">9</b></td>
+                                    <td>待处理风险项</td>
+                                    <td>--</td>
+                                    <td><a onclick="openDetailView('海外站点帮助中心', 'review')">去处理</a></td>
+                                </tr>
+                                <!-- Row 5 -->
+                                <tr>
+                                    <td><b>延保政策人工补充</b><br><span style="color:var(--text-muted);font-size:12px">今天 11:05</span></td>
+                                    <td>人工补充</td>
+                                    <td>客户支持知识库<br><span style="color:var(--text-muted);font-size:12px">运营手动新增内容</span></td>
+                                    <td><span class="badge badge-running">待编辑</span></td>
+                                    <td>清洗结果确认</td>
+                                    <td>0</td>
+                                    <td>人工补充内容草稿</td>
+                                    <td>--</td>
+                                    <td><a onclick="openDetailView('延保政策人工补充', 'manual')">继续编辑</a></td>
+                                </tr>
+                                <!-- Row 6 -->
+                                <tr>
+                                    <td><b>路由器重置回答修复</b><br><span style="color:var(--text-muted);font-size:12px">今天 10:52</span></td>
+                                    <td>内容修复</td>
+                                    <td>客户支持知识库<br><span style="color:var(--text-muted);font-size:12px">修复原文件 + 2 个待修复问题</span></td>
+                                    <td><span class="badge badge-passed">待试查</span></td>
+                                    <td>检索试查</td>
+                                    <td>0</td>
+                                    <td>修复内容草稿</td>
+                                    <td>--</td>
+                                    <td><a onclick="openDetailView('路由器重置回答修复', 'repair')">去试查</a></td>
+                                </tr>
+                                <!-- Row 7 -->
+                                <tr>
+                                    <td><b>HR 政策 2024</b></td>
+                                    <td>批量文件更新</td>
+                                    <td>客户支持知识库<br><span style="color:var(--text-muted);font-size:12px">HR 2024 批次</span></td>
+                                    <td><span class="badge badge-published">已发布</span></td>
+                                    <td>线上生效中</td>
+                                    <td>0</td>
+                                    <td>线上已更新</td>
+                                    <td><span class="badge badge-published">当前线上</span><br><span style="color:var(--text-muted);font-size:12px">今天 11:18 发布</span></td>
+                                    <td><a onclick="openDetailView('HR 政策 2024', 'published')">查看发布结果</a></td>
+                                </tr>
+                                <!-- Row 8 -->
+                                <tr>
+                                    <td><b>9 月全量更新</b><br><span style="color:var(--text-muted);font-size:12px">2023-09-01</span></td>
+                                    <td>全量重建</td>
+                                    <td>客户支持知识库<br><span style="color:var(--text-muted);font-size:12px">v9 全量批次</span></td>
+                                    <td><span class="badge badge-gray">历史版本</span></td>
+                                    <td>已被新版替换</td>
+                                    <td>0</td>
+                                    <td>9 月已发布内容</td>
+                                    <td><span class="badge badge-gray">上一版</span><br><span style="color:var(--text-muted);font-size:12px">2023-09-01 发布</span></td>
+                                    <td><a onclick="openVersionDrawer('9 月已发布内容', '上一版', '2023-09-01')">查看版本内容</a></td>
+                                </tr>
+                                <!-- Row 9 -->
+                                <tr>
+                                    <td><b>8 月售后 FAQ 补充</b><br><span style="color:var(--text-muted);font-size:12px">2023-08-15</span></td>
+                                    <td>人工补充</td>
+                                    <td>客户支持知识库<br><span style="color:var(--text-muted);font-size:12px">运营手动新增 18 条</span></td>
+                                    <td><span class="badge badge-gray">历史版本</span></td>
+                                    <td>已被新版替换</td>
+                                    <td>0</td>
+                                    <td>8 月 FAQ 补充内容</td>
+                                    <td><span class="badge badge-gray">历史发布</span><br><span style="color:var(--text-muted);font-size:12px">2023-08-15 发布</span></td>
+                                    <td><a onclick="openVersionDrawer('8 月 FAQ 补充内容', '历史发布', '2023-08-15')">查看版本内容</a></td>
+                                </tr>
+                                <!-- Row 10 -->
+                                <tr>
+                                    <td><b>7 月首次建库</b><br><span style="color:var(--text-muted);font-size:12px">2023-07-02</span></td>
+                                    <td>全量构建</td>
+                                    <td>客户支持知识库<br><span style="color:var(--text-muted);font-size:12px">首版完整原文件</span></td>
+                                    <td><span class="badge badge-gray">历史版本</span></td>
+                                    <td>已被新版替换</td>
+                                    <td>0</td>
+                                    <td>首版已发布内容</td>
+                                    <td><span class="badge badge-gray">历史发布</span><br><span style="color:var(--text-muted);font-size:12px">2023-07-02 发布</span></td>
+                                    <td><a onclick="openVersionDrawer('首版已发布内容', '历史发布', '2023-07-02')">查看版本内容</a></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW 2: CREATE BUILD TASK 新建任务视图 -->
+            <div id="view-create" class="hidden">
+                <div class="flex justify-between align-center mb-4">
+                    <h1 class="page-title" id="create-title">新建维护任务</h1>
+                    <button class="btn-outline" onclick="switchView('view-list')">取消</button>
+                </div>
+
+                <div class="card" style="max-width: 850px; margin: 0 auto;">
+                    <div class="stepper">
+                        <div class="step active" id="st-1"><div class="step-circle">1</div><div class="step-label">基础信息</div></div>
+                        <div class="step" id="st-2"><div class="step-circle">2</div><div class="step-label" id="step-source-label">上传原文件</div></div>
+                        <div class="step" id="st-3"><div class="step-circle">3</div><div class="step-label">运行参数</div></div>
+                        <div class="step" id="st-4"><div class="step-circle">4</div><div class="step-label">确认启动</div></div>
+                    </div>
+
+                    <!-- Step 1 -->
+                    <div id="step-content-1">
+                        <div class="form-group">
+                            <label class="form-label">所属客户</label>
+                            <input id="create-customer-input" type="text" class="form-control" value="Acme Corp" disabled style="background:#f5f5f5">
+                        </div>
+                        <div class="form-group" id="maintenance-target-group">
+                            <label class="form-label">维护对象</label>
+                            <select id="kb-target-mode" class="form-control" onchange="updateKnowledgeBaseTarget()">
+                                <option value="new">新建知识库：当前客户还没有可用内容，先创建第一版知识库</option>
+                                <option value="existing">维护已有知识库：在当前线上内容基础上更新</option>
+                            </select>
+                            <div class="field-hint">客户是最高层级。首次接入客户时不要求先选择已有知识库，任务发布后会形成该客户下的第一版线上知识库。</div>
+                        </div>
+                        <div class="form-group" id="new-kb-name-group">
+                            <label class="form-label">新知识库名称</label>
+                            <input id="new-kb-name-input" type="text" class="form-control" value="客户支持知识库">
+                            <div class="field-hint">名称用于发布后在该客户下形成知识库资产，后续维护任务会默认维护这个知识库。</div>
+                        </div>
+                        <div class="form-group hidden" id="existing-kb-group">
+                            <label class="form-label">当前知识库</label>
+                            <input id="existing-kb-select" type="text" class="form-control" value="客户支持知识库" disabled style="background:#f5f5f5">
+                            <div class="field-hint">一个客户只有一个知识库，维护任务默认作用于当前客户知识库。</div>
+                        </div>
+                        <div class="form-group" id="task-type-group">
+                            <label class="form-label">任务类型</label>
+                            <select id="task-type-select" class="form-control" onchange="updateTaskTypeHint()">
+                                <option value="full">全量构建：上传第一版完整原文件</option>
+                            </select>
+                            <div class="field-hint" id="task-type-hint">新建知识库默认只支持全量构建，先上传第一版完整原文件，发布后再进行人工补充、内容修复或批量更新。</div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">任务名称</label>
+                            <input type="text" class="form-control" placeholder="例如：第 12 周帮助中心文档更新">
+                        </div>
+                        <div class="flex justify-end mt-4"><button class="btn-primary" id="step1-next-button" onclick="nextStep(2)">下一步：上传原文件</button></div>
+                    </div>
+
+                    <!-- Step 2 -->
+                    <div id="step-content-2" class="hidden">
+                        <div class="form-group" id="reference-history-panel">
+                            <label class="form-label">参考历史维护</label>
+                            <div style="background: var(--bg-body); padding: 15px; border-radius: 6px; margin-bottom: 15px; font-size: 12px;">
+                                <b style="display:block;margin-bottom:10px;">最近上传过的文件批次：</b>
+                                <div>• Q3 同步批次（2023-09-01，15 个文件）</div>
+                                <div>• 产品 v2 批次（2023-08-15，104 个文件）</div>
+                            </div>
+                        </div>
+                        <div class="form-group" id="source-upload-panel">
+                            <label class="form-label">上传原文件（ZIP / PDF / DOCX）</label>
+                            <div style="border: 2px dashed var(--border); padding: 40px; text-align: center; border-radius: 8px; background: #fafafa; cursor: pointer;" onclick="showToast('文件选择框弹出')">
+                                <p style="color:var(--primary); font-weight:bold; margin-bottom:10px;">点击上传文件，或将文件拖到这里</p>
+                                <p style="font-size:12px; color:var(--text-muted)">本版只处理本地文件和已上传内容。上传后会作为本次维护任务的内容来源，便于后续追踪。</p>
+                            </div>
+                            <div class="field-hint">批量文件更新和全量重建需要上传原文件。内容修复可以上传修复后的原文件，也可以只手动新增待修复问题，或两种方式同时使用。</div>
+                            <div class="mt-4" style="font-size:12px; color:var(--success)">已选择：12 个文件（24.5 MB），将作为本次维护任务的内容来源。</div>
+                        </div>
+                        <div class="form-group hidden" id="repair-question-panel">
+                            <div class="flex justify-between align-center mb-4">
+                                <label class="form-label" style="margin:0">手动新增待修复问题</label>
+                                <button class="btn-outline btn-sm" onclick="addRepairQuestionRow()">新增一个问题</button>
+                            </div>
+                            <div style="background:#f4faff; border:1px solid #b9e3ff; border-radius:6px; padding:12px; font-size:12px; line-height:1.7; margin-bottom:15px;">
+                                内容修复可以同时上传修复后的原文件，并录入线上回答不好的问题。系统会用这些问题做检索试查和下一轮优化依据。
+                            </div>
+                            <div class="summary-card" style="margin-bottom:15px;">
+                                <div>本次待修复问题</div>
+                                <div class="summary-value" id="repair-question-count" style="font-size:16px;">2 个</div>
+                            </div>
+                            <div class="hidden" id="repair-question-form" style="border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:15px; background:#fff;">
+                                <div class="form-group">
+                                    <label class="form-label">用户问题</label>
+                                    <input type="text" class="form-control" id="repair-question-input" placeholder="例如：忘记管理员账号还能恢复吗？">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">当前问题描述</label>
+                                    <textarea class="form-control" rows="3" id="repair-current-problem-input" placeholder="例如：当前答案只建议联系客服，没有说明本地恢复方式。"></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">期望修复方向</label>
+                                    <textarea class="form-control" rows="3" id="repair-direction-input" placeholder="例如：优先说明本地恢复，再给人工支持入口。"></textarea>
+                                </div>
+                                <div class="flex justify-end gap-2">
+                                    <button class="btn-outline btn-sm" onclick="closeRepairQuestionForm()">取消</button>
+                                    <button class="btn-primary btn-sm" onclick="confirmRepairQuestion()">加入列表</button>
+                                </div>
+                            </div>
+                            <div class="table-responsive">
+                                <table style="min-width:820px;">
+                                    <thead>
+                                        <tr>
+                                            <th>用户问题</th>
+                                            <th>当前问题</th>
+                                            <th>期望修复方向</th>
+                                            <th>状态</th>
+                                            <th>操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td><b>如何重置路由器密码？</b></td>
+                                            <td>只召回到旧版 Reset 描述，缺少默认账号登录步骤。</td>
+                                            <td>保留完整操作步骤和注意事项。</td>
+                                            <td><span class="badge badge-running">待验证</span></td>
+                                            <td><a onclick="showToast('已打开编辑框')">编辑</a></td>
+                                        </tr>
+                                        <tr>
+                                            <td><b>路由器重置后连不上网怎么办？</b></td>
+                                            <td>答案没有提到重新配置宽带账号。</td>
+                                            <td>补充重置后的网络配置说明。</td>
+                                            <td><span class="badge badge-running">待验证</span></td>
+                                            <td><a onclick="showToast('已打开编辑框')">编辑</a></td>
+                                        </tr>
+                                        <tr class="hidden" id="repair-question-new-row">
+                                            <td><b id="repair-question-added-query">忘记管理员账号还能恢复吗？</b></td>
+                                            <td id="repair-question-added-problem">当前答案只建议联系客服，没有说明本地恢复方式。</td>
+                                            <td id="repair-question-added-direction">优先说明本地恢复，再给人工支持入口。</td>
+                                            <td><span class="badge badge-running">待验证</span></td>
+                                            <td><a onclick="showToast('已打开编辑框')">编辑</a></td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="form-group hidden" id="manual-entry-panel">
+                            <div class="flex justify-between align-center mb-4">
+                                <label class="form-label" style="margin:0">手动新增内容</label>
+                                <button class="btn-outline btn-sm" onclick="addManualDraftRow()">新增一条内容</button>
+                            </div>
+                            <div style="background:#f4faff; border:1px solid #b9e3ff; border-radius:6px; padding:12px; font-size:12px; line-height:1.7; margin-bottom:15px;">
+                                人工补充不需要上传原文件，可一次新增多条内容。创建后会进入“清洗结果确认”，由运营继续编辑、确认文本并生成检索索引。
+                            </div>
+                            <div class="summary-card" style="margin-bottom:15px;">
+                                <div>本次已添加内容</div>
+                                <div class="summary-value" id="manual-draft-count" style="font-size:16px;">3 条</div>
+                            </div>
+                            <div class="table-responsive">
+                                <table style="min-width:760px;">
+                                    <thead>
+                                        <tr>
+                                            <th>标题</th>
+                                            <th>正文摘要</th>
+                                            <th>来源备注</th>
+                                            <th>状态</th>
+                                            <th>操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="manual-draft-tbody">
+                                        <tr>
+                                            <td><b>延保申请入口说明</b></td>
+                                            <td>用户购买设备后，可在会员中心提交设备序列号和购买凭证申请延保。</td>
+                                            <td>人工新增 / 运营补充</td>
+                                            <td><span class="badge badge-running">待确认</span></td>
+                                            <td><a onclick="showToast('已打开编辑框')">编辑</a></td>
+                                        </tr>
+                                        <tr>
+                                            <td><b>会员权益生效时间</b></td>
+                                            <td>权益审核通过后，将在 2 个工作日内同步到会员中心。</td>
+                                            <td>人工新增 / 会员运营</td>
+                                            <td><span class="badge badge-running">待确认</span></td>
+                                            <td><a onclick="showToast('已打开编辑框')">编辑</a></td>
+                                        </tr>
+                                        <tr>
+                                            <td><b>发票抬头修改说明</b></td>
+                                            <td>发票开具后如需修改抬头，请联系客户成功经理提交更正申请。</td>
+                                            <td>人工新增 / 财务 FAQ</td>
+                                            <td><span class="badge badge-running">待确认</span></td>
+                                            <td><a onclick="showToast('已打开编辑框')">编辑</a></td>
+                                        </tr>
+                                        <tr class="hidden" id="manual-draft-new-row">
+                                            <td><b>备用机申请说明</b></td>
+                                            <td>设备维修超过 3 个工作日时，可向服务中心咨询备用机申请条件。</td>
+                                            <td>人工新增 / 售后 FAQ</td>
+                                            <td><span class="badge badge-running">待确认</span></td>
+                                            <td><a onclick="showToast('已打开编辑框')">编辑</a></td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="flex justify-between mt-4">
+                            <button class="btn-outline" onclick="nextStep(1)">上一步</button>
+                            <button class="btn-primary" onclick="nextStep(3)">下一步：运行参数</button>
+                        </div>
+                    </div>
+
+                    <!-- Step 3 -->
+                    <div id="step-content-3" class="hidden">
+                        <div class="form-group">
+                            <label class="form-label">风险确认方式</label>
+                            <select class="form-control">
+                                <option>发现冲突或高风险内容时，暂停并等待人工确认</option>
+                                <option>只记录风险，不阻断本轮内容生成</option>
+                            </select>
+                            <div class="field-hint">人工选择只对当前任务生效，不会写成全局规则。</div>
+                        </div>
+                        <div class="flex gap-4">
+                            <div class="form-group" style="flex:1">
+                                <label class="form-label">自动重试轮数</label>
+                                <select class="form-control"><option>自动优化清洗，最多重试 5 轮</option><option>只跑一轮，结果由人工处理</option></select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">完成后提醒</label>
+                            <select class="form-control">
+                                <option>内容可发布时通知任务创建人</option>
+                                <option>仅在任务列表展示状态，不额外通知</option>
+                            </select>
+                        </div>
+                        <div class="flex justify-between mt-4">
+                            <button class="btn-outline" onclick="nextStep(2)">上一步</button>
+                            <button class="btn-primary" onclick="nextStep(4)">下一步：确认</button>
+                        </div>
+                    </div>
+
+                    <!-- Step 4 -->
+                    <div id="step-content-4" class="hidden">
+                        <div style="background: #f9f9f9; padding: 20px; border-radius: 8px; border: 1px solid var(--border);">
+                            <h3 style="margin-bottom:15px; font-size:14px;">任务配置确认</h3>
+                            <ul style="line-height:2.2; margin-left:20px; font-size:13px; color:var(--text-dark)">
+                                <li><b>维护对象：</b> <span id="confirm-kb-target">Acme Corp / 新建知识库：客户支持知识库</span></li>
+                                <li><b>任务类型：</b> <span id="confirm-task-type">批量文件更新</span></li>
+                                <li><b>任务与来源：</b> <span id="confirm-task-source">第 12 周帮助中心文档更新（上传原文件，共 12 个文件）</span></li>
+                                <li><b>风险确认：</b> 发现冲突或高风险内容时，暂停并等待人工确认</li>
+                                <li><b>自动化：</b> 自动优化清洗，最多 5 轮</li>
+                                <li><b>预计生成：</b> <span id="confirm-task-output">第 12 周待发布内容，并同步更新检索索引</span></li>
+                            </ul>
+                        </div>
+                        <div class="flex justify-between mt-4">
+                            <button class="btn-outline" onclick="nextStep(3)">上一步</button>
+                            <button class="btn-success" onclick="submitCreateTask()">启动清洗流程</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW 3: TASK DETAIL 任务详情工作台 -->
+            <div id="view-detail" class="hidden">
+                <div class="flex align-center gap-2 mb-4">
+                    <button class="btn-outline btn-sm" onclick="switchView('view-list')">← 返回</button>
+                    <h1 class="page-title" id="detail-title" style="margin:0">第四季度帮助中心增量</h1>
+                    <span class="badge badge-review" id="detail-status">需要确认</span>
+                </div>
+                <div class="page-subtitle" id="detail-subtitle" style="margin-bottom: 10px;">
+                    Acme Corp / 客户支持知识库 / 维护任务：批量文件更新 / 来源：Q4 更新批次 / 由 Admin 创建 / 10 分钟前更新
+                </div>
+
+                <!-- 顶部摘要卡片 -->
+                <div class="summary-grid">
+                    <div class="summary-card"><div>当前轮次</div><div class="summary-value" id="detail-round-value" style="color: var(--text-dark)">第 2 轮</div></div>
+                    <div class="summary-card"><div>当前处理状态</div><div class="summary-value text-success" id="detail-state-value" style="font-size:16px;">风险待处理</div></div>
+                    <div class="summary-card"><div>待人工确认</div><div class="summary-value text-warning" id="detail-pending-value">24 项</div></div>
+                    <div class="summary-card" style="background:#f4faff; border-color:var(--primary)">
+                        <div>下一步操作</div>
+                        <div style="margin-top:10px;">
+                            <button id="next-action-button" class="btn-primary btn-sm" onclick="openReviewDrawer()">处理待确认项</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 一级 Tabs -->
+                <div class="tabs">
+                    <div class="tab active" onclick="switchTab('tab-pipeline', this)">处理进度与维护记录</div>
+                    <div class="tab" onclick="switchTab('tab-risk', this)">风险与确认 <span class="badge badge-failed pending-only" style="padding:2px 4px;font-size:11px;margin-left:4px;">待处理</span><span class="badge badge-passed published-only" style="padding:2px 4px;font-size:11px;margin-left:4px;">已处理</span></div>
+                    <div class="tab cleaned-tab" onclick="switchTab('tab-cleaned', this)">清洗结果确认</div>
+                    <div class="tab" onclick="switchTab('tab-attempts', this)">清洗轮次记录</div>
+                    <div class="tab" onclick="switchTab('tab-debug', this)">检索试查</div>
+                    <div class="tab" onclick="switchTab('tab-publish-result', this)">发布结果</div>
+                </div>
+
+                <!-- Tab 1: Pipeline & History -->
+                <div id="tab-pipeline">
+                    <div class="card">
+                        <h3 id="pipeline-title" style="font-size:14px; margin-bottom:15px;">当前处理进度（第 2 轮）</h3>
+                        <div class="pipeline-container">
+                            <div class="pipe-stage done"><b>任务创建</b><br><span style="color:var(--text-muted)">批量文件更新</span></div><span class="pipe-arrow">→</span>
+                            <div class="pipe-stage done"><b>内容来源</b><br><span style="color:var(--text-muted)">12 个文件</span></div><span class="pipe-arrow">→</span>
+                            <div class="pipe-stage done"><b>解析与清洗</b><br><span style="color:var(--text-muted)">1,204 条内容</span></div><span class="pipe-arrow">→</span>
+                            <div class="pipe-stage active"><b>风险与冲突确认</b><br><span style="color:var(--primary)">等待处理</span></div><span class="pipe-arrow">→</span>
+                            <div class="pipe-stage pending"><b>清洗结果确认</b></div><span class="pipe-arrow">→</span>
+                            <div class="pipe-stage pending"><b>检索试查</b></div><span class="pipe-arrow">→</span>
+                            <div class="pipe-stage pending"><b>发布</b></div>
+                        </div>
+                        <div id="pipeline-notice" style="margin-top: 20px; padding: 12px; background: #fff8dd; border: 1px solid #ffc700; border-radius: 6px; font-size: 12px;">
+                            <b>需要处理：</b> 请先处理高风险删除和内容冲突。处理完成后，再确认清洗后的内容草稿并进入检索试查。
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="flex justify-between align-center mb-4">
+                            <h3 style="font-size:14px;">该知识库的维护记录</h3>
+                        </div>
+                        <div class="table-responsive">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>任务名称</th>
+                                        <th>任务类型</th>
+                                        <th>来源</th>
+                                        <th>状态</th>
+                                        <th>产出版本</th>
+                                        <th>发布时间</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr style="background-color: #f0f8ff;">
+                                        <td id="current-history-name"><b>第四季度帮助中心增量</b>（当前）</td>
+                                        <td id="current-history-type">批量文件更新</td>
+                                        <td id="current-history-source">上传文件：Q4 更新批次（12 个文件）</td>
+                                        <td id="current-history-status"><span class="badge badge-review">风险确认中</span></td>
+                                        <td id="current-history-output">Q4 第 2 轮内容草稿</td>
+                                        <td>--</td>
+                                        <td><a onclick="switchTab('tab-attempts', document.querySelectorAll('.tab')[3])">查看轮次</a></td>
+                                    </tr>
+                                    <tr>
+                                        <td>路由器重置回答修复</td>
+                                        <td>内容修复</td>
+                                        <td>上传原文件：路由器设置文档修订版.pdf；手动新增问题：2 个</td>
+                                        <td><span class="badge badge-passed">待试查</span></td>
+                                        <td>修复内容草稿</td>
+                                        <td>今天 10:52</td>
+                                        <td><a onclick="openDetailView('路由器重置回答修复', 'repair')">去试查</a></td>
+                                    </tr>
+                                    <tr>
+                                        <td>延保政策人工补充</td>
+                                        <td>人工补充</td>
+                                        <td>运营手动新增：延保申请说明</td>
+                                        <td><span class="badge badge-running">待编辑</span></td>
+                                        <td>人工补充内容草稿</td>
+                                        <td>今天 11:05</td>
+                                        <td><a onclick="openDetailView('延保政策人工补充', 'manual')">继续编辑</a></td>
+                                    </tr>
+                                    <tr>
+                                        <td>HR 政策 2024</td>
+                                        <td>批量文件更新</td>
+                                        <td>上传文件：HR 2024 批次</td>
+                                        <td><span class="badge badge-published">当前线上</span></td>
+                                        <td><b class="text-success">HR 2024 已发布内容</b></td>
+                                        <td>今天 11:18</td>
+                                        <td><a onclick="openDetailView('HR 政策 2024', 'published')">查看发布结果</a></td>
+                                    </tr>
+                                    <tr>
+                                        <td>9 月全量更新</td>
+                                        <td>全量重建</td>
+                                        <td>上传文件：v9 全量批次（305 个文件）</td>
+                                        <td><span class="badge badge-gray">历史版本</span></td>
+                                        <td>9 月已发布内容</td>
+                                        <td>2023-09-01</td>
+                                        <td><a onclick="openVersionDrawer('9 月已发布内容', '上一版', '2023-09-01')">查看该版本内容</a></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab 2: Attempts -->
+                <div id="tab-attempts" class="hidden">
+                    <div class="card">
+                        <div class="flex justify-between align-center mb-4">
+                            <h3 style="font-size:14px;">清洗轮次记录</h3>
+                            <span style="font-size:12px;color:var(--text-muted);">点击查看每一轮清洗后生成的索引内容。</span>
+                        </div>
+                        <div class="table-responsive">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>轮次</th>
+                                        <th>本轮内容</th>
+                                        <th>本轮清洗策略</th>
+                                        <th>状态</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr style="background-color: #f0f8ff;">
+                                        <td id="attempt-current-round"><b>第 2 轮</b>（当前）</td>
+                                        <td id="attempt-current-content">Q4 第 2 轮内容草稿</td>
+                                        <td id="attempt-current-strategy">激进清洗 + V1修复规则</td>
+                                        <td id="attempt-current-status"><span class="badge badge-review pending-only">待试查</span><span class="badge badge-published published-only">已发布</span></td>
+                                        <td>
+                                            <button class="btn-primary btn-sm" onclick="switchTab('tab-debug', document.querySelectorAll('.tab')[4])">试查</button>
+                                            <button class="btn-success btn-sm" onclick="openPublishModal()">发布</button>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td>第 1 轮</td>
+                                        <td>Q4 第 1 轮内容草稿</td>
+                                        <td>系统默认基线</td>
+                                        <td><span class="badge badge-passed">已完成</span></td>
+                                        <td><button class="btn-outline btn-sm" onclick="openIndexContentDrawer('第 1 轮', 'Q4 第 1 轮内容草稿')">查看</button></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab 3: Risk Classification (含子Tab) -->
+                <div id="tab-risk" class="hidden">
+                    <div class="sub-tabs">
+                        <div class="sub-tab active" onclick="switchSubTab('risk-summary', this)">待处理事项</div>
+                        <div class="sub-tab" onclick="switchSubTab('risk-conflict', this)">合并冲突确认</div>
+                        <div class="sub-tab" onclick="switchSubTab('risk-delete', this)">高风险内容删除</div>
+                    </div>
+
+                    <div id="risk-summary" class="card">
+                        <div class="flex justify-between align-center mb-4">
+                            <div>
+                                <h3 style="font-size:14px; margin-bottom:5px;">风险与冲突处理</h3>
+                                <div style="font-size:12px; color:var(--text-muted);">存在风险项时，先处理这里的事项；处理完成后才进入清洗结果确认。</div>
+                            </div>
+                            <button class="btn-primary btn-sm pending-only" onclick="markAllRisksResolved()">全部标记已处理</button>
+                        </div>
+
+                        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; margin-bottom:16px;">
+                            <div class="summary-card"><div>待处理事项</div><div class="summary-value text-danger" id="risk-pending-count">24</div></div>
+                            <div class="summary-card"><div>合并冲突</div><div class="summary-value text-warning">12</div></div>
+                            <div class="summary-card"><div>高风险删除</div><div class="summary-value text-warning">8</div></div>
+                        </div>
+
+                        <div class="diff-box" data-risk-item>
+                            <div class="diff-header flex justify-between align-center">
+                                <span>合并冲突确认：设备保修期口径不一致</span>
+                                <span class="badge badge-review risk-status">待处理</span>
+                            </div>
+                            <div class="diff-content">
+                                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
+                                    <div style="background:white; border:1px solid var(--border); border-radius:6px; padding:10px;">
+                                        <b>当前线上内容</b><br><br>
+                                        标准保修期为 12 个月，可在购买后 30 天内申请延保。
+                                    </div>
+                                    <div style="background:white; border:1px solid var(--border); border-radius:6px; padding:10px;">
+                                        <b>本次上传内容</b><br><br>
+                                        标准保修期为 24 个月，延保服务以销售订单中的服务条款为准。
+                                    </div>
+                                </div>
+                                <div class="flex gap-2">
+                                    <button class="btn-outline btn-sm" onclick="resolveRiskItem(this, '已保留当前线上内容')">保留当前线上内容</button>
+                                    <button class="btn-success btn-sm" onclick="resolveRiskItem(this, '已采用本次上传内容')">使用本次上传内容</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="diff-box" data-risk-item>
+                            <div class="diff-header flex justify-between align-center">
+                                <span>高风险内容删除：安全警告可能被误删</span>
+                                <span class="badge badge-review risk-status">待处理</span>
+                            </div>
+                            <div class="diff-content">
+                                <div style="background:#fff5f8; border:1px solid #f1416c; border-radius:6px; padding:10px; margin-bottom:12px;">
+                                    系统准备删除重复安全声明，但该内容可能影响合规或安全，需要确认是否恢复。
+                                </div>
+                                <div class="diff-remove" style="padding:10px; border-radius:6px; margin-bottom:12px;">
+                                    警告：请勿使用清水冲洗钠类化学品泄漏，以免引发爆炸。
+                                </div>
+                                <div class="flex gap-2">
+                                    <button class="btn-outline btn-sm" onclick="resolveRiskItem(this, '已保持删除')">保持删除</button>
+                                    <button class="btn-success btn-sm" onclick="resolveRiskItem(this, '已恢复到本轮内容')">恢复到本轮内容</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="risk-resolved-next" class="hidden" style="background:#e8fff3; border:1px solid var(--success); border-radius:6px; padding:12px; font-size:12px;">
+                            风险与冲突已处理完成，可以进入清洗结果确认。
+                            <button class="btn-primary btn-sm cleaned-entry" style="margin-left:10px;" onclick="switchTab('tab-cleaned', document.querySelectorAll('.tab')[2])">进入清洗结果确认</button>
+                        </div>
+                    </div>
+
+                    <div id="risk-conflict" class="card hidden">
+                        <div class="flex justify-between align-center mb-4">
+                            <div>
+                                <h3 style="font-size:14px; margin-bottom:5px;">合并冲突确认</h3>
+                                <div style="font-size:12px; color:var(--text-muted);">同一个问题出现多个不同口径时，需要运营选择本轮采用哪一版。选择只影响当前任务。</div>
+                            </div>
+                            <button class="btn-outline btn-sm" onclick="showToast('已筛选待确认冲突')">只看待确认</button>
+                        </div>
+
+                        <div class="diff-box" data-risk-item>
+                            <div class="diff-header flex justify-between align-center">
+                                <span>设备保修期口径不一致</span>
+                                <span class="badge badge-review risk-status">待处理</span>
+                            </div>
+                            <div class="diff-content">
+                                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
+                                    <div style="background:white; border:1px solid var(--border); border-radius:6px; padding:10px;">
+                                        <b>当前线上内容</b>
+                                        <div style="color:var(--text-muted); margin:6px 0;">来源：产品手册 v2 / 保修政策</div>
+                                        标准保修期为 12 个月，可在购买后 30 天内申请延保。
+                                    </div>
+                                    <div style="background:white; border:1px solid var(--border); border-radius:6px; padding:10px;">
+                                        <b>本次上传内容</b>
+                                        <div style="color:var(--text-muted); margin:6px 0;">来源：产品手册 v3 / 保修政策</div>
+                                        标准保修期为 24 个月，延保服务以销售订单中的服务条款为准。
+                                    </div>
+                                </div>
+                                <div style="background:#f4faff; border:1px solid #b9e3ff; border-radius:6px; padding:10px; margin-bottom:12px;">
+                                    <b>系统建议：</b> 本次上传文件时间更新，建议采用本次上传内容；发布前仍需人工确认。
+                                </div>
+                                <div class="flex gap-2">
+                                    <button class="btn-outline btn-sm" onclick="resolveRiskItem(this, '已保留当前线上内容')">保留当前线上内容</button>
+                                    <button class="btn-success btn-sm" onclick="resolveRiskItem(this, '已采用本次上传内容')">使用本次上传内容</button>
+                                    <button class="btn-outline btn-sm" onclick="showToast('已加入忽略列表')">本轮忽略</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="diff-box" data-risk-item>
+                            <div class="diff-header flex justify-between align-center">
+                                <span>发票抬头修改规则不一致</span>
+                                <span class="badge badge-review risk-status">待处理</span>
+                            </div>
+                            <div class="diff-content">
+                                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
+                                    <div style="background:white; border:1px solid var(--border); border-radius:6px; padding:10px;">
+                                        <b>当前线上内容</b>
+                                        <div style="color:var(--text-muted); margin:6px 0;">来源：财务 FAQ 2023.pdf</div>
+                                        发票开具后不支持修改抬头，如需变更请重新提交开票申请。
+                                    </div>
+                                    <div style="background:white; border:1px solid var(--border); border-radius:6px; padding:10px;">
+                                        <b>本次上传内容</b>
+                                        <div style="color:var(--text-muted); margin:6px 0;">来源：售后政策 2024.docx</div>
+                                        发票开具后如需修改抬头，请联系客户成功经理提交更正申请。
+                                    </div>
+                                </div>
+                                <div style="background:#f4faff; border:1px solid #b9e3ff; border-radius:6px; padding:10px; margin-bottom:12px;">
+                                    <b>系统建议：</b> 两份内容来源不同，需要运营确认是否已有新的财务处理口径。
+                                </div>
+                                <div class="flex gap-2">
+                                    <button class="btn-outline btn-sm" onclick="resolveRiskItem(this, '已保留当前线上内容')">保留当前线上内容</button>
+                                    <button class="btn-success btn-sm" onclick="resolveRiskItem(this, '已采用本次上传内容')">使用本次上传内容</button>
+                                    <button class="btn-outline btn-sm" onclick="showToast('已加入忽略列表')">本轮忽略</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="diff-box" data-risk-item>
+                            <div class="diff-header flex justify-between align-center">
+                                <span>备用机申请条件冲突</span>
+                                <span class="badge badge-review risk-status">待处理</span>
+                            </div>
+                            <div class="diff-content">
+                                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
+                                    <div style="background:white; border:1px solid var(--border); border-radius:6px; padding:10px;">
+                                        <b>当前线上内容</b>
+                                        <div style="color:var(--text-muted); margin:6px 0;">来源：售后服务说明.pdf</div>
+                                        维修预计超过 5 个工作日时，可向服务中心咨询备用机申请。
+                                    </div>
+                                    <div style="background:white; border:1px solid var(--border); border-radius:6px; padding:10px;">
+                                        <b>本次上传内容</b>
+                                        <div style="color:var(--text-muted); margin:6px 0;">来源：售后 FAQ 补充.xlsx</div>
+                                        维修预计超过 3 个工作日时，可向服务中心咨询备用机申请。
+                                    </div>
+                                </div>
+                                <div style="background:#fff8dd; border:1px solid #ffc700; border-radius:6px; padding:10px; margin-bottom:12px;">
+                                    <b>系统建议：</b> 新旧口径差异会影响用户承诺，请确认后再进入清洗结果确认。
+                                </div>
+                                <div class="flex gap-2">
+                                    <button class="btn-outline btn-sm" onclick="resolveRiskItem(this, '已保留当前线上内容')">保留当前线上内容</button>
+                                    <button class="btn-success btn-sm" onclick="resolveRiskItem(this, '已采用本次上传内容')">使用本次上传内容</button>
+                                    <button class="btn-outline btn-sm" onclick="showToast('已加入忽略列表')">本轮忽略</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="risk-delete" class="card hidden">
+                        <div class="flex justify-between align-center mb-4">
+                            <h3 style="font-size:14px;">高风险内容删除明细（这些内容暂未进入待发布内容）</h3>
+                        </div>
+                        <div class="table-responsive">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th style="width:25%">清洗后保留的文本</th>
+                                        <th>来源文件 / 记录</th>
+                                        <th>风险归类</th>
+                                        <th><span class="pending-only">为什么需要确认</span><span class="published-only">处理说明</span></th>
+                                        <th>拦截阶段</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>"如何处理化学品泄漏？立即疏散并报警。"</td>
+                                        <td>实验室安全规程.pdf</td>
+                                        <td><span class="badge" style="background:#fff5f8;color:var(--danger)">合规风险</span></td>
+                                        <td><span class="pending-only">关键安全警告可能被误删，需要人工确认是否恢复。</span><span class="published-only">已完成确认，处理结果已纳入本次发布。</span></td>
+                                        <td>清洗阶段</td>
+                                        <td><button class="btn-outline btn-sm" onclick="showToast('已保持删除状态')">保持删除</button> <button class="btn-primary btn-sm" onclick="showToast('已恢复到本轮内容')">恢复到本轮内容</button></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Tab 4: Cleaned Content Review -->
+                <div id="tab-cleaned" class="hidden">
+                    <div class="card">
+                        <div class="flex justify-between align-center mb-4">
+                            <div>
+                                <h3 style="font-size:14px; margin-bottom:5px;">清洗结果确认</h3>
+                                <div style="font-size:12px; color:var(--text-muted);">这里展示运营可读的内容草稿。修改后，系统会重新生成检索索引，运营不需要处理切片或向量。</div>
+                            </div>
+                            <div class="flex gap-2">
+                                <span class="badge badge-review" id="index-status-badge">索引待更新</span>
+                                <button class="btn-outline btn-sm" onclick="openAddContentModal()">手动新增内容</button>
+                                <button class="btn-outline btn-sm" onclick="showToast('已保存当前内容草稿')">保存草稿</button>
+                                <button class="btn-primary btn-sm" onclick="refreshIndexStatus()">生成检索索引</button>
+                            </div>
+                        </div>
+
+                        <div style="background:#f4faff; border:1px solid #b9e3ff; border-radius:6px; padding:12px; font-size:12px; line-height:1.7; margin-bottom:16px;">
+                            <b>小范围人工新增：</b> 如果只是补一条政策、FAQ 或运营说明，不需要重新上传文件。点击“手动新增内容”，保存后生成检索索引，再到“检索试查”确认能搜到。
+                        </div>
+
+                        <div style="display:grid; grid-template-columns: 180px minmax(340px, 1fr) 330px; gap:16px; align-items:start;">
+                            <div style="border:1px solid var(--border); border-radius:8px; overflow:hidden; font-size:12px;">
+                                <div style="padding:10px 12px; background:#f8fafc; font-weight:600;">内容范围</div>
+                                <div class="review-item active" onclick="showToast('已筛选全部内容')">全部内容（1,204）</div>
+                                <div class="review-item pending-only" onclick="showToast('已筛选待确认内容')">待确认（24）</div>
+                                <div class="review-item published-only">已确认（24）</div>
+                                <div class="review-item" onclick="showToast('已筛选已修改内容')">已修改（6）</div>
+                                <div class="review-item" onclick="showToast('已筛选已删除内容')">已删除（20）</div>
+                                <div class="review-item" onclick="showToast('已筛选低质量内容')">低质量片段（18）</div>
+                            </div>
+
+                            <div>
+                                <div class="flex gap-2 mb-4">
+                                    <select class="form-control" style="width:150px"><option>文件：全部</option><option>安全指南.pdf</option><option>产品手册 v3.docx</option></select>
+                                    <select class="form-control" style="width:150px"><option>状态：全部</option><option>待确认</option><option>已修改</option><option>已删除</option></select>
+                                    <input type="text" class="form-control" placeholder="搜索标题、正文或来源文件..." style="flex:1">
+                                </div>
+
+                                <div class="diff-box hidden" id="manual-added-content" style="border-left:3px solid var(--primary);">
+                                    <div class="diff-header flex justify-between align-center">
+                                        <span id="manual-added-title">人工新增内容</span>
+                                        <span class="badge badge-review">新增，索引待更新</span>
+                                    </div>
+                                    <div class="diff-content">
+                                        <div id="manual-added-source" style="color:var(--text-muted); margin-bottom:8px;">来源：人工新增 / 运营补充</div>
+                                        <p id="manual-added-body">这里会展示运营手动新增的内容。</p>
+                                        <div class="flex gap-2 mt-4">
+                                            <button class="btn-outline btn-sm" onclick="openAddContentModal()">继续编辑</button>
+                                            <button class="btn-danger btn-sm" onclick="document.getElementById('manual-added-content').classList.add('hidden'); markIndexOutdated(); showToast('已删除人工新增内容')">删除</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="diff-box" style="border-left:3px solid var(--warning);">
+                                    <div class="diff-header flex justify-between align-center">
+                                        <span>设备保修期说明</span>
+                                        <span class="badge badge-review pending-only">待确认</span><span class="badge badge-published published-only">已发布</span>
+                                    </div>
+                                    <div class="diff-content">
+                                        <div style="color:var(--text-muted); margin-bottom:8px;">来源：产品手册 v3.docx / 保修政策</div>
+                                        <textarea class="form-control" rows="5" oninput="markIndexOutdated()">标准保修期为 24 个月，延保服务以销售订单中的服务条款为准。购买后如需申请延保，请联系客户成功经理。</textarea>
+                                        <div class="flex gap-2 mt-4">
+                                            <button class="btn-primary btn-sm" onclick="markIndexOutdated(); showToast('已保存修改，索引需要重新生成')">保存修改</button>
+                                            <button class="btn-outline btn-sm" onclick="showToast('已拆成两条内容')">拆成两条</button>
+                                            <button class="btn-outline btn-sm" onclick="showToast('已恢复为清洗前原文')">恢复原文</button>
+                                            <button class="btn-danger btn-sm" onclick="markIndexOutdated(); showToast('已从本轮内容中删除')">删除</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="diff-box">
+                                    <div class="diff-header flex justify-between align-center">
+                                        <span>路由器密码重置步骤</span>
+                                        <span class="badge badge-passed">已修改</span>
+                                    </div>
+                                    <div class="diff-content">
+                                        <div style="color:var(--text-muted); margin-bottom:8px;">来源：路由器设置文档.pdf / 常见问题</div>
+                                        <p>要重置路由器密码，请找到设备背面的 Reset 按钮，按住 10 秒钟后等待设备重启，再使用默认管理员账号登录。</p>
+                                        <div class="flex gap-2 mt-4">
+                                            <button class="btn-outline btn-sm" onclick="showToast('已打开编辑框')">编辑</button>
+                                            <button class="btn-outline btn-sm" onclick="showToast('已合并到上一条内容')">合并到上一条</button>
+                                            <button class="btn-outline btn-sm" onclick="showToast('已查看修改记录')">修改记录</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div style="border:1px solid var(--border); border-radius:8px; padding:14px; background:#f8fafc; font-size:12px; line-height:1.7;">
+                                <h3 style="font-size:14px; margin-bottom:10px;">原文对照与影响</h3>
+                                <div style="margin-bottom:12px;">
+                                    <b>原始内容</b>
+                                    <div style="margin-top:6px; background:white; border:1px solid var(--border); border-radius:6px; padding:10px;">
+                                        标准保修期为 24 个月。页脚：内部资料，请勿外传。延保服务以销售订单中的服务条款为准。
+                                    </div>
+                                </div>
+                                <div style="margin-bottom:12px;">
+                                    <b>系统已做处理</b>
+                                    <div style="margin-top:6px;">
+                                        <span class="badge badge-gray">删除页脚</span>
+                                        <span class="badge badge-gray">合并重复段落</span>
+                                        <span class="badge badge-gray">补全标题</span>
+                                    </div>
+                                </div>
+                                <div style="background:#fff8dd; border:1px solid #ffc700; border-radius:6px; padding:10px; margin-bottom:12px;">
+                                    <b>修改影响：</b> 当前内容已被人工改动，发布前需要重新生成检索索引。该改动只影响当前任务。
+                                </div>
+                                <button class="btn-outline btn-sm" style="width:100%;" onclick="showToast('已查看这条内容的完整来源')">查看完整来源</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab 5: Recall Debug -->
+                <div id="tab-debug" class="hidden">
+                    <div class="card">
+                        <h3 style="font-size:14px; margin-bottom:15px;">检索试查</h3>
+                        <div style="background:#f4faff; border:1px solid #b9e3ff; border-radius:6px; padding:12px; font-size:12px; line-height:1.7; margin-bottom:16px;">
+                            <b>内容修复：</b> 当线上回答不完整、不准确或搜不到时，可以上传修复后的原文件，也可以手动新增待修复问题。试查结果仍不符合预期时，点击“启动下一轮优化”，填写希望系统怎么改。
+                        </div>
+                        <div class="flex gap-2 mb-4">
+                            <input type="text" class="form-control" placeholder="输入一个用户可能会问的问题..." value="如何重置密码？" style="flex:1">
+                            <select class="form-control" id="debug-target-select" style="width:200px"><option>针对内容：Q4 第 2 轮内容草稿</option><option>针对内容：9 月已发布内容</option></select>
+                            <button class="btn-primary" onclick="document.getElementById('debug-results').classList.remove('hidden')">试查</button>
+                            <button class="btn-outline" onclick="openOptimizationModal()">启动下一轮优化</button>
+                            <button class="btn-success" onclick="openPublishModal()">发布</button>
+                        </div>
+                        <div id="debug-results" class="hidden">
+                            <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">最相关的 2 条结果（耗时：120ms）</div>
+                            <div style="border:1px solid var(--border); border-radius:6px; padding:15px; margin-bottom:10px;">
+                                <div class="flex justify-between">
+                                    <b style="color:var(--primary)">#1 相似度 0.89 / 路由器设置文档</b>
+                                    <span class="badge" style="background:#e8fff3;color:var(--success)">相关</span>
+                                </div>
+                                <p style="font-size:12px; margin-top:10px;">...要重置路由器密码，请找到背面的 Reset 按钮并按住 10 秒钟...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab 6: Publish Result -->
+                <div id="tab-publish-result" class="hidden">
+                    <div class="card">
+                        <div class="flex justify-between align-center mb-4">
+                            <div>
+                                <h3 style="font-size:14px; margin-bottom:5px;">发布结果</h3>
+                                <div style="font-size:12px; color:var(--text-muted);">这里查看本次任务最终发布到线上的内容、版本记录和可回滚入口。</div>
+                            </div>
+                            <div class="flex gap-2">
+                                <button class="btn-outline btn-sm hidden" onclick="openOnlineContentModal()">查看当前线上内容</button>
+                                <button class="btn-outline btn-sm hidden" onclick="showToast('已复制为新任务')">复制为新任务</button>
+                                <button class="btn-danger btn-sm" onclick="showToast('已发起回滚确认')">回滚到上一版</button>
+                            </div>
+                        </div>
+
+                        <div class="summary-grid">
+                            <div class="summary-card"><div>线上内容</div><div class="summary-value" style="font-size:14px;">HR 2024 已发布内容</div></div>
+                            <div class="summary-card"><div>发布时间</div><div class="summary-value" style="font-size:14px;">今天 11:18</div></div>
+                            <div class="summary-card"><div>发布人</div><div class="summary-value" style="font-size:14px;">Admin</div></div>
+                            <div class="summary-card"><div>线上状态</div><div class="summary-value text-success" style="font-size:14px;">生效中</div></div>
+                        </div>
+
+                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+                            <div class="diff-box">
+                                <div class="diff-header">本次发布信息</div>
+                                <div class="diff-content" style="line-height:2;">
+                                    <div><b>所属客户：</b> Acme Corp</div>
+                                    <div><b>知识库：</b> 客户支持知识库</div>
+                                    <div><b>任务类型：</b> 批量文件更新</div>
+                                    <div><b>内容来源：</b> HR 2024 批次</div>
+                                    <div><b>清洗轮次：</b> 第 4 轮</div>
+                                    <div><b>内容数量：</b> 1,204 条</div>
+                                    <div><b>索引更新时间：</b> 今天 11:16</div>
+                                </div>
+                            </div>
+
+                            <div class="diff-box">
+                                <div class="diff-header">发布备注</div>
+                                <div class="diff-content">
+                                    本次更新主要修复了 V1 API 下线的文档指引，并补充了新版保修政策。
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive mt-4">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>线上版本</th>
+                                        <th>来源任务</th>
+                                        <th>任务类型</th>
+                                        <th>内容来源</th>
+                                        <th>发布时间</th>
+                                        <th>状态</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr style="background-color:#f0f8ff;">
+                                        <td><b>HR 2024 已发布内容</b></td>
+                                        <td>HR 政策 2024</td>
+                                        <td>批量文件更新</td>
+                                        <td>HR 2024 批次</td>
+                                        <td>今天 11:18</td>
+                                        <td><span class="badge badge-published">当前线上</span></td>
+                                        <td><a onclick="openVersionDrawer('HR 2024 已发布内容', '当前线上', '今天 11:18')">查看该版本内容</a></td>
+                                    </tr>
+                                    <tr>
+                                        <td>9 月已发布内容</td>
+                                        <td>9 月全量更新</td>
+                                        <td>全量重建</td>
+                                        <td>v9 全量批次</td>
+                                        <td>2023-09-01</td>
+                                        <td><span class="badge badge-gray">上一版</span></td>
+                                        <td><a onclick="openVersionDrawer('9 月已发布内容', '上一版', '2023-09-01')">查看该版本内容</a></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Review Drawer 审核抽屉 -->
+    <div class="drawer-overlay" id="drawer-overlay" onclick="closeReviewDrawer()"></div>
+    <div class="drawer" id="review-drawer">
+        <div class="drawer-header">
+            <div>
+                <b style="font-size: 16px;">待确认内容（第 2 轮）</b>
+                <span class="badge badge-review" style="margin-left: 10px;" id="drawer-counter">剩余 24 项待处理</span>
+            </div>
+            <button class="btn-outline btn-sm" onclick="closeReviewDrawer()">关闭</button>
+        </div>
+        <div class="drawer-body">
+            <div class="drawer-left">
+                <div style="padding: 10px 20px; font-size: 11px; font-weight: bold; color: var(--text-muted);">分类筛选</div>
+                <div class="review-item active" data-review-tab="review-conflict" onclick="switchReviewTab('review-conflict', this)">合并冲突确认（12）</div>
+                <div class="review-item" data-review-tab="review-high-risk" onclick="switchReviewTab('review-high-risk', this)">高风险内容删除（8）</div>
+                <div class="review-item" data-review-tab="review-approved" style="color: var(--success); margin-top: 10px; border-top: 1px solid var(--border);" onclick="switchReviewTab('review-approved', this)">已确认通过（2）</div>
+                <div class="review-item" data-review-tab="review-ignored" onclick="switchReviewTab('review-ignored', this)">已忽略/删除内容（4）</div>
+            </div>
+            <div class="drawer-right">
+                <div id="review-conflict" class="review-panel">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:15px; align-items:center;">
+                        <b style="font-size: 14px;">事项 #1：合并冲突确认</b>
+                        <div style="display: flex; gap: 10px;">
+                            <button class="btn-outline btn-sm" onclick="approveReviewItem()">保留当前线上内容</button>
+                            <button class="btn-success btn-sm" onclick="approveReviewItem()">使用本次上传内容</button>
+                        </div>
+                    </div>
+
+                    <div style="background: #fff8dd; border: 1px solid #ffc700; padding: 10px; border-radius: 6px; font-size: 12px; margin-bottom: 20px;">
+                        <b>需要确认：</b> 本次上传内容和当前线上内容对同一问题给出了不同口径。你的选择只影响当前任务，不会改成全局规则。
+                    </div>
+
+                    <div class="diff-box">
+                        <div class="diff-header">当前线上内容（来源：产品手册 v2）</div>
+                        <div class="diff-content">
+                            问：设备保修期多久？<br><br>
+                            答：标准保修期为 12 个月，可在购买后 30 天内申请延保。
+                        </div>
+                    </div>
+
+                    <div class="diff-box">
+                        <div class="diff-header">本次上传内容（来源：产品手册 v3）</div>
+                        <div class="diff-content diff-add">
+                            问：设备保修期多久？<br><br>
+                            答：标准保修期为 24 个月，延保服务以销售订单中的服务条款为准。
+                        </div>
+                    </div>
+                </div>
+
+                <div id="review-high-risk" class="review-panel hidden">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:15px; align-items:center;">
+                        <b style="font-size: 14px;">事项 #1：高风险内容删除</b>
+                        <div style="display: flex; gap: 10px;">
+                            <button class="btn-outline btn-sm" onclick="approveReviewItem()">保持删除</button>
+                            <button class="btn-success btn-sm" onclick="approveReviewItem()">恢复到本轮内容</button>
+                        </div>
+                    </div>
+
+                    <div style="background: #fff5f8; border: 1px solid #f1416c; padding: 10px; border-radius: 6px; font-size: 12px; margin-bottom: 20px;">
+                        <b>需要确认：</b> 系统认为高亮部分是重复的安全声明，已准备删除；但这段话可能影响合规或安全，请确认是否恢复。你的决定只对当前任务生效，不会变成全局规则。
+                    </div>
+
+                    <div class="diff-box">
+                        <div class="diff-header">原始内容（来源：实验室安全规程.pdf）</div>
+                        <div class="diff-content diff-remove">
+                            问：如何安全处理化学品泄漏事故？<br><br>
+                            答：立即疏散泄漏区域内的人员。<b>【警告：请勿使用清水冲洗钠类化学品泄漏，以免引发爆炸。】</b> 请立即联系危险品处理部门介入。
+                        </div>
+                    </div>
+
+                    <div class="diff-box">
+                        <div class="diff-header">系统建议保留的内容</div>
+                        <div class="diff-content diff-add">
+                            问：如何安全处理化学品泄漏事故？<br><br>
+                            答：立即疏散泄漏区域内的人员。请立即联系危险品处理部门介入。
+                        </div>
+                    </div>
+                </div>
+
+                <div id="review-approved" class="review-panel hidden">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:15px; align-items:center;">
+                        <b style="font-size: 14px;">已确认通过</b>
+                        <span class="badge badge-gray">仅展示当前任务结果</span>
+                    </div>
+
+                    <div class="diff-box">
+                        <div class="diff-header">已确认通过</div>
+                        <div class="diff-content">
+                            设备保修期口径已采用本次上传内容：标准保修期为 24 个月，延保以销售订单条款为准。
+                        </div>
+                    </div>
+
+                </div>
+
+                <div id="review-ignored" class="review-panel hidden">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:15px; align-items:center;">
+                        <b style="font-size: 14px;">已忽略/删除内容</b>
+                        <span class="badge badge-gray">仅展示当前任务结果</span>
+                    </div>
+
+                    <div class="diff-box">
+                        <div class="diff-header">已忽略</div>
+                        <div class="diff-content">
+                            “内部培训报名入口已迁移”暂不参与本轮发布，原因：该入口只对内部员工开放，不影响客户支持机器人。
+                        </div>
+                    </div>
+
+                    <div class="diff-box">
+                        <div class="diff-header">已删除</div>
+                        <div class="diff-content diff-remove">
+                            重复的旧版安装步骤已从本轮内容中删除，保留最新版安装说明。
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Version Drawer 版本内容抽屉 -->
+    <div class="drawer-overlay" id="version-drawer-overlay" onclick="closeVersionDrawer()"></div>
+    <div class="drawer" id="version-drawer">
+        <div class="drawer-header">
+            <div>
+                <b style="font-size: 16px;" id="version-drawer-title">版本内容</b>
+                <span class="badge badge-gray" style="margin-left: 10px;" id="version-drawer-status">当前线上</span>
+            </div>
+            <button class="btn-outline btn-sm" onclick="closeVersionDrawer()">关闭</button>
+        </div>
+        <div class="drawer-body">
+            <div class="drawer-left">
+                <div style="padding: 10px 20px; font-size: 11px; font-weight: bold; color: var(--text-muted);">版本信息</div>
+                <div class="review-item active">全部内容（1,204）</div>
+                <div class="review-item">产品政策（320）</div>
+                <div class="review-item">账号与安全（260）</div>
+                <div class="review-item">设备设置（410）</div>
+                <div class="review-item">历史变更（214）</div>
+            </div>
+            <div class="drawer-right">
+                <div class="card" style="box-shadow:none; margin-bottom:15px;">
+                    <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; font-size:12px; line-height:1.8;">
+                        <div><b>发布时间：</b><span id="version-drawer-time">今天 11:18</span></div>
+                        <div><b>来源任务：</b>HR 政策 2024</div>
+                        <div><b>内容来源：</b>HR 2024 批次</div>
+                    </div>
+                </div>
+                <div class="flex gap-2 mb-4">
+                    <input type="text" class="form-control" placeholder="搜索该版本中的内容..." style="flex:1">
+                    <button class="btn-outline btn-sm" onclick="showToast('已筛选该版本内容')">搜索</button>
+                </div>
+                <div class="diff-box">
+                    <div class="diff-header flex justify-between align-center">
+                        <span>设备保修期说明</span>
+                        <span class="badge badge-published">已发布</span>
+                    </div>
+                    <div class="diff-content">
+                        标准保修期为 24 个月，延保服务以销售订单中的服务条款为准。购买后如需申请延保，请联系客户成功经理。
+                    </div>
+                </div>
+                <div class="diff-box">
+                    <div class="diff-header flex justify-between align-center">
+                        <span>路由器密码重置步骤</span>
+                        <span class="badge badge-published">已发布</span>
+                    </div>
+                    <div class="diff-content">
+                        要重置路由器密码，请找到设备背面的 Reset 按钮，按住 10 秒钟后等待设备重启，再使用默认管理员账号登录。
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Index Content Drawer 索引内容抽屉 -->
+    <div class="drawer-overlay" id="index-content-drawer-overlay" onclick="closeIndexContentDrawer()"></div>
+    <div class="drawer" id="index-content-drawer">
+        <div class="drawer-header">
+            <div>
+                <b style="font-size: 16px;" id="index-content-title">清洗轮次索引内容</b>
+                <span class="badge badge-gray" style="margin-left: 10px;" id="index-content-subtitle">Q4 第 2 轮内容草稿</span>
+            </div>
+            <button class="btn-outline btn-sm" onclick="closeIndexContentDrawer()">关闭</button>
+        </div>
+        <div class="drawer-body">
+            <div class="drawer-left">
+                <div style="padding: 10px 20px; font-size: 11px; font-weight: bold; color: var(--text-muted);">索引内容范围</div>
+                <div class="review-item active">全部索引内容（1,204）</div>
+                <div class="review-item">已修改内容（6）</div>
+                <div class="review-item">已删除内容（20）</div>
+                <div class="review-item">高风险处理内容（8）</div>
+                <div class="review-item">人工新增内容（1）</div>
+            </div>
+            <div class="drawer-right">
+                <div class="flex gap-2 mb-4">
+                    <input type="text" class="form-control" placeholder="搜索索引内容..." style="flex:1">
+                    <button class="btn-outline btn-sm" onclick="showToast('已筛选索引内容')">搜索</button>
+                </div>
+                <div class="diff-box">
+                    <div class="diff-header flex justify-between align-center">
+                        <span>设备保修期说明</span>
+                        <span class="badge badge-passed">已入索引</span>
+                    </div>
+                    <div class="diff-content">
+                        <div style="color:var(--text-muted); margin-bottom:8px;">来源：产品手册 v3.docx / 保修政策</div>
+                        标准保修期为 24 个月，延保服务以销售订单中的服务条款为准。购买后如需申请延保，请联系客户成功经理。
+                    </div>
+                </div>
+                <div class="diff-box">
+                    <div class="diff-header flex justify-between align-center">
+                        <span>路由器密码重置步骤</span>
+                        <span class="badge badge-passed">已入索引</span>
+                    </div>
+                    <div class="diff-content">
+                        <div style="color:var(--text-muted); margin-bottom:8px;">来源：路由器设置文档.pdf / 常见问题</div>
+                        要重置路由器密码，请找到设备背面的 Reset 按钮，按住 10 秒钟后等待设备重启，再使用默认管理员账号登录。
+                    </div>
+                </div>
+                <div class="diff-box">
+                    <div class="diff-header flex justify-between align-center">
+                        <span>人工补充：延保申请入口</span>
+                        <span class="badge badge-review">本轮新增</span>
+                    </div>
+                    <div class="diff-content">
+                        <div style="color:var(--text-muted); margin-bottom:8px;">来源：人工新增 / 运营补充</div>
+                        客户如需申请延保，可在购买后 30 天内联系客户成功经理，由客户成功经理根据销售订单中的服务条款协助处理。
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Publish Modal 发布确认弹窗 -->
+    <div class="modal-overlay" id="publish-modal">
+        <div class="modal">
+            <div class="modal-header">确认发布知识库内容</div>
+            <div class="modal-body">
+                <p style="margin-bottom: 15px;">你即将把 <b>HR 2024 待发布内容</b> 发布为 <b>客户支持知识库</b> 的线上内容。</p>
+                <div style="background: var(--bg-body); padding: 15px; border-radius: 6px; margin-bottom: 15px;">
+                    <div class="flex justify-between" style="margin-bottom: 8px;"><span>未完成的人工确认：</span> <b id="publish-pending-status">0</b></div>
+                    <div class="flex justify-between" style="margin-bottom: 8px;"><span>高风险待处理：</span> <b>0</b></div>
+                    <div class="flex justify-between"><span>检索索引：</span> <b id="publish-index-status" class="text-success">已更新</b></div>
+                </div>
+                <div id="publish-index-warning" class="hidden" style="background:#fff5f8; border:1px solid #f1416c; color:var(--danger); padding:10px; border-radius:6px; margin-bottom:15px; font-size:12px;">
+                    内容已被修改，请先生成检索索引后再发布。
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label class="form-label">发布备注</label>
+                    <textarea class="form-control" rows="3" placeholder="例如：本次更新主要修复了 V1 API 下线的文档指引。"></textarea>
+                </div>
+                <p style="font-size: 12px; color: var(--danger);">风险提示：发布后，连接该知识库的线上机器人会立即使用新内容。</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-outline" onclick="closePublishModal()">暂不发布</button>
+                <button class="btn-success" id="confirm-publish-button" onclick="confirmPublish()">确认发布</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Current Online Content Modal 当前线上内容弹窗 -->
+    <div class="modal-overlay" id="online-content-modal">
+        <div class="modal" style="width:760px;">
+            <div class="modal-header">当前线上内容</div>
+            <div class="modal-body">
+                <div style="background: var(--bg-body); padding: 15px; border-radius: 6px; margin-bottom: 15px; display:grid; grid-template-columns: repeat(3, 1fr); gap:12px;">
+                    <div><b>知识库：</b><br>客户支持知识库</div>
+                    <div><b>当前版本：</b><br>HR 2024 已发布内容</div>
+                    <div><b>索引状态：</b><br><span class="text-success">已更新</span></div>
+                </div>
+                <div class="flex gap-2 mb-4">
+                    <input type="text" class="form-control" placeholder="搜索当前线上内容..." style="flex:1">
+                    <button class="btn-outline btn-sm" onclick="showToast('已搜索当前线上内容')">搜索</button>
+                </div>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>内容标题</th>
+                                <th>来源文件</th>
+                                <th>更新时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><b>设备保修期说明</b><br><span style="color:var(--text-muted);font-size:12px">标准保修期为 24 个月，延保服务以销售订单条款为准。</span></td>
+                                <td>产品手册 v3.docx</td>
+                                <td>今天 11:18</td>
+                                <td><a onclick="showToast('已打开内容详情')">查看详情</a></td>
+                            </tr>
+                            <tr>
+                                <td><b>路由器密码重置步骤</b><br><span style="color:var(--text-muted);font-size:12px">按住设备背面的 Reset 按钮 10 秒后重新登录。</span></td>
+                                <td>路由器设置文档.pdf</td>
+                                <td>今天 11:18</td>
+                                <td><a onclick="showToast('已打开内容详情')">查看详情</a></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-outline" onclick="closeOnlineContentModal()">关闭</button>
+                <button class="btn-primary" onclick="showToast('已进入检索试查')">去检索试查</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Content Modal 手动新增内容弹窗 -->
+    <div class="modal-overlay" id="add-content-modal">
+        <div class="modal" style="width:680px;">
+            <div class="modal-header">手动新增内容</div>
+            <div class="modal-body">
+                <div style="background:#f8fafc; border:1px solid var(--border); border-radius:6px; padding:10px; margin-bottom:15px; font-size:12px;">
+                    新增内容会进入当前任务的内容草稿。保存后需要重新生成检索索引，发布后才会在线上生效。
+                </div>
+                <div class="form-group">
+                    <label class="form-label">内容标题</label>
+                    <input type="text" class="form-control" id="new-content-title" value="人工补充：延保申请入口">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">内容正文</label>
+                    <textarea class="form-control" rows="6" id="new-content-body">客户如需申请延保，可在购买后 30 天内联系客户成功经理，由客户成功经理根据销售订单中的服务条款协助处理。</textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">来源说明</label>
+                    <input type="text" class="form-control" id="new-content-source" value="人工新增 / 运营补充">
+                    <div class="field-hint">用于说明这条内容为什么被补充进来，例如来自运营经验、客服反馈或临时公告。</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-outline" onclick="closeAddContentModal()">取消</button>
+                <button class="btn-success" onclick="confirmAddCleanedContent()">保存到内容草稿</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Optimization Modal 下一轮优化弹窗 -->
+    <div class="modal-overlay" id="optimization-modal">
+        <div class="modal" style="width:640px;">
+            <div class="modal-header">启动下一轮优化</div>
+            <div class="modal-body">
+                <div style="background:#f8fafc; border:1px solid var(--border); border-radius:6px; padding:10px; margin-bottom:15px; font-size:12px;">
+                    请描述这轮希望优化的方向，系统会基于当前清洗结果重新生成下一轮内容草稿。
+                </div>
+                <div class="form-group">
+                    <label class="form-label">优化方向描述</label>
+                    <textarea class="form-control" rows="6" id="optimization-desc" placeholder="例如：保留更多操作步骤，减少页眉误删；对保修政策类内容保留完整上下文。"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-outline" onclick="closeOptimizationModal()">取消</button>
+                <button class="btn-success" onclick="confirmOptimization()">启动优化</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast 提示框 -->
+    <div id="toast">操作成功</div>
+
+    <script>
+        // State 模拟状态
+        let pendingReviewCount = 24;
+        let indexReady = true;
+        let currentCustomer = 'Acme Corp';
+        let currentCustomerHasKnowledgeBase = true;
+        let currentKnowledgeBaseName = '客户支持知识库';
+        let currentPublishedVersion = 'HR 2024 已发布内容';
+        let createFlowMode = 'maintenance';
+        const customerKnowledgeStates = {
+            'Acme Corp': {
+                hasKnowledgeBase: true,
+                knowledgeBaseName: '客户支持知识库',
+                publishedVersion: 'HR 2024 已发布内容'
+            },
+            'TechFlow Inc': {
+                hasKnowledgeBase: false,
+                knowledgeBaseName: '',
+                publishedVersion: ''
+            }
+        };
+
+        function getCurrentCustomerState() {
+            if (!customerKnowledgeStates[currentCustomer]) {
+                customerKnowledgeStates[currentCustomer] = {
+                    hasKnowledgeBase: false,
+                    knowledgeBaseName: '',
+                    publishedVersion: ''
+                };
+            }
+            return customerKnowledgeStates[currentCustomer];
+        }
+
+        function handleCustomerChange(customer) {
+            currentCustomer = customer;
+            updateListKnowledgeBaseState();
+            switchView('view-list');
+            showToast('已切换客户视角');
+        }
+
+        function updateListKnowledgeBaseState() {
+            const state = getCurrentCustomerState();
+            currentCustomerHasKnowledgeBase = state.hasKnowledgeBase;
+            currentKnowledgeBaseName = state.knowledgeBaseName || '客户支持知识库';
+            currentPublishedVersion = state.publishedVersion || '';
+            const emptyState = document.getElementById('kb-empty-state');
+            const kbBadge = document.getElementById('topbar-kb-badge');
+            const versionBadge = document.getElementById('topbar-version-badge');
+            const currentOnlineLink = document.getElementById('current-online-link');
+            document.querySelectorAll('.kb-ready-only').forEach(el => el.classList.toggle('hidden', !currentCustomerHasKnowledgeBase));
+            if (emptyState) { emptyState.classList.toggle('hidden', currentCustomerHasKnowledgeBase); }
+            if (kbBadge) { kbBadge.innerText = currentCustomerHasKnowledgeBase ? currentKnowledgeBaseName : '尚未创建知识库'; }
+            if (versionBadge) {
+                versionBadge.className = currentPublishedVersion ? 'badge badge-published' : 'badge badge-gray';
+                versionBadge.innerText = currentPublishedVersion ? '当前线上版本：' + currentPublishedVersion : '暂无线上版本';
+            }
+            if (currentOnlineLink) {
+                currentOnlineLink.innerText = currentPublishedVersion || '暂无线上版本';
+                currentOnlineLink.style.color = currentPublishedVersion ? 'var(--primary)' : 'var(--text-muted)';
+            }
+        }
+
+        function openCurrentOnlineFromList() {
+            if (!currentPublishedVersion) {
+                showToast('当前知识库还没有已发布版本');
+                return;
+            }
+            openDetailView('HR 政策 2024', 'published');
+        }
+
+        function startCreateKnowledgeBase() {
+            createFlowMode = 'create_kb';
+            nextStep(1);
+            applyCreateFlowMode();
+            switchView('view-create');
+        }
+
+        function startMaintenanceTask() {
+            createFlowMode = 'maintenance';
+            nextStep(1);
+            applyCreateFlowMode();
+            switchView('view-create');
+        }
+
+        // 一级页面切换
+        function switchView(viewId) {
+            document.getElementById('view-list').classList.add('hidden');
+            document.getElementById('view-create').classList.add('hidden');
+            document.getElementById('view-detail').classList.add('hidden');
+            document.getElementById(viewId).classList.remove('hidden');
+        }
+
+        // 列表 -> 详情
+        function openDetailView(title, statusType) {
+            document.getElementById('detail-title').innerText = title;
+            const statusBadge = document.getElementById('detail-status');
+            const subtitle = document.getElementById('detail-subtitle');
+            const contextPrefix = currentCustomer + ' / ' + (currentKnowledgeBaseName || '客户支持知识库') + ' / 维护任务：';
+            const runningType = currentPublishedVersion ? '全量重建' : '全量构建';
+            const runningSource = currentPublishedVersion ? 'V3 全量批次' : '第一版完整原文件';
+            const subtitleMap = {
+                manual: contextPrefix + '人工补充 / 来源：运营手动新增内容 / 由 Admin 创建 / 5 分钟前更新',
+                repair: contextPrefix + '内容修复 / 来源：上传原文件 + 手动新增待修复问题 / 由 Admin 创建 / 12 分钟前更新',
+                running: contextPrefix + runningType + ' / 来源：' + runningSource + ' / 由 Admin 创建 / 30 分钟前更新',
+                published: contextPrefix + '批量文件更新 / 来源：HR 2024 批次 / 由 Admin 发布 / 今天 11:18 更新'
+            };
+            if (subtitle) {
+                subtitle.innerText = subtitleMap[statusType] || contextPrefix + '批量文件更新 / 来源：Q4 更新批次 / 由 Admin 创建 / 10 分钟前更新';
+            }
+            document.getElementById('view-detail').classList.toggle('published-readonly', statusType === 'published');
+            document.getElementById('view-detail').classList.toggle('risk-blocked', statusType === 'review');
+            pendingReviewCount = statusType === 'review' ? 24 : 0;
+            updateDrawerCounter();
+
+            // 默认切回第一个 Tab
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab')[0].classList.add('active');
+            switchTab('tab-pipeline', document.querySelectorAll('.tab')[0]);
+
+            if(statusType === 'review') {
+                statusBadge.className = 'badge badge-review'; statusBadge.innerText = '需要确认';
+            } else if (statusType === 'running') {
+                statusBadge.className = 'badge badge-running'; statusBadge.innerText = '处理中';
+            } else if (statusType === 'passed') {
+                statusBadge.className = 'badge badge-passed'; statusBadge.innerText = '可发布';
+            } else if (statusType === 'manual') {
+                statusBadge.className = 'badge badge-running'; statusBadge.innerText = '待编辑';
+            } else if (statusType === 'repair') {
+                statusBadge.className = 'badge badge-passed'; statusBadge.innerText = '待试查';
+            } else if (statusType === 'published') {
+                statusBadge.className = 'badge badge-published'; statusBadge.innerText = '已发布上线';
+            }
+
+            setIndexReady(statusType === 'passed' || statusType === 'published' || statusType === 'repair');
+            updateDetailSummary(statusType);
+            updatePipelineProgress(statusType);
+            updateNextAction(statusType);
+            updateCurrentHistory(title, statusType);
+            updateCurrentAttempt(statusType);
+            updateDebugTarget(statusType);
+            updateManualContentSample(statusType);
+            switchView('view-detail');
+            if (statusType === 'published') {
+                switchTab('tab-publish-result', document.querySelectorAll('.tab')[5]);
+            } else if (statusType === 'manual') {
+                switchTab('tab-cleaned', document.querySelectorAll('.tab')[2]);
+            } else if (statusType === 'repair') {
+                switchTab('tab-debug', document.querySelectorAll('.tab')[4]);
+            }
+        }
+
+        function updateCurrentHistory(title, statusType) {
+            const nameEl = document.getElementById('current-history-name');
+            const typeEl = document.getElementById('current-history-type');
+            const sourceEl = document.getElementById('current-history-source');
+            const statusEl = document.getElementById('current-history-status');
+            const outputEl = document.getElementById('current-history-output');
+            if (!nameEl || !typeEl || !sourceEl || !statusEl || !outputEl) { return; }
+
+            const rows = {
+                manual: {
+                    type: '人工补充',
+                    source: '运营手动新增：延保申请说明',
+                    status: '<span class="badge badge-running">待编辑<\/span>',
+                    output: '人工补充内容草稿'
+                },
+                repair: {
+                    type: '内容修复',
+                    source: '上传原文件：路由器设置文档修订版.pdf；手动新增问题：2 个',
+                    status: '<span class="badge badge-passed">待试查<\/span>',
+                    output: '修复内容草稿'
+                },
+                running: {
+                    type: currentPublishedVersion ? '全量重建' : '全量构建',
+                    source: currentPublishedVersion ? '上传文件：V3 全量批次' : '上传文件：第一版完整原文件',
+                    status: '<span class="badge badge-running">处理中<\/span>',
+                    output: '正在清洗'
+                },
+                published: {
+                    type: '批量文件更新',
+                    source: '上传文件：HR 2024 批次',
+                    status: '<span class="badge badge-published">当前线上<\/span>',
+                    output: 'HR 2024 已发布内容'
+                }
+            };
+            const row = rows[statusType] || {
+                type: '批量文件更新',
+                source: '上传文件：Q4 更新批次（12 个文件）',
+                status: '<span class="badge badge-review">风险确认中<\/span>',
+                output: 'Q4 第 2 轮内容草稿'
+            };
+            nameEl.innerHTML = '<b>' + title + '<\/b>（当前）';
+            typeEl.innerText = row.type;
+            sourceEl.innerText = row.source;
+            statusEl.innerHTML = row.status;
+            outputEl.innerText = row.output;
+        }
+
+        function updateCurrentAttempt(statusType) {
+            const roundEl = document.getElementById('attempt-current-round');
+            const contentEl = document.getElementById('attempt-current-content');
+            const strategyEl = document.getElementById('attempt-current-strategy');
+            const statusEl = document.getElementById('attempt-current-status');
+            if (!roundEl || !contentEl || !strategyEl || !statusEl) { return; }
+
+            const rows = {
+                manual: {
+                    round: '<b>第 1 轮<\/b>（当前）',
+                    content: '人工补充内容草稿',
+                    strategy: '运营手动编辑 + 自动生成索引',
+                    status: '<span class="badge badge-running">待编辑<\/span>'
+                },
+                repair: {
+                    round: '<b>第 2 轮<\/b>（当前）',
+                    content: '修复内容草稿',
+                    strategy: '按线上反馈重新清洗',
+                    status: '<span class="badge badge-passed">待试查<\/span>'
+                },
+                running: {
+                    round: '<b>第 1 轮<\/b>（当前）',
+                    content: '正在清洗',
+                    strategy: '系统默认基线',
+                    status: '<span class="badge badge-running">处理中<\/span>'
+                },
+                published: {
+                    round: '<b>第 4 轮<\/b>（已发布）',
+                    content: 'HR 2024 已发布内容',
+                    strategy: '确认内容 + 已更新索引',
+                    status: '<span class="badge badge-published">已发布<\/span>'
+                }
+            };
+            const row = rows[statusType] || {
+                round: '<b>第 2 轮<\/b>（当前）',
+                content: 'Q4 第 2 轮内容草稿',
+                strategy: '激进清洗 + V1修复规则',
+                status: '<span class="badge badge-review pending-only">待试查<\/span><span class="badge badge-published published-only">已发布<\/span>'
+            };
+            roundEl.innerHTML = row.round;
+            contentEl.innerText = row.content;
+            strategyEl.innerText = row.strategy;
+            statusEl.innerHTML = row.status;
+        }
+
+        function updateDebugTarget(statusType) {
+            const select = document.getElementById('debug-target-select');
+            if (!select) { return; }
+            const targets = {
+                manual: ['针对内容：人工补充内容草稿', '针对内容：当前线上内容'],
+                repair: ['针对内容：修复内容草稿', '针对内容：当前线上内容'],
+                published: ['针对内容：HR 2024 已发布内容', '针对内容：9 月已发布内容'],
+                running: ['针对内容：正在清洗的内容', '针对内容：当前线上内容']
+            };
+            const items = targets[statusType] || ['针对内容：Q4 第 2 轮内容草稿', '针对内容：9 月已发布内容'];
+            select.innerHTML = items.map(item => '<option>' + item + '<\/option>').join('');
+        }
+
+        function updateManualContentSample(statusType) {
+            const box = document.getElementById('manual-added-content');
+            if (!box) { return; }
+            if (statusType === 'manual') {
+                document.getElementById('manual-added-title').innerText = '延保申请入口说明';
+                document.getElementById('manual-added-source').innerText = '来源：人工新增 / 运营补充';
+                document.getElementById('manual-added-body').innerText = '用户购买设备后，如需申请延保，可在会员中心提交设备序列号和购买凭证。审核通过后，延保权益会在 2 个工作日内生效。';
+                box.classList.remove('hidden');
+            } else {
+                box.classList.add('hidden');
+            }
+        }
+
+        function updateDetailSummary(statusType) {
+            const roundValue = document.getElementById('detail-round-value');
+            const stateValue = document.getElementById('detail-state-value');
+            const pendingValue = document.getElementById('detail-pending-value');
+            if (!roundValue || !stateValue || !pendingValue) { return; }
+
+            if (statusType === 'running') {
+                roundValue.innerText = '第 1 轮';
+                stateValue.innerText = '正在清洗';
+                pendingValue.innerText = '0 项';
+            } else if (statusType === 'passed') {
+                roundValue.innerText = '第 4 轮';
+                stateValue.innerText = '可发布';
+                pendingValue.innerText = '0 项';
+            } else if (statusType === 'manual') {
+                roundValue.innerText = '第 1 轮';
+                stateValue.innerText = '内容待编辑';
+                pendingValue.innerText = '0 项';
+            } else if (statusType === 'repair') {
+                roundValue.innerText = '第 2 轮';
+                stateValue.innerText = '待试查';
+                pendingValue.innerText = '0 项';
+            } else if (statusType === 'published') {
+                roundValue.innerText = '第 4 轮';
+                stateValue.innerText = '已发布上线';
+                pendingValue.innerText = '0 项';
+            } else {
+                roundValue.innerText = '第 2 轮';
+                stateValue.innerText = '风险待处理';
+                pendingValue.innerText = '24 项';
+            }
+        }
+
+        function updateNextAction(statusType) {
+            const nextActionButton = document.getElementById('next-action-button');
+            if (!nextActionButton) { return; }
+
+            if (statusType === 'passed') {
+                nextActionButton.innerText = '发布';
+                nextActionButton.className = 'btn-success btn-sm';
+                nextActionButton.onclick = openPublishModal;
+            } else if (statusType === 'published') {
+                nextActionButton.innerText = '查看发布结果';
+                nextActionButton.className = 'btn-outline btn-sm';
+                nextActionButton.onclick = () => switchTab('tab-publish-result', document.querySelectorAll('.tab')[5]);
+            } else if (statusType === 'running') {
+                nextActionButton.innerText = '查看进度';
+                nextActionButton.className = 'btn-outline btn-sm';
+                nextActionButton.onclick = () => switchTab('tab-pipeline', document.querySelectorAll('.tab')[0]);
+            } else if (statusType === 'manual') {
+                nextActionButton.innerText = '编辑新增内容';
+                nextActionButton.className = 'btn-primary btn-sm';
+                nextActionButton.onclick = () => switchTab('tab-cleaned', document.querySelectorAll('.tab')[2]);
+            } else if (statusType === 'repair') {
+                nextActionButton.innerText = '去检索试查';
+                nextActionButton.className = 'btn-primary btn-sm';
+                nextActionButton.onclick = () => switchTab('tab-debug', document.querySelectorAll('.tab')[4]);
+            } else {
+                nextActionButton.innerText = '处理风险与冲突';
+                nextActionButton.className = 'btn-primary btn-sm';
+                nextActionButton.onclick = () => switchTab('tab-risk', document.querySelectorAll('.tab')[1]);
+            }
+        }
+
+        function updatePipelineProgress(statusType) {
+            const stages = Array.from(document.querySelectorAll('.pipeline-container .pipe-stage'));
+            const titleEl = document.getElementById('pipeline-title');
+            const noticeEl = document.getElementById('pipeline-notice');
+            const labels = [
+                ['任务创建', '批量文件更新'],
+                ['内容来源', '12 个文件'],
+                ['解析与清洗', '1,204 条内容'],
+                ['风险与冲突确认', '等待处理'],
+                ['清洗结果确认', ''],
+                ['检索试查', ''],
+                ['发布', '']
+            ];
+
+            let states = ['done', 'done', 'done', 'active', 'pending', 'pending', 'pending'];
+            let statusLabels = labels.map(item => item[1]);
+            titleEl.innerText = '当前处理进度（第 2 轮）';
+            setNoticeText(noticeEl, '需要处理：', '请先处理高风险删除和内容冲突。处理完成后，再确认清洗后的内容草稿并进入检索试查。');
+
+            if (statusType === 'running') {
+                states = ['done', 'done', 'active', 'pending', 'pending', 'pending', 'pending'];
+                statusLabels = ['已创建', '12 个文件', '处理中', '', '', '', ''];
+                titleEl.innerText = '当前处理进度（第 1 轮）';
+                setNoticeText(noticeEl, '正在处理：', '文件正在解析和清洗，完成后会进入风险与冲突确认。');
+            } else if (statusType === 'manual') {
+                states = ['done', 'done', 'done', 'done', 'active', 'pending', 'pending'];
+                statusLabels = ['已创建', '运营新增', '无需解析', '无风险', '待编辑', '', ''];
+                titleEl.innerText = '当前处理进度（人工补充）';
+                setNoticeText(noticeEl, '需要编辑：', '请在清洗结果确认中补充或修改运营内容。保存后生成检索索引，再进入检索试查。');
+            } else if (statusType === 'repair') {
+                states = ['done', 'done', 'done', 'done', 'done', 'active', 'pending'];
+                statusLabels = ['已创建', '修复来源', '已重新清洗', '无风险', '已确认', '待试查', ''];
+                titleEl.innerText = '当前处理进度（内容修复）';
+                setNoticeText(noticeEl, '需要试查：', '请用手动新增的待修复问题验证原文件清洗结果。不符合预期时，可启动下一轮优化并填写优化方向。');
+            } else if (statusType === 'passed') {
+                states = ['done', 'done', 'done', 'done', 'done', 'done', 'active'];
+                statusLabels = ['已创建', '12 个文件', '1,204 条内容', '已处理', '已确认', '已试查', '可发布'];
+                titleEl.innerText = '当前处理进度（第 4 轮）';
+                setNoticeText(noticeEl, '可发布：', '风险确认、内容草稿确认和检索试查都已完成，可以进入发布。');
+            } else if (statusType === 'published') {
+                states = ['done', 'done', 'done', 'done', 'done', 'done', 'done'];
+                statusLabels = ['已创建', '12 个文件', '1,204 条内容', '已处理', '已确认', '已试查', '已发布'];
+                titleEl.innerText = '当前处理进度（第 4 轮）';
+                setNoticeText(noticeEl, '已发布：', '内容已发布上线，可在发布结果中查看线上内容快照和历史版本。');
+            }
+
+            stages.forEach((stage, index) => {
+                const title = labels[index][0];
+                const statusText = statusLabels[index];
+                const state = states[index];
+                stage.className = 'pipe-stage ' + state;
+                renderStage(stage, title, statusText, state);
+            });
+        }
+
+        function setNoticeText(noticeEl, label, text) {
+            noticeEl.textContent = '';
+            const labelEl = document.createElement('b');
+            labelEl.innerText = label;
+            noticeEl.appendChild(labelEl);
+            noticeEl.appendChild(document.createTextNode(' ' + text));
+        }
+
+        function renderStage(stage, title, statusText, state) {
+            stage.textContent = '';
+            const titleEl = document.createElement('b');
+            titleEl.innerText = title;
+            stage.appendChild(titleEl);
+
+            if (statusText) {
+                stage.appendChild(document.createElement('br'));
+                const statusEl = document.createElement('span');
+                statusEl.style.color = state === 'active' ? 'var(--primary)' : 'var(--text-muted)';
+                statusEl.innerText = statusText;
+                stage.appendChild(statusEl);
+            }
+        }
+
+        // 详情页一级 Tabs 切换
+        function switchTab(tabId, el) {
+            if (tabId === 'tab-cleaned' && document.getElementById('view-detail').classList.contains('risk-blocked')) {
+                showToast('请先处理风险与冲突，再确认清洗结果');
+                return;
+            }
+            const tabs = ['tab-pipeline', 'tab-risk', 'tab-cleaned', 'tab-attempts', 'tab-debug', 'tab-publish-result'];
+            tabs.forEach(id => document.getElementById(id).classList.add('hidden'));
+            document.getElementById(tabId).classList.remove('hidden');
+
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            el.classList.add('active');
+        }
+
+        // 风险分类页二级 Tabs 切换
+        function switchSubTab(tabId, el) {
+            const subs = ['risk-summary', 'risk-conflict', 'risk-delete'];
+            subs.forEach(id => document.getElementById(id).classList.add('hidden'));
+            document.getElementById(tabId).classList.remove('hidden');
+
+            document.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('active'));
+            el.classList.add('active');
+        }
+
+        function markIndexOutdated() {
+            setIndexReady(false);
+        }
+
+        function refreshIndexStatus() {
+            setIndexReady(true);
+            showToast('检索索引已重新生成，可以继续发布');
+        }
+
+        function resolveRiskItem(button, resultText) {
+            const item = button.closest('[data-risk-item]');
+            if (!item) { return; }
+            const status = item.querySelector('.risk-status');
+            if (status) {
+                status.className = 'badge badge-passed risk-status';
+                status.innerText = resultText;
+            }
+            item.querySelectorAll('button').forEach(btn => btn.disabled = true);
+            pendingReviewCount = Math.max(0, pendingReviewCount - 1);
+            updateDrawerCounter();
+            updatePublishGuard();
+            document.getElementById('risk-pending-count').innerText = pendingReviewCount;
+            showToast('已保存处理结果');
+        }
+
+        function markAllRisksResolved() {
+            pendingReviewCount = 0;
+            updateDrawerCounter();
+            updatePublishGuard();
+            document.getElementById('risk-pending-count').innerText = '0';
+            document.querySelectorAll('[data-risk-item]').forEach(item => {
+                const status = item.querySelector('.risk-status');
+                if (status) {
+                    status.className = 'badge badge-passed risk-status';
+                    status.innerText = '已处理';
+                }
+                item.querySelectorAll('button').forEach(btn => btn.disabled = true);
+            });
+            document.getElementById('view-detail').classList.remove('risk-blocked');
+            document.getElementById('risk-resolved-next').classList.remove('hidden');
+            showToast('风险与冲突已处理，可以确认清洗结果');
+        }
+
+        function openAddContentModal() {
+            document.getElementById('add-content-modal').classList.add('open');
+        }
+
+        function closeAddContentModal() {
+            document.getElementById('add-content-modal').classList.remove('open');
+        }
+
+        function confirmAddCleanedContent() {
+            const title = document.getElementById('new-content-title').value || '人工新增内容';
+            const body = document.getElementById('new-content-body').value || '暂无正文';
+            const source = document.getElementById('new-content-source').value || '人工新增';
+
+            document.getElementById('manual-added-title').innerText = title;
+            document.getElementById('manual-added-body').innerText = body;
+            document.getElementById('manual-added-source').innerText = '来源：' + source;
+            document.getElementById('manual-added-content').classList.remove('hidden');
+            closeAddContentModal();
+            markIndexOutdated();
+            showToast('已新增到内容草稿，发布前需要重新生成检索索引');
+        }
+
+        function setIndexReady(isReady) {
+            indexReady = isReady;
+            const badge = document.getElementById('index-status-badge');
+            if (badge) {
+                badge.className = 'badge ' + (indexReady ? 'badge-passed' : 'badge-review');
+                badge.innerText = indexReady ? '索引已更新' : '索引待更新';
+            }
+            updatePublishGuard();
+        }
+
+        function updatePublishGuard() {
+            const publishStatus = document.getElementById('publish-index-status');
+            const warning = document.getElementById('publish-index-warning');
+            const publishButton = document.getElementById('confirm-publish-button');
+            const pendingStatus = document.getElementById('publish-pending-status');
+            const canPublish = indexReady && pendingReviewCount === 0;
+            if (publishStatus) {
+                publishStatus.className = indexReady ? 'text-success' : 'text-danger';
+                publishStatus.innerText = indexReady ? '已更新' : '待更新';
+            }
+            if (pendingStatus) {
+                pendingStatus.className = pendingReviewCount === 0 ? '' : 'text-danger';
+                pendingStatus.innerText = pendingReviewCount;
+            }
+            if (warning) {
+                warning.classList.toggle('hidden', canPublish);
+                if (pendingReviewCount > 0) {
+                    warning.innerText = '还有 ' + pendingReviewCount + ' 项人工确认未完成，请处理完成后再发布。';
+                } else if (!indexReady) {
+                    warning.innerText = '内容已被修改，请先生成检索索引后再发布。';
+                }
+            }
+            if (publishButton) { publishButton.disabled = !canPublish; }
+        }
+
+        function updateKnowledgeBaseTarget() {
+            applyCreateFlowMode();
+        }
+
+        function applyCreateFlowMode() {
+            const title = document.getElementById('create-title');
+            const customerInput = document.getElementById('create-customer-input');
+            const targetGroup = document.getElementById('maintenance-target-group');
+            const modeSelect = document.getElementById('kb-target-mode');
+            const newGroup = document.getElementById('new-kb-name-group');
+            const newInput = document.getElementById('new-kb-name-input');
+            const existingInput = document.getElementById('existing-kb-select');
+            const existingGroup = document.getElementById('existing-kb-group');
+            const taskTypeGroup = document.getElementById('task-type-group');
+            if (!newGroup || !existingGroup || !taskTypeGroup) { return; }
+
+            const isCreateKnowledgeBase = createFlowMode === 'create_kb';
+            if (title) { title.innerText = isCreateKnowledgeBase ? '创建知识库' : '新建维护任务'; }
+            if (customerInput) { customerInput.value = currentCustomer; }
+            if (newInput && isCreateKnowledgeBase) { newInput.value = currentKnowledgeBaseName || '客户支持知识库'; }
+            if (existingInput) { existingInput.value = currentKnowledgeBaseName || '客户支持知识库'; }
+            if (targetGroup) { targetGroup.classList.add('hidden'); }
+            if (modeSelect) { modeSelect.value = isCreateKnowledgeBase ? 'new' : 'existing'; }
+            newGroup.classList.toggle('hidden', !isCreateKnowledgeBase);
+            existingGroup.classList.toggle('hidden', isCreateKnowledgeBase);
+            taskTypeGroup.classList.toggle('hidden', isCreateKnowledgeBase);
+            updateTaskTypeOptionsForTarget();
+        }
+
+        function getKnowledgeBaseTargetText() {
+            const newInput = document.getElementById('new-kb-name-input');
+            if (createFlowMode === 'create_kb') {
+                return currentCustomer + ' / 创建知识库：' + ((newInput && newInput.value) || '客户支持知识库');
+            }
+            return currentCustomer + ' / 当前知识库：客户支持知识库';
+        }
+
+        function addManualDraftRow() {
+            const row = document.getElementById('manual-draft-new-row');
+            const count = document.getElementById('manual-draft-count');
+            if (!row || !count) { return; }
+            row.classList.remove('hidden');
+            count.innerText = '4 条';
+            showToast('已新增一条内容，可继续编辑');
+        }
+
+        function addRepairQuestionRow() {
+            openRepairQuestionForm();
+        }
+
+        function openRepairQuestionForm() {
+            const form = document.getElementById('repair-question-form');
+            if (!form) { return; }
+            form.classList.remove('hidden');
+            const input = document.getElementById('repair-question-input');
+            if (input) { input.focus(); }
+        }
+
+        function closeRepairQuestionForm() {
+            const form = document.getElementById('repair-question-form');
+            if (!form) { return; }
+            form.classList.add('hidden');
+        }
+
+        function confirmRepairQuestion() {
+            const row = document.getElementById('repair-question-new-row');
+            const count = document.getElementById('repair-question-count');
+            const query = document.getElementById('repair-question-input');
+            const problem = document.getElementById('repair-current-problem-input');
+            const direction = document.getElementById('repair-direction-input');
+            if (!row || !count || !query || !problem || !direction) { return; }
+            document.getElementById('repair-question-added-query').innerText = query.value.trim() || '未填写问题';
+            document.getElementById('repair-question-added-problem').innerText = problem.value.trim() || '待补充当前问题描述';
+            document.getElementById('repair-question-added-direction').innerText = direction.value.trim() || '待补充期望修复方向';
+            row.classList.remove('hidden');
+            count.innerText = '3 个';
+            closeRepairQuestionForm();
+            showToast('已将待修复问题加入列表');
+        }
+
+        function updateTaskTypeOptionsForTarget() {
+            const taskTypeSelect = document.getElementById('task-type-select');
+            if (!taskTypeSelect) { return; }
+
+            const existingValue = taskTypeSelect.value;
+            const options = createFlowMode === 'create_kb'
+                ? [
+                    { value: 'full', label: '全量构建：上传第一版完整原文件' }
+                ]
+                : [
+                    { value: 'batch', label: '批量文件更新：上传一批文件，更新现有知识库' },
+                    { value: 'manual', label: '人工补充：少量新增或改写内容，不需要上传文件' },
+                    { value: 'repair', label: '内容修复：线上回答不好时，按问题反馈重新优化' },
+                    { value: 'full', label: '全量重建：用新文件整体替换当前知识库内容' }
+                ];
+            taskTypeSelect.innerHTML = options.map(option => '<option value="' + option.value + '">' + option.label + '<\/option>').join('');
+            taskTypeSelect.value = options.some(option => option.value === existingValue) ? existingValue : options[0].value;
+            updateTaskTypeHint();
+        }
+
+        function updateTaskTypeHint() {
+            const select = document.getElementById('task-type-select');
+            const hint = document.getElementById('task-type-hint');
+            if (!select || !hint) { return; }
+            if (createFlowMode === 'create_kb') {
+                hint.innerText = '新建知识库默认只支持全量构建，先上传第一版完整原文件，发布后再进行人工补充、内容修复或批量更新。';
+                updateSourceStepForTaskType();
+                return;
+            }
+            const copy = {
+                batch: '适合日常批量迭代。后续会上传原文件，系统自动解析、清洗并生成待确认内容。',
+                manual: '适合补一条政策、FAQ 或运营说明。人工补充不上传原文件，下一步直接填写新增内容。',
+                repair: '适合线上回答不好、搜不到或答案不完整的修复。下一步可以上传修复后的原文件，也可以手动新增待修复问题。',
+                full: '适合一次性替换当前知识库内容。需要上传完整原文件，发布后整体替换当前线上内容。'
+            };
+            hint.innerText = copy[select.value] || copy.batch;
+            updateSourceStepForTaskType();
+        }
+
+        function updateSourceStepForTaskType() {
+            const select = document.getElementById('task-type-select');
+            const stepLabel = document.getElementById('step-source-label');
+            const nextButton = document.getElementById('step1-next-button');
+            const uploadPanel = document.getElementById('source-upload-panel');
+            const historyPanel = document.getElementById('reference-history-panel');
+            const manualPanel = document.getElementById('manual-entry-panel');
+            const repairPanel = document.getElementById('repair-question-panel');
+            if (!select || !stepLabel || !nextButton || !uploadPanel || !historyPanel || !manualPanel || !repairPanel) { return; }
+
+            const isManual = select.value === 'manual';
+            const isRepair = select.value === 'repair';
+            stepLabel.innerText = isManual ? '手动新增内容' : (isRepair ? '修复来源' : '上传原文件');
+            nextButton.innerText = isManual ? '下一步：填写新增内容' : (isRepair ? '下一步：补充修复来源' : '下一步：上传原文件');
+            uploadPanel.classList.toggle('hidden', isManual);
+            historyPanel.classList.toggle('hidden', isManual || createFlowMode === 'create_kb');
+            manualPanel.classList.toggle('hidden', !isManual);
+            repairPanel.classList.toggle('hidden', !isRepair);
+        }
+
+        function updateCreateSummary() {
+            const taskTypeSelect = document.getElementById('task-type-select');
+            const targetEl = document.getElementById('confirm-kb-target');
+            const typeEl = document.getElementById('confirm-task-type');
+            const sourceEl = document.getElementById('confirm-task-source');
+            const outputEl = document.getElementById('confirm-task-output');
+            if (!taskTypeSelect || !targetEl || !typeEl || !sourceEl || !outputEl) { return; }
+
+            const summary = {
+                batch: {
+                    type: '批量文件更新',
+                    source: '第 12 周帮助中心文档更新（上传原文件，共 12 个文件）',
+                    output: '第 12 周待发布内容，并同步更新检索索引'
+                },
+                manual: {
+                    type: '人工补充',
+                    source: '手动新增内容 3 条，无需上传原文件',
+                    output: '人工补充内容草稿，并同步更新检索索引'
+                },
+                repair: {
+                    type: '内容修复',
+                    source: '路由器重置回答修复（上传修复后的原文件，手动新增待修复问题 2 个）',
+                    output: '修复内容草稿，并进入检索试查'
+                },
+                full: {
+                    type: createFlowMode === 'create_kb' ? '全量构建' : '全量重建',
+                    source: createFlowMode === 'create_kb' ? '第一版完整原文件' : '客户支持知识库重建（上传完整原文件）',
+                    output: createFlowMode === 'create_kb' ? '第一版待发布内容，并同步生成检索索引' : '新的完整待发布内容，并同步更新检索索引'
+                }
+            };
+            const item = summary[taskTypeSelect.value] || summary.batch;
+            targetEl.innerText = getKnowledgeBaseTargetText();
+            typeEl.innerText = item.type;
+            sourceEl.innerText = item.source;
+            outputEl.innerText = item.output;
+        }
+
+        // 新建任务向导切换
+        function nextStep(stepNum) {
+            for(let i=1; i<=4; i++) {
+                document.getElementById('st-'+i).classList.remove('active');
+                document.getElementById('step-content-'+i).classList.add('hidden');
+            }
+            for(let i=1; i<=stepNum; i++) { document.getElementById('st-'+i).classList.add('active'); }
+            document.getElementById('step-content-'+stepNum).classList.remove('hidden');
+            if (stepNum === 1) { updateKnowledgeBaseTarget(); }
+            if (stepNum === 2) { updateSourceStepForTaskType(); }
+            if (stepNum === 4) { updateCreateSummary(); }
+        }
+
+        function submitCreateTask() {
+            if (createFlowMode === 'create_kb') {
+                const nameInput = document.getElementById('new-kb-name-input');
+                const state = getCurrentCustomerState();
+                state.hasKnowledgeBase = true;
+                state.knowledgeBaseName = (nameInput && nameInput.value.trim()) || '客户支持知识库';
+                state.publishedVersion = '';
+                updateListKnowledgeBaseState();
+                showToast('知识库创建任务已启动，正在生成第一版内容。');
+                setTimeout(() => {
+                    openDetailView(state.knowledgeBaseName + ' 首次建库', 'running');
+                    nextStep(1);
+                }, 1200);
+                return;
+            }
+            showToast('维护任务创建成功，正在排队执行。');
+            setTimeout(() => { switchView('view-list'); nextStep(1); }, 1200);
+        }
+
+        // 审核抽屉
+        function openReviewDrawer(tabId) {
+            document.getElementById('drawer-overlay').classList.add('open');
+            document.getElementById('review-drawer').classList.add('open');
+            if (tabId) {
+                const target = document.querySelector('[data-review-tab="' + tabId + '"]');
+                if (target) { switchReviewTab(tabId, target); }
+            }
+            updateDrawerCounter();
+        }
+        function closeReviewDrawer() {
+            document.getElementById('drawer-overlay').classList.remove('open');
+            document.getElementById('review-drawer').classList.remove('open');
+        }
+        function switchReviewTab(tabId, el) {
+            document.querySelectorAll('.review-panel').forEach(panel => panel.classList.add('hidden'));
+            document.getElementById(tabId).classList.remove('hidden');
+            document.querySelectorAll('.drawer-left .review-item').forEach(item => item.classList.remove('active'));
+            el.classList.add('active');
+        }
+        function approveReviewItem() {
+            pendingReviewCount = Math.max(0, pendingReviewCount - 1); updateDrawerCounter();
+            updatePublishGuard();
+            showToast('已保存判定结论，自动跳至下一项。');
+            if(pendingReviewCount <= 0) { setTimeout(closeReviewDrawer, 1000); showToast('全部确认完成，任务继续运行。'); }
+        }
+        function updateDrawerCounter() {
+            const drawerCounter = document.getElementById('drawer-counter');
+            const detailPending = document.getElementById('detail-pending-value');
+            const riskPending = document.getElementById('risk-pending-count');
+            if (drawerCounter) { drawerCounter.innerText = '剩余 ' + pendingReviewCount + ' 项'; }
+            if (detailPending) { detailPending.innerText = pendingReviewCount + ' 项'; }
+            if (riskPending) { riskPending.innerText = pendingReviewCount; }
+        }
+
+        // 版本内容抽屉
+        function openVersionDrawer(title, status, time) {
+            document.getElementById('version-drawer-title').innerText = title;
+            document.getElementById('version-drawer-status').innerText = status;
+            document.getElementById('version-drawer-time').innerText = time;
+            document.getElementById('version-drawer-overlay').classList.add('open');
+            document.getElementById('version-drawer').classList.add('open');
+        }
+
+        function closeVersionDrawer() {
+            document.getElementById('version-drawer-overlay').classList.remove('open');
+            document.getElementById('version-drawer').classList.remove('open');
+        }
+
+        function openIndexContentDrawer(round, title) {
+            document.getElementById('index-content-title').innerText = round + '索引内容';
+            document.getElementById('index-content-subtitle').innerText = title;
+            document.getElementById('index-content-drawer-overlay').classList.add('open');
+            document.getElementById('index-content-drawer').classList.add('open');
+        }
+
+        function closeIndexContentDrawer() {
+            document.getElementById('index-content-drawer-overlay').classList.remove('open');
+            document.getElementById('index-content-drawer').classList.remove('open');
+        }
+
+        // 发布弹窗
+        function openPublishModal() {
+            updatePublishGuard();
+            document.getElementById('publish-modal').classList.add('open');
+        }
+        function closePublishModal() { document.getElementById('publish-modal').classList.remove('open'); }
+        function confirmPublish() {
+            if (pendingReviewCount > 0) {
+                showToast('还有人工确认未完成，不能发布');
+                switchTab('tab-risk', document.querySelectorAll('.tab')[1]);
+                return;
+            }
+            if (!indexReady) {
+                showToast('内容已修改，请先生成检索索引');
+                switchTab('tab-cleaned', document.querySelectorAll('.tab')[2]);
+                return;
+            }
+            closePublishModal();
+            showToast('内容发布成功，线上路由已更新。');
+            document.getElementById('detail-status').className = 'badge badge-published';
+            document.getElementById('detail-status').innerText = '已发布上线';
+            document.getElementById('view-detail').classList.add('published-readonly');
+            updateDetailSummary('published');
+            updatePipelineProgress('published');
+            updateNextAction('published');
+            switchTab('tab-publish-result', document.querySelectorAll('.tab')[5]);
+        }
+
+        // 当前线上内容弹窗
+        function openOnlineContentModal() {
+            document.getElementById('online-content-modal').classList.add('open');
+        }
+
+        function closeOnlineContentModal() {
+            document.getElementById('online-content-modal').classList.remove('open');
+        }
+
+        function openOptimizationModal() {
+            document.getElementById('optimization-modal').classList.add('open');
+        }
+
+        function closeOptimizationModal() {
+            document.getElementById('optimization-modal').classList.remove('open');
+        }
+
+        function confirmOptimization() {
+            const desc = document.getElementById('optimization-desc').value.trim();
+            if (!desc) {
+                showToast('请先填写优化方向描述');
+                return;
+            }
+            closeOptimizationModal();
+            showToast('已启动下一轮优化，系统将按描述重新清洗内容');
+        }
+
+        // 通用 Toast 提示
+        let toastTimeout;
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            toast.innerText = msg;
+            toast.style.opacity = '1';
+            toast.style.transform = 'translate(-50%, 0)';
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translate(-50%, -20px)';
+            }, 2500);
+        }
+    </script>
+</body>
+</html>

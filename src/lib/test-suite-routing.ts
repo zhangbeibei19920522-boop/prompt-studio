@@ -20,6 +20,17 @@ export function getTestRouteTargetId(
 export function normalizeTestSuiteRoute(
   route: Partial<TestSuiteRoute>
 ): TestSuiteRoute {
+  if ((route.intent ?? '').trim() === 'R') {
+    return {
+      intent: 'R',
+      promptId: '',
+      targetType: 'prompt',
+      targetId: '',
+      ragPromptId: (route.ragPromptId ?? '').trim(),
+      ragIndexVersionId: (route.ragIndexVersionId ?? '').trim(),
+    }
+  }
+
   const targetType = getTestRouteTargetType({
     targetType: route.targetType,
   })
@@ -39,5 +50,9 @@ export function normalizeTestSuiteRoute(
 }
 
 export function isTestSuiteRouteComplete(route: TestSuiteRoute): boolean {
+  if (route.intent.trim() === 'R') {
+    return (route.ragPromptId?.trim().length ?? 0) > 0 && (route.ragIndexVersionId?.trim().length ?? 0) > 0
+  }
+
   return route.intent.trim().length > 0 && getTestRouteTargetId(route).trim().length > 0
 }

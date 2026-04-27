@@ -1,6 +1,8 @@
 import { getDb } from '@/lib/db'
 import { nanoid } from 'nanoid'
-import type { TestRun, TestCaseResult, TestReport } from '@/types/database'
+import { findTestSuitesByProject } from '@/lib/db/repositories/test-suites'
+import { countTestCasesBySuite } from '@/lib/db/repositories/test-cases'
+import type { TestRun, TestCaseResult, TestReport, TestSuiteRunProgress } from '@/types/database'
 
 interface TestRunRow {
   id: string
@@ -11,6 +13,18 @@ interface TestRunRow {
   score: number | null
   started_at: string
   completed_at: string | null
+}
+
+function hasEvaluatedResult(result: TestCaseResult): boolean {
+  return (
+    Boolean(result.reason?.trim())
+    || result.replyPassed !== undefined
+    || result.replyScore !== undefined
+    || Boolean(result.replyReason?.trim())
+    || result.intentPassed !== undefined
+    || result.intentScore !== undefined
+    || Boolean(result.intentReason?.trim())
+  )
 }
 
 function mapRowToTestRun(row: TestRunRow): TestRun {
@@ -52,6 +66,38 @@ export function findLatestTestRun(testSuiteId: string): TestRun | null {
     .prepare('SELECT * FROM test_runs WHERE test_suite_id = ? ORDER BY started_at DESC LIMIT 1')
     .get(testSuiteId) as TestRunRow | undefined
   return row ? mapRowToTestRun(row) : null
+}
+
+export function findRunningTestSuiteProgressByProject(projectId: string): TestSuiteRunProgress[] {
+  const suites = findTestSuitesByProject(projectId).filter((suite) => suite.status === 'running')
+
+  return suites.flatMap((suite) => {
+    const latestRun = findLatestTestRun(suite.id)
+    if (!latestRun || latestRun.status !== 'running') {
+      return []
+    }
+
+    const totalCases = countTestCasesBySuite(suite.id)
+    const completedCases = Math.min(latestRun.results.length, totalCases)
+    const evaluatedCases = Math.min(
+      latestRun.results.filter(hasEvaluatedResult).length,
+      totalCases
+    )
+
+    return [
+      {
+        suiteId: suite.id,
+        runId: latestRun.id,
+        status:
+          totalCases > 0 && completedCases >= totalCases
+            ? 'evaluating'
+            : 'running',
+        completedCases,
+        evaluatedCases,
+        totalCases,
+      },
+    ]
+  })
 }
 
 export function createTestRun(testSuiteId: string): TestRun {

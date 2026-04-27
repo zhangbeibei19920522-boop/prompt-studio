@@ -46,6 +46,8 @@ describe("main page workspace layout", () => {
     expect(source).toContain("testSuiteGenerationJobs")
     expect(source).toContain("visibleTestSuites")
     expect(source).toContain('(suite.section ?? "full-flow") === testCanvasSection')
+    expect(source).toContain("refreshTestSuites()")
+    expect(source).toContain("refreshTestSuiteGenerationJobs()")
     expect(source).toContain('setTestCanvasView("list")')
     expect(source).not.toContain("工作台首页")
     expect(source).not.toContain("canvasExpanded")

@@ -12,13 +12,16 @@ import {
 } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 
-const ACCEPTED_EXTENSIONS = [".pdf", ".doc", ".docx", ".txt", ".md"]
+const ACCEPTED_EXTENSIONS = [".pdf", ".doc", ".docx", ".txt", ".md", ".csv", ".xls", ".xlsx"]
 const ACCEPTED_MIME_TYPES = [
   "application/pdf",
   "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "text/plain",
   "text/markdown",
+  "text/csv",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 ]
 
 function formatFileSize(bytes: number): string {

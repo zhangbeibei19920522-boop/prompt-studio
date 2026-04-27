@@ -12,7 +12,7 @@ function isRoutingErrorContent(content: string): boolean {
 
 function isDisplayableIntent(intent: string | null | undefined): intent is string {
   const trimmed = intent?.trim()
-  if (!trimmed || trimmed.length > 40) return false
+  if (!trimmed) return false
   if (trimmed.includes("\n")) return false
   if (/[，。！？：；、"'“”‘’（）()]/.test(trimmed)) return false
   return /^[\p{L}\p{N}_./-]+$/u.test(trimmed)

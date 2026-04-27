@@ -32,6 +32,8 @@ export function TestSuiteGenerationStatus({
   const totalCount = Math.max(job.totalCount, 1)
   const generatedCount = Math.min(job.generatedCount, totalCount)
   const label = job.status === "queued" ? "排队中" : "生成中"
+  const isIndeterminate = generatedCount === 0 && totalCount > 0
+  const width = isIndeterminate ? 36 : getProgressWidth(generatedCount, totalCount)
 
   return (
     <div className="w-[180px] text-right">
@@ -43,8 +45,10 @@ export function TestSuiteGenerationStatus({
       </div>
       <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-200">
         <div
-          className="h-full rounded-full bg-blue-500 transition-all duration-300"
-          style={{ width: `${getProgressWidth(generatedCount, totalCount)}%` }}
+          className={`h-full rounded-full bg-blue-500 transition-all duration-300 ${
+            isIndeterminate ? "animate-pulse" : ""
+          }`}
+          style={{ width: `${width}%` }}
         />
       </div>
     </div>

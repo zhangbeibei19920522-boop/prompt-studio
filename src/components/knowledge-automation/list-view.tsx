@@ -16,9 +16,7 @@ import type { KnowledgePushRecord, KnowledgeTaskRow, KnowledgeVersionRow } from 
 import {
   knowledgeVersionBadgeVariant,
   type CustomerState,
-  type DetailState,
   type DetailMode,
-  type DetailTab,
 } from "./prototype-data"
 
 export type KnowledgeListSection = "versions" | "tasks"
@@ -45,7 +43,7 @@ export function ListView({
   notice?: string | null
   isMutatingVersionId?: string | null
   onCreate: () => void
-  onOpenDetail: (state?: DetailState, tab?: DetailTab, mode?: DetailMode) => void
+  onOpenDetail: (taskId: string) => void
   onOpenVersionDetail?: (knowledgeVersionId: string, mode?: DetailMode) => void
   onPushToStg?: (knowledgeVersionId: string) => Promise<void> | void
   onPushToProd?: (knowledgeVersionId: string) => Promise<void> | void
@@ -254,6 +252,7 @@ export function ListView({
                   <th className="px-5 py-3">负责人</th>
                   <th className="px-5 py-3">当前阶段</th>
                   <th className="px-5 py-3">状态</th>
+                  <th className="px-5 py-3">进度</th>
                   <th className="px-5 py-3">最近更新</th>
                   <th className="px-5 py-3">操作</th>
                 </tr>
@@ -271,22 +270,23 @@ export function ListView({
                           {row.status}
                         </Badge>
                       </td>
+                      <td className="px-5 py-4">
+                        <div className="w-40 space-y-1">
+                          <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+                            <div
+                              className={`h-full rounded-full transition-all ${row.isRunning ? "bg-blue-600" : "bg-emerald-500"}`}
+                              style={{ width: `${Math.max(0, Math.min(100, row.isRunning && row.progress === 0 ? 8 : row.progress))}%` }}
+                            />
+                          </div>
+                          <div className="text-xs text-slate-500">{row.progress}%</div>
+                        </div>
+                      </td>
                       <td className="px-5 py-4 text-slate-600">{row.updatedAt}</td>
                       <td className="px-5 py-4">
                         <Button
                           variant="link"
                           className="h-auto px-0"
-                          onClick={() => {
-                            if (row.knowledgeVersionId) {
-                              onOpenVersionDetail?.(row.knowledgeVersionId, row.status === "进行中" ? "candidate" : "history")
-                              return
-                            }
-                            onOpenDetail(
-                              row.status === "进行中" ? "review" : "ready",
-                              row.status === "进行中" ? "cleaned" : "rounds",
-                              row.status === "进行中" ? "candidate" : "history"
-                            )
-                          }}
+                          onClick={() => onOpenDetail(row.id)}
                         >
                           查看记录
                         </Button>
@@ -295,7 +295,7 @@ export function ListView({
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={7} className="px-5 py-8 text-center text-slate-500">
+                    <td colSpan={8} className="px-5 py-8 text-center text-slate-500">
                       还没有清洗任务记录。
                     </td>
                   </tr>

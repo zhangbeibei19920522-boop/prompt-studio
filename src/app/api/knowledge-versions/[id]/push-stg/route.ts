@@ -12,7 +12,7 @@ export async function POST(
 ) {
   try {
     const { id } = await params
-    const data = pushKnowledgeVersionToStg(id)
+    const data = await pushKnowledgeVersionToStg(id)
     return NextResponse.json({ success: true, data, error: null })
   } catch (error) {
     console.error('[POST /api/knowledge-versions/[id]/push-stg]', error)

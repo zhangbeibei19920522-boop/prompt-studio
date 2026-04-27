@@ -28,6 +28,7 @@ import type {
   PromptVersion,
   TestSuite,
   TestSuiteGenerationJob,
+  TestSuiteRunProgress,
   TestCase,
   TestRun,
   ConversationAuditJob,
@@ -261,6 +262,8 @@ export const testRunsApi = {
     fetchApi<TestRun[]>(`/api/test-suites/${suiteId}/runs`),
   get: (id: string) =>
     fetchApi<TestRun>(`/api/test-runs/${id}`),
+  listRunningByProject: (projectId: string) =>
+    fetchApi<TestSuiteRunProgress[]>(`/api/projects/${projectId}/test-suite-run-progress`),
 }
 
 export const conversationAuditJobsApi = {

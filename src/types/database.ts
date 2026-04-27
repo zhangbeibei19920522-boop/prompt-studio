@@ -102,6 +102,28 @@ export interface KnowledgeCoverageAudit {
   ambiguityRecords: string[]
 }
 
+export interface KnowledgeRetrievalContract {
+  version: number
+  supportsRagRoute: boolean
+  supportsEvidenceAssembly: boolean
+  enrichedMetadataKeys: string[]
+}
+
+export interface KnowledgeArtifactManifest {
+  generatedAt: string
+  profileKey: string
+  projectName: string
+  sourceSummary: Record<string, unknown>
+  stageSummary: KnowledgeStageSummary
+  coverageAudit: KnowledgeCoverageAudit
+  pendingRecords: Array<Record<string, unknown>>
+  blockedRecords: Array<Record<string, unknown>>
+  highRiskRecords: Array<Record<string, unknown>>
+  stageArtifacts: Record<string, Array<Record<string, unknown>>>
+  snapshotHash: string
+  retrievalContract?: KnowledgeRetrievalContract
+}
+
 export interface KnowledgeStageSummary {
   sourceCount: number
   excludedCount: number
@@ -221,6 +243,7 @@ export interface KnowledgeVersion {
   createdAt: string
   updatedAt: string
   publishedAt: string | null
+  manifest?: KnowledgeArtifactManifest | null
   parents?: KnowledgeParent[]
   chunks?: KnowledgeChunk[]
 }
@@ -339,14 +362,22 @@ export type TestGenerationSection = 'full-flow' | 'unit'
 export type TestGenerationStructure = 'single' | 'multi'
 export type TestConversationMode = 'single-turn' | 'multi-turn'
 export type TestGenerationTargetType = 'prompt' | 'index-version'
+export type TestDocumentRouteMode = 'rag' | 'non-r'
 export type TestRoutingTargetType = 'prompt' | 'index-version'
 export type TestSuiteGenerationJobStatus = 'queued' | 'running' | 'completed' | 'failed'
+
+export interface TestGenerationDocumentRouteMode {
+  documentId: string
+  routeMode: TestDocumentRouteMode
+}
 
 export interface TestSuiteRoute {
   intent: string
   promptId: string
   targetType?: TestRoutingTargetType
   targetId?: string
+  ragPromptId?: string
+  ragIndexVersionId?: string
 }
 
 export interface TestSuiteRoutingConfig {
@@ -364,6 +395,21 @@ export interface TestCaseRoutingStep {
   matchedPromptTitle: string | null
   actualReply: string
   routingError?: string | null
+  routeMode?: 'prompt' | 'rag'
+  ragPromptId?: string | null
+  ragIndexVersionId?: string | null
+  retrievalTopK?: number | null
+  selectedDocId?: string | null
+  selectedChunkIds?: string[]
+  selectionMargin?: number | null
+  answerMode?: 'extractive' | 'llm_fallback' | null
+  ingestBackfilled?: boolean
+}
+
+export interface TestCaseGenerationMetadata {
+  sourceDocumentId: string | null
+  sourceDocumentName: string | null
+  sourceRouteMode: TestDocumentRouteMode | null
 }
 
 // 测试集
@@ -407,6 +453,7 @@ export interface TestCase {
   expectedOutput: string
   expectedOutputDiagnostics?: TestCaseRoutingStep[] | null
   expectedIntent: string | null
+  generationMetadata?: TestCaseGenerationMetadata | null
   sortOrder: number
 }
 
@@ -449,6 +496,15 @@ export interface TestRun {
   score: number | null
   startedAt: string
   completedAt: string | null
+}
+
+export interface TestSuiteRunProgress {
+  suiteId: string
+  runId: string
+  status: 'running' | 'evaluating'
+  completedCases: number
+  evaluatedCases: number
+  totalCases: number
 }
 
 export type ConversationAuditJobStatus = 'parsing' | 'draft' | 'running' | 'completed' | 'failed'

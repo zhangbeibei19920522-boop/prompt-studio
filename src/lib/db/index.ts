@@ -276,8 +276,10 @@ export function getDb(): Database.Database {
   )
   ensureColumn(db, 'test_suites', 'workflow_mode', "TEXT NOT NULL DEFAULT 'single'")
   ensureColumn(db, 'test_suites', 'routing_config', 'TEXT')
+  ensureColumn(db, 'test_suite_generation_jobs', 'request_json', 'TEXT')
   ensureColumn(db, 'test_cases', 'expected_output_diagnostics', 'TEXT')
   ensureColumn(db, 'test_cases', 'expected_intent', 'TEXT')
+  ensureColumn(db, 'test_cases', 'generation_metadata_json', 'TEXT')
 
   return db
 }

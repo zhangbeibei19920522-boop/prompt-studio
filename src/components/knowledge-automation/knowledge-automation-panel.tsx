@@ -18,6 +18,7 @@ import {
   buildKnowledgePushRecords,
   buildKnowledgeTaskRows,
   buildKnowledgeVersionRows,
+  resolveEffectiveTaskState,
   type KnowledgePushRecord,
 } from "./model"
 import { VersionDetailView } from "./version-detail-view"
@@ -53,12 +54,14 @@ export function KnowledgeAutomationPanel({
   const [detailState, setDetailState] = useState<DetailState>("risk")
   const [detailMode, setDetailMode] = useState<DetailMode>("candidate")
   const [activeTab, setActiveTab] = useState<DetailTab>("risk")
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const [selectedKnowledgeVersionId, setSelectedKnowledgeVersionId] = useState<string | null>(null)
   const [knowledgeBase, setKnowledgeBase] = useState<KnowledgeBase | null>(initialData?.knowledgeBase ?? null)
   const [tasks, setTasks] = useState<KnowledgeBuildTask[]>(initialData?.tasks ?? [])
   const [versions, setVersions] = useState<KnowledgeVersion[]>(initialData?.versions ?? [])
   const [indexVersions, setIndexVersions] = useState<KnowledgeIndexVersion[]>(initialData?.indexVersions ?? [])
   const [versionDetails, setVersionDetails] = useState<Record<string, KnowledgeVersion>>({})
+  const [loadingVersionIds, setLoadingVersionIds] = useState<Record<string, boolean>>({})
   const [actionNotice, setActionNotice] = useState<string | null>(null)
   const [actionRecords, setActionRecords] = useState<KnowledgePushRecord[]>([])
   const [isLoading, setIsLoading] = useState(Boolean(projectId) && !initialData)
@@ -66,7 +69,7 @@ export function KnowledgeAutomationPanel({
   const [isMutatingVersionId, setIsMutatingVersionId] = useState<string | null>(null)
 
   const versionRows = useMemo(() => buildKnowledgeVersionRows(versions, indexVersions), [versions, indexVersions])
-  const taskRows = useMemo(() => buildKnowledgeTaskRows(tasks), [tasks])
+  const taskRows = useMemo(() => buildKnowledgeTaskRows(tasks, versions), [tasks, versions])
   const generatedPushRecords = useMemo(() => buildKnowledgePushRecords(versions), [versions])
   const pushRecords = useMemo(() => {
     return [...actionRecords, ...generatedPushRecords.filter((record) => {
@@ -80,6 +83,33 @@ export function KnowledgeAutomationPanel({
   const selectedVersion = selectedKnowledgeVersionId
     ? versionDetails[selectedKnowledgeVersionId] ?? versions.find((version) => version.id === selectedKnowledgeVersionId) ?? null
     : null
+  const selectedTask = selectedTaskId ? tasks.find((task) => task.id === selectedTaskId) ?? null : null
+  const selectedTaskVersion = selectedTask?.knowledgeVersionId
+    ? versionDetails[selectedTask.knowledgeVersionId] ??
+      versions.find((version) => version.id === selectedTask.knowledgeVersionId) ??
+      null
+    : null
+
+  const resolveReferenceVersionIdForTask = useCallback((task: KnowledgeBuildTask | null) => {
+    if (!task?.knowledgeVersionId) return null
+    if (task.baseVersionId) return task.baseVersionId
+
+    const orderedVersions = [...versions].sort((left, right) => (right.createdAt || "").localeCompare(left.createdAt || ""))
+    const currentIndex = orderedVersions.findIndex((item) => item.id === task.knowledgeVersionId)
+    if (currentIndex < 0) return null
+    return orderedVersions.slice(currentIndex + 1).find((item) => item.id !== task.knowledgeVersionId)?.id ?? null
+  }, [versions])
+
+  const selectedTaskReferenceVersionId = resolveReferenceVersionIdForTask(selectedTask)
+  const selectedTaskVersionDetailReady = selectedTask?.knowledgeVersionId
+    ? Boolean(versionDetails[selectedTask.knowledgeVersionId]) &&
+      (!selectedTaskReferenceVersionId || Boolean(versionDetails[selectedTaskReferenceVersionId]))
+    : true
+  const selectedTaskVersionLoading = selectedTask?.knowledgeVersionId
+    ? Boolean(loadingVersionIds[selectedTask.knowledgeVersionId]) ||
+      Boolean(selectedTaskReferenceVersionId && loadingVersionIds[selectedTaskReferenceVersionId]) ||
+      !selectedTaskVersionDetailReady
+    : false
 
   const hasKnowledgeBase = Boolean(knowledgeBase)
   const currentVersionLabel =
@@ -123,25 +153,114 @@ export function KnowledgeAutomationPanel({
     void loadKnowledgeData()
   }, [loadKnowledgeData, projectId])
 
-  function openDetail(nextState: DetailState = "risk", nextTab?: DetailTab, nextMode: DetailMode = "candidate") {
-    setDetailState(nextState)
-    setDetailMode(nextMode)
-    setActiveTab(nextTab ?? (nextState === "ready" || nextState === "indexed" ? "rounds" : "risk"))
+  const ensureVersionDetail = useCallback(async (knowledgeVersionId: string) => {
+    if (versionDetails[knowledgeVersionId]) return versionDetails[knowledgeVersionId]
+
+    setLoadingVersionIds((current) => ({ ...current, [knowledgeVersionId]: true }))
+    try {
+      const version = await knowledgeApi.getKnowledgeVersion(knowledgeVersionId)
+      setVersionDetails((current) => ({ ...current, [knowledgeVersionId]: version }))
+      return version
+    } finally {
+      setLoadingVersionIds((current) => ({ ...current, [knowledgeVersionId]: false }))
+    }
+  }, [versionDetails])
+
+  useEffect(() => {
+    if (!projectId) return
+    if (!tasks.some((task) => task.status === "running")) return
+
+    const timer = window.setInterval(() => {
+      void loadKnowledgeData()
+    }, 1000)
+
+    return () => window.clearInterval(timer)
+  }, [loadKnowledgeData, projectId, tasks])
+
+  useEffect(() => {
+    if (!selectedTask?.knowledgeVersionId) return
+
+    const relatedVersionIds = [
+      selectedTask.knowledgeVersionId,
+      resolveReferenceVersionIdForTask(selectedTask),
+    ].filter((value): value is string => Boolean(value))
+
+    const missingVersionIds = relatedVersionIds.filter((knowledgeVersionId) => !versionDetails[knowledgeVersionId])
+    if (missingVersionIds.length === 0) return
+
+    void Promise.allSettled(missingVersionIds.map((knowledgeVersionId) => ensureVersionDetail(knowledgeVersionId))).catch(() => {
+      setActionNotice("加载任务关联知识版本失败")
+    })
+  }, [ensureVersionDetail, resolveReferenceVersionIdForTask, selectedTask, versionDetails])
+
+  function resolveTaskDetailState(task: KnowledgeBuildTask, linkedVersion: KnowledgeVersion | null): {
+    state: DetailState
+    tab: DetailTab
+    mode: DetailMode
+  } {
+    const effectiveTask = resolveEffectiveTaskState(task, linkedVersion ? [linkedVersion] : versions)
+
+    if (linkedVersion?.status === "prod") {
+      return { state: "ready", tab: "rounds", mode: "prod" }
+    }
+
+    if (linkedVersion?.status === "stg") {
+      return { state: "indexed", tab: "recall", mode: "stg" }
+    }
+
+    if (effectiveTask.currentStep === "risk_review") {
+      return { state: "risk", tab: "risk", mode: "candidate" }
+    }
+
+    if (effectiveTask.currentStep === "result_review") {
+      return { state: "review", tab: "cleaned", mode: "candidate" }
+    }
+
+    if (effectiveTask.currentStep === "completed") {
+      return { state: "ready", tab: "rounds", mode: "history" }
+    }
+
+    return { state: "risk", tab: "risk", mode: "candidate" }
+  }
+
+  async function openDetail(taskId: string) {
+    const task = tasks.find((item) => item.id === taskId)
+    if (!task) return
+
+    const linkedVersion = task.knowledgeVersionId
+      ? versionDetails[task.knowledgeVersionId] ??
+        versions.find((version) => version.id === task.knowledgeVersionId) ??
+        null
+      : null
+    const next = resolveTaskDetailState(task, linkedVersion)
+
+    setSelectedTaskId(taskId)
+    setDetailState(next.state)
+    setDetailMode(next.mode)
+    setActiveTab(next.tab)
     setView("detail")
+
+    const relatedVersionIds = [
+      task.knowledgeVersionId,
+      resolveReferenceVersionIdForTask(task),
+    ].filter((value): value is string => Boolean(value))
+
+    const missingVersionIds = relatedVersionIds.filter((knowledgeVersionId) => !versionDetails[knowledgeVersionId])
+    if (missingVersionIds.length > 0) {
+      void Promise.allSettled(missingVersionIds.map((knowledgeVersionId) => ensureVersionDetail(knowledgeVersionId))).catch(() => {
+        setActionNotice("加载任务关联知识版本失败")
+      })
+    }
   }
 
   async function openVersionDetail(knowledgeVersionId: string, nextMode: DetailMode = "history") {
     setSelectedKnowledgeVersionId(knowledgeVersionId)
     setDetailMode(nextMode)
     setView("version-detail")
-
-    if (versionDetails[knowledgeVersionId]) return
-
-    try {
-      const version = await knowledgeApi.getKnowledgeVersion(knowledgeVersionId)
-      setVersionDetails((current) => ({ ...current, [knowledgeVersionId]: version }))
-    } catch (error) {
-      setActionNotice(error instanceof Error ? error.message : "加载知识版本详情失败")
+    if (!versionDetails[knowledgeVersionId]) {
+      void ensureVersionDetail(knowledgeVersionId).catch((error) => {
+        setActionNotice(error instanceof Error ? error.message : "加载知识版本详情失败")
+      })
     }
   }
 
@@ -168,9 +287,8 @@ export function KnowledgeAutomationPanel({
       })
 
       await loadKnowledgeData()
-      setVersionDetails((current) => ({ ...current, [result.version.id]: result.version }))
       setActionNotice(`已启动任务：${result.task.name}`)
-      await openVersionDetail(result.version.id, "history")
+      await openDetail(result.task.id)
     } catch (error) {
       setActionNotice(error instanceof Error ? error.message : "启动任务失败")
       throw error
@@ -284,7 +402,7 @@ export function KnowledgeAutomationPanel({
               notice={actionNotice}
               isMutatingVersionId={isMutatingVersionId}
               onCreate={() => setView("create")}
-              onOpenDetail={openDetail}
+              onOpenDetail={(taskId) => void openDetail(taskId)}
               onOpenVersionDetail={(knowledgeVersionId, mode) => void openVersionDetail(knowledgeVersionId, mode)}
               onPushToStg={(knowledgeVersionId) => handlePushStg(knowledgeVersionId)}
               onPushToProd={(knowledgeVersionId) => handlePushProd(knowledgeVersionId)}
@@ -312,9 +430,19 @@ export function KnowledgeAutomationPanel({
               detailState={detailState}
               detailMode={detailMode}
               activeTab={activeTab}
+              task={selectedTask}
+              version={selectedTaskVersion}
+              isVersionLoading={selectedTaskVersionLoading}
+              hasVersionDetailLoaded={selectedTaskVersionDetailReady}
+              versions={versions}
+              indexVersions={indexVersions}
+              versionDetails={versionDetails}
               onTabChange={setActiveTab}
               onBack={() => setView("list")}
               onSetState={setDetailState}
+              onLoadVersionDetail={async (knowledgeVersionId) => {
+                await ensureVersionDetail(knowledgeVersionId)
+              }}
             />
           )}
           {view === "version-detail" && (

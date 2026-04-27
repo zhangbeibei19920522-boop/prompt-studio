@@ -1,5 +1,9 @@
 import type { StreamEvent, MemoryCommandData, TestSuiteGenerationData, TestSuiteBatchData } from '@/types/ai'
-import type { MessageReference, TestSuiteRoutingConfig } from '@/types/database'
+import type {
+  MessageReference,
+  TestGenerationDocumentRouteMode,
+  TestSuiteRoutingConfig,
+} from '@/types/database'
 import { findKnowledgeIndexVersionById } from '@/lib/db/repositories/knowledge-index-versions'
 import { findPromptById } from '@/lib/db/repositories/prompts'
 import { getTestRouteTargetId, getTestRouteTargetType } from '@/lib/test-suite-routing'
@@ -259,6 +263,7 @@ export async function* handleTestAgentChat(
   references: MessageReference[] = [],
   options: {
     routingConfig?: TestSuiteRoutingConfig | null
+    documentRouteModes?: TestGenerationDocumentRouteMode[]
     persistUserMessage?: boolean
   } = {}
 ): AsyncGenerator<StreamEvent> {
@@ -269,12 +274,12 @@ export async function* handleTestAgentChat(
     const effectiveUserMessage = options.routingConfig
       ? `用户已完成多 Prompt 路由配置。请基于已有需求继续生成测试集。\n入口 Prompt: ${options.routingConfig.entryPromptId}\n路由规则:\n${options.routingConfig.routes
           .map((route) => {
-            const targetType = getTestRouteTargetType(route)
-            const targetId = getTestRouteTargetId(route)
             const targetLabel =
-              targetType === 'index-version'
-                ? `索引版本 ${findKnowledgeIndexVersionById(targetId)?.name ?? targetId}`
-                : `Prompt ${findPromptById(targetId)?.title ?? targetId}`
+              route.intent === 'R'
+                ? `RAG Prompt ${findPromptById(route.ragPromptId ?? '')?.title ?? route.ragPromptId ?? ''} + 索引版本 ${findKnowledgeIndexVersionById(route.ragIndexVersionId ?? '')?.name ?? route.ragIndexVersionId ?? ''}`
+                : getTestRouteTargetType(route) === 'index-version'
+                  ? `索引版本 ${findKnowledgeIndexVersionById(getTestRouteTargetId(route))?.name ?? getTestRouteTargetId(route)}`
+                  : `Prompt ${findPromptById(getTestRouteTargetId(route))?.title ?? getTestRouteTargetId(route)}`
             return `- ${route.intent} -> ${targetLabel}`
           })
           .join('\n')}`
@@ -298,6 +303,7 @@ export async function* handleTestAgentChat(
     const context = collectAgentContext(sessionId, effectiveUserMessage, references)
     const messages = buildTestAgentMessages(context, {
       routingConfig: options.routingConfig,
+      documentRouteModes: options.documentRouteModes,
     })
 
     // 4. Yield context summary for thinking-chain display
@@ -372,6 +378,7 @@ export async function* handleTestAgentChat(
 
         const continuationMessages = buildBatchContinuationMessages(context, batchBlock, allCases, {
           routingConfig: options.routingConfig,
+          documentRouteModes: options.documentRouteModes,
         })
 
         let batchAccumulated = ''

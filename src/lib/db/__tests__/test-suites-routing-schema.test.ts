@@ -106,6 +106,14 @@ describe('test suite routing schema', () => {
               intent: 'refund',
               promptId: 'prompt-b',
             },
+            {
+              intent: 'R',
+              promptId: '',
+              targetType: 'prompt',
+              targetId: '',
+              ragPromptId: 'prompt-b',
+              ragIndexVersionId: 'index-1',
+            },
           ],
         },
       })
@@ -117,7 +125,17 @@ describe('test suite routing schema', () => {
         workflowMode: 'routing',
         routingConfig: {
           entryPromptId: 'prompt-a',
-          routes: [{ intent: 'refund', promptId: 'prompt-b' }],
+          routes: [
+            { intent: 'refund', promptId: 'prompt-b' },
+            {
+              intent: 'R',
+              promptId: '',
+              targetType: 'prompt',
+              targetId: '',
+              ragPromptId: 'prompt-b',
+              ragIndexVersionId: 'index-1',
+            },
+          ],
         },
       })
 
@@ -127,9 +145,19 @@ describe('test suite routing schema', () => {
         input: '我要退款',
         expectedIntent: 'refund',
         expectedOutput: '请提供订单号，我们为您处理退款。',
+        generationMetadata: {
+          sourceDocumentId: 'doc-refund',
+          sourceDocumentName: '退款政策.docx',
+          sourceRouteMode: 'rag',
+        },
       })
 
       expect(createdCase.expectedIntent).toBe('refund')
+      expect(createdCase.generationMetadata).toEqual({
+        sourceDocumentId: 'doc-refund',
+        sourceDocumentName: '退款政策.docx',
+        sourceRouteMode: 'rag',
+      })
 
       const batchCases = testContext.repositories.createTestCasesBatch(suite.id, [
         {
@@ -137,10 +165,20 @@ describe('test suite routing schema', () => {
           input: '我要换货',
           expectedIntent: 'exchange',
           expectedOutput: '请提供订单号，我们为您处理换货。',
+          generationMetadata: {
+            sourceDocumentId: 'doc-exchange',
+            sourceDocumentName: '换货说明.docx',
+            sourceRouteMode: 'non-r',
+          },
         },
       ])
 
       expect(batchCases[0]?.expectedIntent).toBe('exchange')
+      expect(batchCases[0]?.generationMetadata).toEqual({
+        sourceDocumentId: 'doc-exchange',
+        sourceDocumentName: '换货说明.docx',
+        sourceRouteMode: 'non-r',
+      })
 
       const cases = testContext.repositories.findTestCasesBySuite(suite.id)
       expect(cases).toEqual(
@@ -148,10 +186,20 @@ describe('test suite routing schema', () => {
           expect.objectContaining({
             title: 'Refund case',
             expectedIntent: 'refund',
+            generationMetadata: {
+              sourceDocumentId: 'doc-refund',
+              sourceDocumentName: '退款政策.docx',
+              sourceRouteMode: 'rag',
+            },
           }),
           expect.objectContaining({
             title: 'Exchange case',
             expectedIntent: 'exchange',
+            generationMetadata: {
+              sourceDocumentId: 'doc-exchange',
+              sourceDocumentName: '换货说明.docx',
+              sourceRouteMode: 'non-r',
+            },
           }),
         ])
       )

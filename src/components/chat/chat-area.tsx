@@ -65,7 +65,7 @@ function ContextLog({ summary }: { summary: AgentContextSummary }) {
 interface ChatAreaProps {
   messages: Message[]
   sessionId: string | null
-  prompts: Array<{ id: string; title: string }>
+  prompts: Array<{ id: string; title: string; content?: string }>
   documents: Array<{ id: string; name: string }>
   indexVersions: Array<{ id: string; title: string }>
   onMessagesChange: () => void

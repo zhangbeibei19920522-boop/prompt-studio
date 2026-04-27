@@ -9,10 +9,12 @@ import {
   getConfiguredSuiteWorkflowMode,
   isValidConversationMode,
   isValidSection,
+  isValidSuiteLanguage,
   isValidStructure,
   isValidTargetType,
+  validateGenerationDocumentRouteModes,
 } from '@/lib/test-suite-generation/configured-generation'
-import { runConfiguredTestSuiteGenerationJob } from '@/lib/test-suite-generation/run-configured-suite-generation'
+import { scheduleConfiguredTestSuiteGenerationJob } from '@/lib/test-suite-generation/job-scheduler'
 import type {
   GenerateConfiguredTestSuiteRequest,
   GenerateConfiguredTestSuiteResponse,
@@ -30,10 +32,18 @@ export async function POST(
       !isValidSection(body.section) ||
       !isValidStructure(body.structure) ||
       !isValidTargetType(body.targetType) ||
-      !isValidConversationMode(body.conversationMode)
+      !isValidConversationMode(body.conversationMode) ||
+      !isValidSuiteLanguage(body.suiteLanguage)
     ) {
       return NextResponse.json(
         { success: false, data: null, error: 'Invalid test suite generation config' },
+        { status: 400 }
+      )
+    }
+
+    if (typeof body.suiteName !== 'string' || body.suiteName.trim().length === 0) {
+      return NextResponse.json(
+        { success: false, data: null, error: 'suiteName is required' },
         { status: 400 }
       )
     }
@@ -48,6 +58,22 @@ export async function POST(
     if (typeof body.caseCount !== 'number' || body.caseCount <= 0) {
       return NextResponse.json(
         { success: false, data: null, error: 'caseCount must be a positive number' },
+        { status: 400 }
+      )
+    }
+
+    try {
+      validateGenerationDocumentRouteModes({
+        generationSourceIds: body.generationSourceIds,
+        generationDocumentRouteModes: body.generationDocumentRouteModes,
+      })
+    } catch (error) {
+      return NextResponse.json(
+        {
+          success: false,
+          data: null,
+          error: error instanceof Error ? error.message : 'Invalid document route mode config',
+        },
         { status: 400 }
       )
     }
@@ -107,16 +133,15 @@ export async function POST(
       projectId,
       suiteId: suite.id,
       totalCount: generationRequest.caseCount,
+      request: generationRequest,
     })
 
-    setTimeout(() => {
-      void runConfiguredTestSuiteGenerationJob({
-        projectId,
-        suiteId: suite.id,
-        jobId: job.id,
-        request: generationRequest,
-      })
-    }, 0)
+    scheduleConfiguredTestSuiteGenerationJob({
+      projectId,
+      suiteId: suite.id,
+      jobId: job.id,
+      request: generationRequest,
+    })
 
     return NextResponse.json(
       {

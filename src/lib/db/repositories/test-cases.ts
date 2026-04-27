@@ -11,6 +11,7 @@ interface TestCaseRow {
   expected_output: string
   expected_output_diagnostics: string | null
   expected_intent: string | null
+  generation_metadata_json: string | null
   sort_order: number
 }
 
@@ -31,6 +32,14 @@ function mapRowToTestCase(row: TestCaseRow): TestCase {
       }
     })(),
     expectedIntent: row.expected_intent,
+    generationMetadata: (() => {
+      if (!row.generation_metadata_json) return null
+      try {
+        return JSON.parse(row.generation_metadata_json) as TestCase['generationMetadata']
+      } catch {
+        return null
+      }
+    })(),
     sortOrder: row.sort_order,
   }
 }
@@ -57,6 +66,7 @@ export function createTestCase(data: {
   expectedOutput: string
   expectedOutputDiagnostics?: TestCase['expectedOutputDiagnostics']
   expectedIntent?: string | null
+  generationMetadata?: TestCase['generationMetadata']
   sortOrder?: number
 }): TestCase {
   const db = getDb()
@@ -80,9 +90,10 @@ export function createTestCase(data: {
       expected_output,
       expected_output_diagnostics,
       expected_intent,
+      generation_metadata_json,
       sort_order
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     data.testSuiteId,
@@ -92,6 +103,7 @@ export function createTestCase(data: {
     data.expectedOutput,
     data.expectedOutputDiagnostics ? JSON.stringify(data.expectedOutputDiagnostics) : null,
     data.expectedIntent ?? null,
+    data.generationMetadata ? JSON.stringify(data.generationMetadata) : null,
     sortOrder
   )
 
@@ -104,6 +116,7 @@ export function createTestCase(data: {
     expectedOutput: data.expectedOutput,
     expectedOutputDiagnostics: data.expectedOutputDiagnostics ?? null,
     expectedIntent: data.expectedIntent ?? null,
+    generationMetadata: data.generationMetadata ?? null,
     sortOrder,
   }
 }
@@ -117,6 +130,7 @@ export function updateTestCase(
     expectedOutput?: string
     expectedOutputDiagnostics?: TestCase['expectedOutputDiagnostics']
     expectedIntent?: string | null
+    generationMetadata?: TestCase['generationMetadata']
     sortOrder?: number
   }
 ): TestCase | null {
@@ -153,6 +167,10 @@ export function updateTestCase(
     fields.push('expected_intent = ?')
     values.push(data.expectedIntent)
   }
+  if (data.generationMetadata !== undefined) {
+    fields.push('generation_metadata_json = ?')
+    values.push(data.generationMetadata ? JSON.stringify(data.generationMetadata) : null)
+  }
   if (data.sortOrder !== undefined) {
     fields.push('sort_order = ?')
     values.push(data.sortOrder)
@@ -181,6 +199,7 @@ export function createTestCasesBatch(
     expectedOutput: string
     expectedOutputDiagnostics?: TestCase['expectedOutputDiagnostics']
     expectedIntent?: string | null
+    generationMetadata?: TestCase['generationMetadata']
     sortOrder?: number
   }[]
 ): TestCase[] {
@@ -201,9 +220,10 @@ export function createTestCasesBatch(
       expected_output,
       expected_output_diagnostics,
       expected_intent,
+      generation_metadata_json,
       sort_order
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
 
   const created: TestCase[] = []
@@ -221,6 +241,7 @@ export function createTestCasesBatch(
         c.expectedOutput ?? '',
         c.expectedOutputDiagnostics ? JSON.stringify(c.expectedOutputDiagnostics) : null,
         c.expectedIntent ?? null,
+        c.generationMetadata ? JSON.stringify(c.generationMetadata) : null,
         sortOrder
       )
       created.push({
@@ -232,6 +253,7 @@ export function createTestCasesBatch(
         expectedOutput: c.expectedOutput,
         expectedOutputDiagnostics: c.expectedOutputDiagnostics ?? null,
         expectedIntent: c.expectedIntent ?? null,
+        generationMetadata: c.generationMetadata ?? null,
         sortOrder,
       })
     }
@@ -240,4 +262,35 @@ export function createTestCasesBatch(
   insertAll()
 
   return created
+}
+
+export function replaceTestCasesForSuite(
+  testSuiteId: string,
+  cases: {
+    title: string
+    context?: string
+    input: string
+    expectedOutput: string
+    expectedOutputDiagnostics?: TestCase['expectedOutputDiagnostics']
+    expectedIntent?: string | null
+    generationMetadata?: TestCase['generationMetadata']
+    sortOrder?: number
+  }[]
+): TestCase[] {
+  const db = getDb()
+
+  const replaceAll = db.transaction(() => {
+    db.prepare('DELETE FROM test_cases WHERE test_suite_id = ?').run(testSuiteId)
+    return createTestCasesBatch(testSuiteId, cases)
+  })
+
+  return replaceAll()
+}
+
+export function countTestCasesBySuite(testSuiteId: string): number {
+  const db = getDb()
+  const row = db
+    .prepare('SELECT COUNT(*) as total FROM test_cases WHERE test_suite_id = ?')
+    .get(testSuiteId) as { total: number }
+  return row.total
 }

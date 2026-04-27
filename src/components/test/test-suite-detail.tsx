@@ -45,7 +45,7 @@ interface TestSuiteDetailProps {
   suite: TestSuite
   cases: TestCase[]
   latestRun: TestRun | null
-  prompts: Array<{ id: string; title: string }>
+  prompts: Array<{ id: string; title: string; content?: string }>
   indexVersions: Array<{ id: string; title: string }>
   onSuiteUpdate: () => void
   onCaseUpdate: () => void
@@ -57,6 +57,18 @@ interface RunProgress {
   total: number
   results: TestCaseResult[]
   report: TestReport | null
+}
+
+function hasPersistedEvaluation(result: TestCaseResult): boolean {
+  return (
+    Boolean(result.reason?.trim())
+    || result.replyPassed !== undefined
+    || result.replyScore !== undefined
+    || Boolean(result.replyReason?.trim())
+    || result.intentPassed !== undefined
+    || result.intentScore !== undefined
+    || Boolean(result.intentReason?.trim())
+  )
 }
 
 function getStatusLabel(status: string): string {
@@ -125,6 +137,26 @@ export function TestSuiteDetail({
 
   const latestResults = runProgress?.results ?? latestRun?.results ?? []
   const latestReport = runProgress?.report ?? latestRun?.report ?? null
+  const persistedRunProgress =
+    !isRunning && latestRun?.status === "running"
+      ? (() => {
+          const total = cases.length
+          const completed = Math.min(latestRun.results.length, total)
+          const phase = total > 0 && completed >= total ? "evaluating" as const : "running" as const
+
+          return {
+            phase,
+            current:
+              phase === "evaluating"
+                ? Math.min(latestRun.results.filter(hasPersistedEvaluation).length, total)
+                : completed,
+            total,
+            results: latestRun.results,
+            report: latestRun.report,
+          }
+        })()
+      : null
+  const visibleRunProgress = isRunning ? runProgress : persistedRunProgress
 
   function getResultForCase(caseId: string): TestCaseResult | undefined {
     return latestResults.find((r) => r.testCaseId === caseId)
@@ -415,15 +447,15 @@ export function TestSuiteDetail({
       )}
 
       {/* Run progress */}
-      {isRunning && runProgress && (
+      {visibleRunProgress && (
         <Card>
           <CardContent className="pt-4">
             <div className="flex items-center gap-3">
               <Loader2 className="size-4 animate-spin text-blue-500" />
               <span className="text-sm">
-                {runProgress.phase === "running"
-                  ? `执行中 ${runProgress.current}/${runProgress.total}`
-                  : `评估中 ${runProgress.current}/${runProgress.total}`}
+                {visibleRunProgress.phase === "running"
+                  ? `执行中 ${visibleRunProgress.current}/${visibleRunProgress.total}`
+                  : `评估中 ${visibleRunProgress.current}/${visibleRunProgress.total}`}
               </span>
             </div>
           </CardContent>
@@ -577,15 +609,11 @@ export function TestSuiteDetail({
                     </>
                   ) : (
                     <>
-                      {/* No results yet: show input and expected output separately */}
-                      <div>
-                        <p className="text-xs font-medium text-muted-foreground mb-1">输入</p>
-                        <p className="text-sm whitespace-pre-wrap bg-muted/50 rounded p-2">{tc.input}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium text-muted-foreground mb-1">期望输出</p>
-                        <p className="text-sm whitespace-pre-wrap bg-muted/50 rounded p-2">{tc.expectedOutput}</p>
-                      </div>
+                      <ConversationPanel
+                        title="预期对话"
+                        turns={parseExpectedConversationOutput(tc.input, tc.expectedOutput)}
+                        showIntentBadges
+                      />
                       {suite.workflowMode === "routing" && tc.expectedOutputDiagnostics?.length ? (
                         <RoutingStepDiagnosticsDetails
                           title="预期结果生成诊断"
@@ -599,6 +627,26 @@ export function TestSuiteDetail({
                         </div>
                       )}
                     </>
+                  )}
+                  {tc.generationMetadata && (
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-1">来源文档</p>
+                        <p className="text-sm whitespace-pre-wrap bg-muted/50 rounded p-2">
+                          {tc.generationMetadata.sourceDocumentName ?? tc.generationMetadata.sourceDocumentId ?? "-"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-1">来源归类</p>
+                        <p className="text-sm whitespace-pre-wrap bg-muted/50 rounded p-2">
+                          {tc.generationMetadata.sourceRouteMode === "rag"
+                            ? "R"
+                            : tc.generationMetadata.sourceRouteMode === "non-r"
+                              ? "非 R"
+                              : "-"}
+                        </p>
+                      </div>
+                    </div>
                   )}
                   <div className="flex gap-2 pt-1">
                     <Button

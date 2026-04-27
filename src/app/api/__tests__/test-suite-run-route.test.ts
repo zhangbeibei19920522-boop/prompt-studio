@@ -104,6 +104,7 @@ async function setupTestSuiteRunRouteTest() {
   )
 
   return {
+    db,
     cleanup() {
       db.close()
       process.chdir(originalCwd)
@@ -146,6 +147,86 @@ describe("test suite run route", () => {
       await response.text()
 
       expect(captured.signal).toBe(request.signal)
+    } finally {
+      testContext.cleanup()
+    }
+  })
+
+  it("loads ragPromptId prompts into routePrompts for R routes", async () => {
+    const testContext = await setupTestSuiteRunRouteTest()
+    const captured: { routePrompts: Record<string, { id: string }> | null } = { routePrompts: null }
+    const now = "2026-04-23T00:00:00.000Z"
+
+    testContext.db.prepare(`
+      INSERT INTO prompts (
+        id,
+        project_id,
+        title,
+        content,
+        description,
+        tags,
+        variables,
+        version,
+        status,
+        created_at,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run("prompt-rag", "project-1", "RAG Reply", "Use this evidence:\n{rag_qas_text}", "", "[]", "[]", 1, "active", now, now)
+
+    testContext.db.prepare(`
+      UPDATE test_suites
+      SET workflow_mode = ?, routing_config = ?, prompt_id = ?
+      WHERE id = ?
+    `).run(
+      "routing",
+      JSON.stringify({
+        entryPromptId: "prompt-a",
+        routes: [
+          {
+            intent: "R",
+            promptId: "",
+            targetType: "prompt",
+            targetId: "",
+            ragPromptId: "prompt-rag",
+            ragIndexVersionId: "index-1",
+          },
+        ],
+      }),
+      null,
+      "suite-1",
+    )
+
+    vi.doMock("@/lib/ai/test-runner", () => ({
+      runTestSuite: vi.fn(async function* (
+        _runId: string,
+        _suite: unknown,
+        _cases: unknown,
+        _prompt: unknown,
+        options?: { routePrompts?: Record<string, { id: string }> }
+      ) {
+        captured.routePrompts = options?.routePrompts ?? null
+        yield { type: "test-complete", data: { runId: "run-1", score: 100 } }
+      }),
+    }))
+
+    try {
+      const { POST } = await import("@/app/api/test-suites/[id]/run/route")
+      const request = new Request("http://localhost", {
+        method: "POST",
+        body: JSON.stringify({}),
+      })
+
+      const response = await POST(request as never, {
+        params: Promise.resolve({ id: "suite-1" }),
+      })
+
+      await response.text()
+
+      expect(captured.routePrompts).toEqual({
+        "prompt-rag": expect.objectContaining({
+          id: "prompt-rag",
+        }),
+      })
     } finally {
       testContext.cleanup()
     }

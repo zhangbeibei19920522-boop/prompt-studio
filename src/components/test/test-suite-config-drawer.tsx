@@ -26,8 +26,11 @@ import {
   normalizeTestSuiteRoute,
 } from "@/lib/test-suite-routing"
 import { cn } from "@/lib/utils"
-import type { TestSuiteRoutingConfig } from "@/types/database"
-import { TestRoutingConfigForm } from "./test-routing-config-dialog"
+import type {
+  TestGenerationDocumentRouteMode,
+  TestSuiteRoutingConfig,
+} from "@/types/database"
+import { getRagRouteValidationError, TestRoutingConfigForm } from "./test-routing-config-dialog"
 import { buildRoutesFromPrompts, findUniquePromptMatch } from "./routing-config-utils"
 
 export type TestSuiteConfigDrawerSection = "full-flow" | "unit"
@@ -37,6 +40,8 @@ type UnitTestTarget = "prompt" | "index-version"
 
 export interface TestSuiteConfigSubmitPayload {
   section: TestSuiteConfigDrawerSection
+  suiteName: string
+  suiteLanguage: "zh" | "en"
   structure: TestStructure
   promptId: string | null
   routingConfig: TestSuiteRoutingConfig | null
@@ -49,12 +54,13 @@ export interface TestSuiteConfigSubmitPayload {
   minTurns: number | null
   maxTurns: number | null
   generationSourceIds: string[]
+  generationDocumentRouteModes: TestGenerationDocumentRouteMode[]
 }
 
 interface TestSuiteConfigDrawerProps {
   open: boolean
   section: TestSuiteConfigDrawerSection
-  prompts: Array<{ id: string; title: string }>
+  prompts: Array<{ id: string; title: string; content?: string }>
   documents: Array<{ id: string; name: string }>
   indexVersions: Array<{ id: string; title: string }>
   onClose: () => void
@@ -71,11 +77,20 @@ function getDrawerDescription(section: TestSuiteConfigDrawerSection) {
     : "配置业务流程、对话范围和用例生成来源。"
 }
 
-function isRoutingConfigComplete(routingConfig: TestSuiteRoutingConfig) {
+function isRoutingConfigComplete(
+  routingConfig: TestSuiteRoutingConfig,
+  prompts: Array<{ id: string; title: string; content?: string }>
+) {
   return (
     routingConfig.entryPromptId.trim().length > 0 &&
     routingConfig.routes.length > 0 &&
-    routingConfig.routes.every((route) => isTestSuiteRouteComplete(normalizeTestSuiteRoute(route)))
+    routingConfig.routes.every((route) => {
+      const normalizedRoute = normalizeTestSuiteRoute(route)
+      return (
+        isTestSuiteRouteComplete(normalizedRoute) &&
+        !getRagRouteValidationError(normalizedRoute, prompts)
+      )
+    })
   )
 }
 
@@ -83,6 +98,38 @@ type GenerationSourceOption = {
   id: string
   label: string
   group: "Prompt" | "文档库"
+}
+
+function getSelectedGenerationDocumentIds(generationSourceIds: string[]) {
+  return generationSourceIds
+    .filter((sourceId) => sourceId.startsWith("document:"))
+    .map((sourceId) => sourceId.replace(/^document:/, "").trim())
+    .filter((documentId) => documentId.length > 0)
+}
+
+export function syncGenerationDocumentRouteModes(
+  generationSourceIds: string[],
+  currentModes: TestGenerationDocumentRouteMode[]
+) {
+  const selectedDocumentIds = getSelectedGenerationDocumentIds(generationSourceIds)
+  const modeByDocumentId = new Map(currentModes.map((mode) => [mode.documentId, mode]))
+
+  return selectedDocumentIds.map((documentId) => {
+    const existing = modeByDocumentId.get(documentId)
+    return existing ?? { documentId, routeMode: "non-r" as const }
+  })
+}
+
+export function summarizeGenerationDocumentRouteModes(
+  generationDocumentRouteModes: TestGenerationDocumentRouteMode[]
+) {
+  if (generationDocumentRouteModes.length === 0) {
+    return null
+  }
+
+  const ragCount = generationDocumentRouteModes.filter((mode) => mode.routeMode === "rag").length
+  const nonRCount = generationDocumentRouteModes.length - ragCount
+  return `文档：${ragCount} 份走 R，${nonRCount} 份走非 R`
 }
 
 export function TestSuiteConfigDrawer({
@@ -98,6 +145,8 @@ export function TestSuiteConfigDrawer({
     entryPromptId: prompts[0]?.id ?? "",
     routes: [{ intent: "", promptId: "", targetType: "prompt", targetId: "" }],
   })
+  const [suiteName, setSuiteName] = useState("")
+  const [suiteLanguage, setSuiteLanguage] = useState<"zh" | "en">("zh")
   const [targetType, setTargetType] = useState<UnitTestTarget>("prompt")
   const [targetId, setTargetId] = useState(prompts[0]?.id ?? indexVersions[0]?.id ?? "")
   const [embeddingRequestUrl, setEmbeddingRequestUrl] = useState("")
@@ -113,17 +162,20 @@ export function TestSuiteConfigDrawer({
       ...prompts.map((prompt) => ({
         id: `prompt:${prompt.id}`,
         label: prompt.title,
-        group: "Prompt",
+        group: "Prompt" as const,
       })),
       ...documents.map((document) => ({
         id: `document:${document.id}`,
         label: document.name,
-        group: "文档库",
+        group: "文档库" as const,
       })),
     ],
     [documents, prompts]
   )
   const [generationSourceIds, setGenerationSourceIds] = useState<string[]>([])
+  const [generationDocumentRouteModes, setGenerationDocumentRouteModes] = useState<
+    TestGenerationDocumentRouteMode[]
+  >([])
   const structure: TestStructure = section === "full-flow" ? "multi" : "single"
 
   if (!open) {
@@ -136,6 +188,7 @@ export function TestSuiteConfigDrawer({
   const needsTurnRange = conversationMode === "multi-turn"
 
   const isBaseValid =
+    suiteName.trim().length > 0 &&
     Number.isFinite(numericCaseCount) &&
     numericCaseCount > 0 &&
     generationSourceIds.length > 0 &&
@@ -153,6 +206,9 @@ export function TestSuiteConfigDrawer({
   )
   const filteredPromptSources = filteredGenerationSourceOptions.filter((option) => option.group === "Prompt")
   const filteredDocumentSources = filteredGenerationSourceOptions.filter((option) => option.group === "文档库")
+  const selectedGenerationDocumentRouteSummary = summarizeGenerationDocumentRouteModes(
+    generationDocumentRouteModes
+  )
   const generationSourceSummary =
     selectedGenerationSources.length === 0
       ? "未选择来源"
@@ -160,17 +216,34 @@ export function TestSuiteConfigDrawer({
         ? `已选择：${selectedGenerationSources[0]?.label ?? "1 个来源"}`
         : `已选择 ${selectedGenerationSources.length} 个来源`
 
+  function updateGenerationSources(nextSourceIds: string[] | ((current: string[]) => string[])) {
+    setGenerationSourceIds((current) => {
+      const resolved =
+        typeof nextSourceIds === "function" ? nextSourceIds(current) : nextSourceIds
+      setGenerationDocumentRouteModes((currentModes) =>
+        syncGenerationDocumentRouteModes(resolved, currentModes)
+      )
+      return resolved
+    })
+  }
+
   function toggleGenerationSource(optionId: string) {
-    setGenerationSourceIds((current) =>
+    updateGenerationSources((current) =>
       current.includes(optionId)
         ? current.filter((currentId) => currentId !== optionId)
         : [...current, optionId]
     )
   }
 
+  function setDocumentRouteMode(documentId: string, routeMode: TestGenerationDocumentRouteMode["routeMode"]) {
+    setGenerationDocumentRouteModes((current) =>
+      current.map((mode) => (mode.documentId === documentId ? { ...mode, routeMode } : mode))
+    )
+  }
+
   const canSubmit =
     section === "full-flow"
-      ? isBaseValid && isRoutingConfigComplete(routingConfig)
+      ? isBaseValid && isRoutingConfigComplete(routingConfig, prompts)
       : isBaseValid &&
         targetId.length > 0 &&
         (targetType !== "index-version" ||
@@ -181,6 +254,8 @@ export function TestSuiteConfigDrawer({
 
     onSubmit({
       section,
+      suiteName: suiteName.trim(),
+      suiteLanguage,
       structure,
       promptId: null,
       routingConfig: section === "full-flow" ? routingConfig : null,
@@ -199,6 +274,7 @@ export function TestSuiteConfigDrawer({
       minTurns: needsTurnRange ? numericMinTurns : null,
       maxTurns: needsTurnRange ? numericMaxTurns : null,
       generationSourceIds,
+      generationDocumentRouteModes,
     })
   }
 
@@ -235,6 +311,28 @@ export function TestSuiteConfigDrawer({
 
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
           <div className="space-y-6">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">测试集名称</label>
+              <Input
+                value={suiteName}
+                onChange={(event) => setSuiteName(event.target.value)}
+                placeholder="输入测试集名称"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">测试集语言</label>
+              <Select value={suiteLanguage} onValueChange={(value) => setSuiteLanguage(value as "zh" | "en")}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="选择测试集语言" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="zh">中文</SelectItem>
+                  <SelectItem value="en">英文</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             {section === "full-flow" ? (
               <div className="space-y-3">
                 <div>
@@ -454,6 +552,9 @@ export function TestSuiteConfigDrawer({
                   <div className="min-w-0 flex-1">
                     <p className="text-sm text-zinc-950">{generationSourceSummary}</p>
                     <p className="mt-1 text-xs text-zinc-500">支持混选 Prompt 和文档库内容。</p>
+                    {selectedGenerationDocumentRouteSummary ? (
+                      <p className="mt-1 text-xs text-zinc-500">{selectedGenerationDocumentRouteSummary}</p>
+                    ) : null}
                   </div>
                   <Button type="button" variant="outline" onClick={() => setGenerationSourcePickerOpen(true)}>
                     选择来源
@@ -509,9 +610,14 @@ export function TestSuiteConfigDrawer({
             />
 
             <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
-              <span className="text-zinc-500">{generationSourceSummary}</span>
+              <div className="space-y-1">
+                <div className="text-zinc-500">{generationSourceSummary}</div>
+                {selectedGenerationDocumentRouteSummary ? (
+                  <div className="text-zinc-500">{selectedGenerationDocumentRouteSummary}</div>
+                ) : null}
+              </div>
               <div className="flex gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={() => setGenerationSourceIds([])}>
+                <Button type="button" variant="outline" size="sm" onClick={() => updateGenerationSources([])}>
                   清空
                 </Button>
                 <Button
@@ -519,7 +625,7 @@ export function TestSuiteConfigDrawer({
                   variant="outline"
                   size="sm"
                   onClick={() =>
-                    setGenerationSourceIds(
+                    updateGenerationSources(
                       filteredGenerationSourceOptions.map((option) => option.id)
                     )
                   }
@@ -610,6 +716,88 @@ export function TestSuiteConfigDrawer({
                     </div>
                   )}
                 </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-zinc-950">文档路由归类</p>
+                    <p className="mt-1 text-xs text-zinc-500">仅对已选中的文档配置走 R 或走非 R。</p>
+                  </div>
+                  {generationDocumentRouteModes.length > 0 ? (
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setGenerationDocumentRouteModes((current) =>
+                            current.map((mode) => ({ ...mode, routeMode: "rag" }))
+                          )
+                        }
+                      >
+                        已选文档全部标为 R
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setGenerationDocumentRouteModes((current) =>
+                            current.map((mode) => ({ ...mode, routeMode: "non-r" }))
+                          )
+                        }
+                      >
+                        已选文档全部标为非 R
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+
+                {generationDocumentRouteModes.length > 0 ? (
+                  <div className="space-y-2">
+                    {generationDocumentRouteModes.map((mode) => {
+                      const document = documents.find((item) => item.id === mode.documentId)
+                      return (
+                        <div
+                          key={mode.documentId}
+                          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-white px-3 py-3"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium text-zinc-950">
+                              {document?.name ?? mode.documentId}
+                            </p>
+                            <p className="mt-1 text-xs text-zinc-500">
+                              {mode.routeMode === "rag" ? "当前配置：走 R" : "当前配置：走非 R"}
+                            </p>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              type="button"
+                              variant={mode.routeMode === "rag" ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setDocumentRouteMode(mode.documentId, "rag")}
+                            >
+                              走 R
+                            </Button>
+                            <Button
+                              type="button"
+                              variant={mode.routeMode === "non-r" ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setDocumentRouteMode(mode.documentId, "non-r")}
+                            >
+                              走非 R
+                            </Button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-zinc-200 px-3 py-4 text-sm text-zinc-500">
+                    选中文档后可配置走 R 或走非 R。
+                  </div>
+                )}
               </div>
             </div>
           </div>

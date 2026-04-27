@@ -240,6 +240,17 @@ describe("routing test result details", () => {
     expect(source).toContain("tc.expectedOutputDiagnostics")
   })
 
+  it("renders generation metadata for document-constrained cases", () => {
+    const source = fs.readFileSync(
+      path.join(process.cwd(), "src/components/test/test-suite-detail.tsx"),
+      "utf8"
+    )
+
+    expect(source).toContain("tc.generationMetadata")
+    expect(source).toContain("来源文档")
+    expect(source).toContain("来源归类")
+  })
+
   it("shows the 路由配置 header action only for routing suites", () => {
     const baseSuite = {
       id: "suite-1",
@@ -337,6 +348,16 @@ describe("routing test result details", () => {
     expect(source).toContain("parseExpectedConversationOutput")
   })
 
+  it("uses a conversation layout for draft cases before the first run", () => {
+    const source = fs.readFileSync(
+      path.join(process.cwd(), "src/components/test/test-suite-detail.tsx"),
+      "utf8"
+    )
+
+    expect(source).not.toContain("No results yet: show input and expected output separately")
+    expect(source).toContain('title="预期对话"')
+  })
+
   it("includes a header action to regenerate expected outputs for the suite", () => {
     const source = fs.readFileSync(
       path.join(process.cwd(), "src/components/test/test-suite-detail.tsx"),
@@ -369,6 +390,161 @@ describe("routing test result details", () => {
     expect(source).toContain("handleStopRun")
     expect(source).toContain("runAbortControllerRef.current?.abort()")
     expect(source).toContain("signal: controller.signal")
+  })
+
+  it("renders persisted running progress when reopening a suite detail during execution", () => {
+    const html = renderToStaticMarkup(
+      <TestSuiteDetail
+        suite={{
+          id: "suite-1",
+          projectId: "project-1",
+          sessionId: null,
+          section: "full-flow",
+          name: "Running Suite",
+          description: "",
+          promptId: "prompt-a",
+          promptVersionId: null,
+          workflowMode: "single",
+          routingConfig: null,
+          config: {
+            provider: "openai",
+            model: "gpt-4.1",
+            apiKey: "sk-test",
+            baseUrl: "",
+          },
+          status: "running",
+          createdAt: "2026-03-20T00:00:00.000Z",
+          updatedAt: "2026-03-20T00:00:00.000Z",
+        }}
+        cases={[
+          {
+            id: "case-1",
+            testSuiteId: "suite-1",
+            title: "Case 1",
+            context: "",
+            input: "hello",
+            expectedIntent: null,
+            expectedOutput: "world",
+            sortOrder: 0,
+          },
+          {
+            id: "case-2",
+            testSuiteId: "suite-1",
+            title: "Case 2",
+            context: "",
+            input: "hello again",
+            expectedIntent: null,
+            expectedOutput: "world again",
+            sortOrder: 1,
+          },
+        ]}
+        latestRun={{
+          id: "run-1",
+          testSuiteId: "suite-1",
+          status: "running",
+          results: [
+            {
+              testCaseId: "case-1",
+              actualOutput: "world",
+              passed: true,
+              score: 90,
+              reason: "ok",
+            },
+          ],
+          report: null,
+          score: null,
+          startedAt: "2026-03-20T00:00:00.000Z",
+          completedAt: null,
+        }}
+        prompts={[{ id: "prompt-a", title: "PromptA" }]}
+        indexVersions={[{ id: "kb-index-1", title: "kb-index-1" }]}
+        onSuiteUpdate={() => {}}
+        onCaseUpdate={() => {}}
+      />
+    )
+
+    expect(html).toContain("执行中 1/2")
+  })
+
+  it("renders persisted evaluating progress when reopening a suite detail during evaluation", () => {
+    const html = renderToStaticMarkup(
+      <TestSuiteDetail
+        suite={{
+          id: "suite-1",
+          projectId: "project-1",
+          sessionId: null,
+          section: "full-flow",
+          name: "Evaluating Suite",
+          description: "",
+          promptId: "prompt-a",
+          promptVersionId: null,
+          workflowMode: "single",
+          routingConfig: null,
+          config: {
+            provider: "openai",
+            model: "gpt-4.1",
+            apiKey: "sk-test",
+            baseUrl: "",
+          },
+          status: "running",
+          createdAt: "2026-03-20T00:00:00.000Z",
+          updatedAt: "2026-03-20T00:00:00.000Z",
+        }}
+        cases={[
+          {
+            id: "case-1",
+            testSuiteId: "suite-1",
+            title: "Case 1",
+            context: "",
+            input: "hello",
+            expectedIntent: null,
+            expectedOutput: "world",
+            sortOrder: 0,
+          },
+          {
+            id: "case-2",
+            testSuiteId: "suite-1",
+            title: "Case 2",
+            context: "",
+            input: "hello again",
+            expectedIntent: null,
+            expectedOutput: "world again",
+            sortOrder: 1,
+          },
+        ]}
+        latestRun={{
+          id: "run-1",
+          testSuiteId: "suite-1",
+          status: "running",
+          results: [
+            {
+              testCaseId: "case-1",
+              actualOutput: "world",
+              passed: true,
+              score: 90,
+              reason: "ok",
+            },
+            {
+              testCaseId: "case-2",
+              actualOutput: "world again",
+              passed: false,
+              score: 0,
+              reason: "",
+            },
+          ],
+          report: null,
+          score: null,
+          startedAt: "2026-03-20T00:00:00.000Z",
+          completedAt: null,
+        }}
+        prompts={[{ id: "prompt-a", title: "PromptA" }]}
+        indexVersions={[{ id: "kb-index-1", title: "kb-index-1" }]}
+        onSuiteUpdate={() => {}}
+        onCaseUpdate={() => {}}
+      />
+    )
+
+    expect(html).toContain("评估中 1/2")
   })
 
   it("keeps prototype-style metrics, history count, and trend shell in suite detail", () => {

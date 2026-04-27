@@ -15,6 +15,10 @@ export interface KnowledgeArtifactPaths {
   chunksFilePath: string
   manifestFilePath: string
   indexManifestFilePath: string
+  indexParentsFilePath: string
+  indexChunksFilePath: string
+  indexVectorsFilePath: string
+  indexIngestFilePath: string
 }
 
 export function buildKnowledgeArtifactPaths(input: KnowledgeArtifactPathsInput): KnowledgeArtifactPaths {
@@ -30,10 +34,13 @@ export function buildKnowledgeArtifactPaths(input: KnowledgeArtifactPathsInput):
     chunksFilePath: path.join(versionDir, 'chunks.jsonl'),
     manifestFilePath: path.join(versionDir, 'manifest.json'),
     indexManifestFilePath: path.join(indexDir, 'manifest.json'),
+    indexParentsFilePath: path.join(indexDir, 'parents.jsonl'),
+    indexChunksFilePath: path.join(indexDir, 'chunks.jsonl'),
+    indexVectorsFilePath: path.join(indexDir, 'vectors.jsonl'),
+    indexIngestFilePath: path.join(indexDir, 'ingest.json'),
   }
 }
 
 export function ensureKnowledgeArtifactDir(filePath: string): void {
   fs.mkdirSync(path.dirname(filePath), { recursive: true })
 }
-

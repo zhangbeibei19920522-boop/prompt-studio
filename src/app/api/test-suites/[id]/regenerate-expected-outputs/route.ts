@@ -61,8 +61,12 @@ export async function POST(
 
       prompt = findPromptById(suite.routingConfig.entryPromptId)
       routePrompts = Object.fromEntries(
-        suite.routingConfig.routes
-          .map((route) => [route.promptId, findPromptById(route.promptId)])
+        [...new Set(
+          suite.routingConfig.routes
+            .map((route) => route.intent === 'R' ? route.ragPromptId : route.promptId)
+            .filter((promptId): promptId is string => typeof promptId === 'string' && promptId.trim().length > 0),
+        )]
+          .map((promptId) => [promptId, findPromptById(promptId)])
           .filter((entry): entry is [string, NonNullable<ReturnType<typeof findPromptById>>] => Boolean(entry[1]))
       )
     }

@@ -252,6 +252,7 @@ CREATE TABLE IF NOT EXISTS test_cases (
   expected_output TEXT NOT NULL,
   expected_output_diagnostics TEXT,
   expected_intent TEXT,
+  generation_metadata_json TEXT,
   sort_order INTEGER NOT NULL DEFAULT 0
 );
 
@@ -273,6 +274,7 @@ CREATE TABLE IF NOT EXISTS test_suite_generation_jobs (
   status TEXT NOT NULL DEFAULT 'queued' CHECK(status IN ('queued', 'running', 'completed', 'failed')),
   generated_count INTEGER NOT NULL DEFAULT 0,
   total_count INTEGER NOT NULL DEFAULT 0,
+  request_json TEXT,
   error_message TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),

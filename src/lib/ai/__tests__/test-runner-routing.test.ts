@@ -293,6 +293,210 @@ describe("routing test runner", () => {
     )
   })
 
+  it("passes through rag routing diagnostics from the executor", async () => {
+    vi.resetModules()
+
+    const updateTestRun = vi.fn()
+    const updateTestSuite = vi.fn()
+
+    const testProvider = {
+      chat: vi.fn(),
+      chatStream: vi.fn(),
+    }
+
+    const evalProvider = {
+      chat: vi.fn(async () => `\`\`\`json
+{
+  "passed": true,
+  "score": 91,
+  "reason": "RAG 回复完整且符合预期"
+}
+\`\`\``),
+      chatStream: vi.fn(),
+    }
+
+    const createAiProvider = vi
+      .fn()
+      .mockReturnValueOnce(testProvider)
+      .mockReturnValueOnce(evalProvider)
+
+    try {
+      vi.doMock("@/lib/ai/provider", () => ({
+        createAiProvider,
+      }))
+
+      vi.doMock("@/lib/ai/routing-executor", () => ({
+        executePromptForCase: vi.fn(),
+        executeRoutingPromptForCase: vi.fn(async () => ({
+          actualOutput: "Hold the reset button for 10 seconds.",
+          actualIntent: "R",
+          matchedPromptId: "prompt-rag",
+          matchedPromptTitle: "RAG Reply",
+          routingSteps: [
+            {
+              turnIndex: 0,
+              userInput: "How do I reset the router?",
+              rawIntent: "R",
+              rawIntentOutput: "R",
+              actualIntent: "R",
+              matchedPromptId: "prompt-rag",
+              matchedPromptTitle: "RAG Reply",
+              actualReply: "Hold the reset button for 10 seconds.",
+              routeMode: "rag",
+              ragPromptId: "prompt-rag",
+              ragIndexVersionId: "index-1",
+              retrievalTopK: 10,
+              selectedDocId: "doc-reset",
+              selectedChunkIds: ["chunk-1"],
+              selectionMargin: 0.42,
+              answerMode: "extractive",
+              ingestBackfilled: true,
+            },
+          ],
+        })),
+      }))
+
+      vi.doMock("@/lib/db/repositories/settings", () => ({
+        getSettings: () => ({
+          provider: "openai",
+          apiKey: "eval-key",
+          model: "gpt-test",
+          baseUrl: "",
+        }),
+      }))
+
+      vi.doMock("@/lib/db/repositories/test-runs", () => ({
+        updateTestRun,
+      }))
+
+      vi.doMock("@/lib/db/repositories/test-suites", () => ({
+        updateTestSuite,
+      }))
+
+      const { runTestSuite } = await import("@/lib/ai/test-runner")
+
+      const suite = {
+        id: "suite-rag",
+        projectId: "project-1",
+        sessionId: null,
+        name: "RAG Routing Suite",
+        description: "",
+        promptId: null,
+        promptVersionId: null,
+        workflowMode: "routing" as const,
+        routingConfig: {
+          entryPromptId: "prompt-router",
+          routes: [
+            {
+              intent: "R",
+              promptId: "",
+              targetType: "prompt" as const,
+              targetId: "",
+              ragPromptId: "prompt-rag",
+              ragIndexVersionId: "index-1",
+            },
+          ],
+        },
+        config: {
+          provider: "openai",
+          apiKey: "test-key",
+          model: "gpt-test",
+          baseUrl: "",
+        },
+        status: "ready" as const,
+        createdAt: "2026-04-23T00:00:00.000Z",
+        updatedAt: "2026-04-23T00:00:00.000Z",
+      }
+
+      const cases = [
+        {
+          id: "case-rag",
+          testSuiteId: "suite-rag",
+          title: "RAG route",
+          context: "",
+          input: "How do I reset the router?",
+          expectedIntent: "R",
+          expectedOutput: "Hold the reset button for 10 seconds.",
+          sortOrder: 0,
+        },
+      ]
+
+      const prompt = {
+        id: "prompt-router",
+        projectId: "project-1",
+        title: "Intent Router",
+        content: "输出 intent",
+        description: "",
+        tags: [],
+        variables: [],
+        version: 1,
+        status: "active" as const,
+        createdAt: "2026-04-23T00:00:00.000Z",
+        updatedAt: "2026-04-23T00:00:00.000Z",
+      }
+
+      const events = []
+      for await (const event of runTestSuite("run-rag", suite, cases, prompt, {
+        routePrompts: {
+          "prompt-rag": {
+            ...prompt,
+            id: "prompt-rag",
+            title: "RAG Reply",
+            content: "Use this evidence:\n{rag_qas_text}",
+          },
+        },
+      })) {
+        events.push(event)
+      }
+
+      expect(events.find((event) => event.type === "test-case-done")).toMatchObject({
+        type: "test-case-done",
+        data: {
+          caseId: "case-rag",
+          actualIntent: "R",
+          matchedPromptId: "prompt-rag",
+          routingSteps: [
+            expect.objectContaining({
+              routeMode: "rag",
+              ragPromptId: "prompt-rag",
+              ragIndexVersionId: "index-1",
+              retrievalTopK: 10,
+              selectedDocId: "doc-reset",
+              selectedChunkIds: ["chunk-1"],
+              selectionMargin: 0.42,
+              answerMode: "extractive",
+              ingestBackfilled: true,
+            }),
+          ],
+        },
+      })
+
+      expect(updateTestRun).toHaveBeenCalledWith(
+        "run-rag",
+        expect.objectContaining({
+          results: [
+            expect.objectContaining({
+              testCaseId: "case-rag",
+              routingSteps: [
+                expect.objectContaining({
+                  routeMode: "rag",
+                  answerMode: "extractive",
+                }),
+              ],
+            }),
+          ],
+        }),
+      )
+    } finally {
+      vi.doUnmock("@/lib/ai/provider")
+      vi.doUnmock("@/lib/ai/routing-executor")
+      vi.doUnmock("@/lib/db/repositories/settings")
+      vi.doUnmock("@/lib/db/repositories/test-runs")
+      vi.doUnmock("@/lib/db/repositories/test-suites")
+      vi.resetModules()
+    }
+  })
+
   it("routes each user turn in multi-turn conversations and returns the full assistant transcript", async () => {
     vi.resetModules()
 

@@ -9,17 +9,14 @@ export interface KnowledgeRuntimeProfile {
 
 const DEFAULT_RISK_KEYWORDS = [
   'refund',
-  'policy',
-  'billing',
-  'payment',
-  'price',
-  'pricing',
-  'warranty',
+  'reimbursement',
+  'chargeback',
   'contract',
   'compliance',
   'legal',
   'medical',
-  'finance',
+  'gift card',
+  'destroy',
 ]
 
 const DEFAULT_QUESTION_SUFFIXES = [

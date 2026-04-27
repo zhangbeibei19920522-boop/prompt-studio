@@ -14,6 +14,7 @@ import {
   Search,
   Settings2,
   ShieldCheck,
+  Trash2,
   Upload,
 } from "lucide-react"
 
@@ -34,7 +35,16 @@ import {
 } from "@/components/test/test-suite-config-drawer"
 import { TestSuiteDetail } from "@/components/test/test-suite-detail"
 import { TestSuiteGenerationStatus } from "@/components/test/test-suite-generation-status"
+import { TestSuiteRunStatus } from "@/components/test/test-suite-run-status"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import {
   Select,
   SelectContent,
@@ -78,6 +88,7 @@ import type {
   TestRun,
   TestSuite,
   TestSuiteGenerationJob,
+  TestSuiteRunProgress,
 } from "@/types/database"
 
 type ModuleId = "home" | "prompt" | "test" | "audit" | "knowledge" | "memory" | "settings"
@@ -237,6 +248,7 @@ function CanvasListCard({
   meta,
   status,
   statusNode,
+  actions,
   active = false,
   onClick,
 }: {
@@ -246,32 +258,93 @@ function CanvasListCard({
   meta: string
   status: string
   statusNode?: React.ReactNode
+  actions?: React.ReactNode
   active?: boolean
   onClick: () => void
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
+    <div
       className={`mb-2 flex w-full items-center gap-3 rounded-lg border px-3.5 py-3 text-left transition-colors ${
         active
           ? "border-zinc-300 bg-zinc-50"
           : "border-zinc-200 bg-white hover:border-zinc-300 hover:bg-zinc-50"
       }`}
     >
-      <div className={`grid size-10 place-items-center rounded-lg ${getCanvasIconClass(tone)}`}>
-        {icon}
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+      >
+        <div className={`grid size-10 place-items-center rounded-lg ${getCanvasIconClass(tone)}`}>
+          {icon}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium text-zinc-950">{title}</div>
+          <div className="mt-1 truncate text-xs text-zinc-500">{meta}</div>
+        </div>
+      </button>
+      <div className="flex items-center gap-2">
+        {statusNode ?? (
+          <span className={`rounded-full px-2 py-1 text-[11px] font-medium ${getLibraryBadgeClass(status)}`}>
+            {status}
+          </span>
+        )}
+        {actions}
       </div>
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium text-zinc-950">{title}</div>
-        <div className="mt-1 truncate text-xs text-zinc-500">{meta}</div>
-      </div>
-      {statusNode ?? (
-        <span className={`rounded-full px-2 py-1 text-[11px] font-medium ${getLibraryBadgeClass(status)}`}>
-          {status}
-        </span>
-      )}
-    </button>
+    </div>
+  )
+}
+
+function PromptListCard({
+  title,
+  meta,
+  status,
+  active = false,
+  checked = false,
+  onClick,
+  onCheckedChange,
+  onDelete,
+}: {
+  title: string
+  meta: string
+  status: string
+  active?: boolean
+  checked?: boolean
+  onClick: () => void
+  onCheckedChange: (checked: boolean) => void
+  onDelete: () => void
+}) {
+  return (
+    <div
+      className={`mb-2 flex items-center gap-3 rounded-lg border px-3.5 py-3 transition-colors ${
+        active ? "border-zinc-300 bg-zinc-50" : "border-zinc-200 bg-white"
+      }`}
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onCheckedChange(event.target.checked)}
+        aria-label={`选择 Prompt ${title}`}
+        className="size-4 rounded border-zinc-300 text-zinc-950 focus:ring-zinc-950"
+      />
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+      >
+        <div className={`grid size-10 place-items-center rounded-lg ${getCanvasIconClass("library")}`}>
+          <FileText className="size-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium text-zinc-950">{title}</div>
+          <div className="mt-1 truncate text-xs text-zinc-500">{meta}</div>
+        </div>
+      </button>
+      <span className={`rounded-full px-2 py-1 text-[11px] font-medium ${getLibraryBadgeClass(status)}`}>{status}</span>
+      <Button type="button" variant="ghost" size="icon-sm" onClick={onDelete} aria-label={`删除 Prompt ${title}`}>
+        <Trash2 className="size-4 text-zinc-500" />
+      </Button>
+    </div>
   )
 }
 
@@ -394,6 +467,7 @@ export default function MainPage() {
 
   const [testSuites, setTestSuites] = useState<TestSuite[]>([])
   const [testSuiteGenerationJobs, setTestSuiteGenerationJobs] = useState<TestSuiteGenerationJob[]>([])
+  const [runningTestSuiteProgress, setRunningTestSuiteProgress] = useState<TestSuiteRunProgress[]>([])
   const [currentTestSuiteId, setCurrentTestSuiteId] = useState<string | null>(null)
   const [currentTestCases, setCurrentTestCases] = useState<TestCase[]>([])
   const [currentTestRun, setCurrentTestRun] = useState<TestRun | null>(null)
@@ -414,6 +488,13 @@ export default function MainPage() {
   const [promptCanvasMode, setPromptCanvasMode] = useState<PromptCanvasMode>("empty")
   const [libraryQuery, setLibraryQuery] = useState("")
   const [libraryFilter, setLibraryFilter] = useState<LibraryFilter>("all")
+  const [selectedPromptIds, setSelectedPromptIds] = useState<string[]>([])
+  const [promptIdsPendingDelete, setPromptIdsPendingDelete] = useState<string[]>([])
+  const [promptDeleteDialogOpen, setPromptDeleteDialogOpen] = useState(false)
+  const [deletingPrompts, setDeletingPrompts] = useState(false)
+  const [testSuiteIdPendingDelete, setTestSuiteIdPendingDelete] = useState<string | null>(null)
+  const [testSuiteDeleteDialogOpen, setTestSuiteDeleteDialogOpen] = useState(false)
+  const [deletingTestSuite, setDeletingTestSuite] = useState(false)
   const [testCanvasView, setTestCanvasView] = useState<TestCanvasView>("list")
   const [testCanvasSection, setTestCanvasSection] = useState<TestCanvasSection>("full-flow")
   const [testSuiteConfigDrawerOpen, setTestSuiteConfigDrawerOpen] = useState(false)
@@ -453,6 +534,15 @@ export default function MainPage() {
   const hasActiveTestSuiteGenerationJob = testSuiteGenerationJobs.some(
     (job) => job.status === "queued" || job.status === "running"
   )
+  const runningTestSuiteProgressBySuiteId = useMemo(() => {
+    const nextMap = new Map<string, TestSuiteRunProgress>()
+    for (const progress of runningTestSuiteProgress) {
+      nextMap.set(progress.suiteId, progress)
+    }
+    return nextMap
+  }, [runningTestSuiteProgress])
+  const hasActiveTestSuiteRun =
+    runningTestSuiteProgress.length > 0 || testSuites.some((suite) => suite.status === "running")
   const indexVersionOptions = historyVersionRows
     .filter((row) => row.indexVersionId !== "待生成")
     .map((row) => ({
@@ -472,6 +562,8 @@ export default function MainPage() {
 
     return matchesQuery && matchesFilter
   })
+  const allVisiblePromptsSelected =
+    filteredPrompts.length > 0 && filteredPrompts.every((prompt) => selectedPromptIds.includes(prompt.id))
 
   const resetProjectScopedState = useCallback(() => {
     setCurrentPrompt(null)
@@ -479,6 +571,7 @@ export default function MainPage() {
     setVersions([])
     setCurrentDocument(null)
     setTestSuiteGenerationJobs([])
+    setRunningTestSuiteProgress([])
     setCurrentTestSuiteId(null)
     setCurrentTestCases([])
     setCurrentTestRun(null)
@@ -597,6 +690,10 @@ export default function MainPage() {
     promptsApi.listByProject(currentProjectId).then(setPrompts).catch(console.error)
   }, [currentProjectId])
 
+  useEffect(() => {
+    setSelectedPromptIds((prev) => prev.filter((id) => prompts.some((prompt) => prompt.id === id)))
+  }, [prompts])
+
   const refreshTestSuites = useCallback(() => {
     if (!currentProjectId) return
     testSuitesApi.listByProject(currentProjectId).then(setTestSuites).catch(console.error)
@@ -607,21 +704,48 @@ export default function MainPage() {
     testSuiteGenerationJobsApi.listByProject(currentProjectId).then(setTestSuiteGenerationJobs).catch(console.error)
   }, [currentProjectId])
 
+  const refreshRunningTestSuiteProgress = useCallback(() => {
+    if (!currentProjectId) return
+    testRunsApi.listRunningByProject(currentProjectId).then(setRunningTestSuiteProgress).catch(console.error)
+  }, [currentProjectId])
+
+  useEffect(() => {
+    if (activeModuleId !== "test" || !currentProjectId) return
+
+    refreshTestSuites()
+    refreshTestSuiteGenerationJobs()
+    refreshRunningTestSuiteProgress()
+  }, [
+    activeModuleId,
+    currentProjectId,
+    refreshTestSuites,
+    refreshTestSuiteGenerationJobs,
+    refreshRunningTestSuiteProgress,
+  ])
+
   const refreshConversationAuditJobs = useCallback(() => {
     if (!currentProjectId) return
     conversationAuditJobsApi.listByProject(currentProjectId).then(setConversationAuditJobs).catch(console.error)
   }, [currentProjectId])
 
   useEffect(() => {
-    if (!currentProjectId || !hasActiveTestSuiteGenerationJob) return
+    if (!currentProjectId || (!hasActiveTestSuiteGenerationJob && !hasActiveTestSuiteRun)) return
 
     const timer = window.setInterval(() => {
       refreshTestSuites()
       refreshTestSuiteGenerationJobs()
+      refreshRunningTestSuiteProgress()
     }, 1200)
 
     return () => window.clearInterval(timer)
-  }, [currentProjectId, hasActiveTestSuiteGenerationJob, refreshTestSuiteGenerationJobs, refreshTestSuites])
+  }, [
+    currentProjectId,
+    hasActiveTestSuiteGenerationJob,
+    hasActiveTestSuiteRun,
+    refreshTestSuiteGenerationJobs,
+    refreshTestSuites,
+    refreshRunningTestSuiteProgress,
+  ])
 
   const handleCreateProject = async (data: Omit<Project, "id" | "createdAt" | "updatedAt">) => {
     try {
@@ -728,6 +852,36 @@ export default function MainPage() {
       openModule("prompt")
     } catch (error) {
       console.error("Delete prompt failed:", error)
+    }
+  }
+
+  const handleRequestDeletePrompts = (ids: string[]) => {
+    if (ids.length === 0) return
+    setPromptIdsPendingDelete(ids)
+    setPromptDeleteDialogOpen(true)
+  }
+
+  const handleConfirmDeletePrompts = async () => {
+    if (!currentProjectId || promptIdsPendingDelete.length === 0) return
+
+    setDeletingPrompts(true)
+    try {
+      await Promise.all(promptIdsPendingDelete.map((id) => promptsApi.delete(id)))
+      const nextPrompts = await promptsApi.listByProject(currentProjectId)
+      setPrompts(nextPrompts)
+      setSelectedPromptIds((prev) => prev.filter((id) => !promptIdsPendingDelete.includes(id)))
+      if (currentPrompt && promptIdsPendingDelete.includes(currentPrompt.id)) {
+        setCurrentPrompt(null)
+        setVersions([])
+        setPromptCanvasMode("empty")
+      }
+      openModule("prompt")
+      setPromptDeleteDialogOpen(false)
+      setPromptIdsPendingDelete([])
+    } catch (error) {
+      console.error("Delete prompts failed:", error)
+    } finally {
+      setDeletingPrompts(false)
     }
   }
 
@@ -908,6 +1062,42 @@ export default function MainPage() {
       setActiveModuleId("test")
     } catch (error) {
       console.error(error)
+    }
+  }
+
+  const handleRequestDeleteTestSuite = (id: string) => {
+    setTestSuiteIdPendingDelete(id)
+    setTestSuiteDeleteDialogOpen(true)
+  }
+
+  const handleConfirmDeleteTestSuite = async () => {
+    if (!currentProjectId || !testSuiteIdPendingDelete) return
+
+    setDeletingTestSuite(true)
+    try {
+      await testSuitesApi.delete(testSuiteIdPendingDelete)
+      const [nextSuites, nextJobs, nextRunningProgress] = await Promise.all([
+        testSuitesApi.listByProject(currentProjectId),
+        testSuiteGenerationJobsApi.listByProject(currentProjectId),
+        testRunsApi.listRunningByProject(currentProjectId),
+      ])
+      setTestSuites(nextSuites)
+      setTestSuiteGenerationJobs(nextJobs)
+      setRunningTestSuiteProgress(nextRunningProgress)
+
+      if (currentTestSuiteId === testSuiteIdPendingDelete) {
+        setCurrentTestSuiteId(null)
+        setCurrentTestCases([])
+        setCurrentTestRun(null)
+        setTestCanvasView("list")
+      }
+
+      setTestSuiteDeleteDialogOpen(false)
+      setTestSuiteIdPendingDelete(null)
+    } catch (error) {
+      console.error("Delete test suite failed:", error)
+    } finally {
+      setDeletingTestSuite(false)
     }
   }
 
@@ -1210,6 +1400,29 @@ export default function MainPage() {
               <Button variant="outline" size="sm" onClick={() => setBatchPromptUploadOpen(true)}>
                 批量导入
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={filteredPrompts.length === 0}
+                onClick={() =>
+                  setSelectedPromptIds((prev) =>
+                    allVisiblePromptsSelected
+                      ? prev.filter((id) => !filteredPrompts.some((prompt) => prompt.id === id))
+                      : Array.from(new Set([...prev, ...filteredPrompts.map((prompt) => prompt.id)]))
+                  )
+                }
+              >
+                {allVisiblePromptsSelected ? "取消全选" : "全选"}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={selectedPromptIds.length === 0}
+                onClick={() => handleRequestDeletePrompts(selectedPromptIds)}
+              >
+                <Trash2 className="size-4" />
+                批量删除
+              </Button>
               <Button variant="outline" size="sm" onClick={() => void handleCreatePrompt()}>
                 <Plus className="size-4" />
                 新建
@@ -1246,15 +1459,20 @@ export default function MainPage() {
           </div>
         ) : (
           filteredPrompts.map((prompt) => (
-            <CanvasListCard
+            <PromptListCard
               key={prompt.id}
-              icon={<FileText className="size-4" />}
-              tone="library"
               title={prompt.title}
               meta={`v${prompt.version} · ${getPromptStatusLabel(prompt.status)} · ${formatCanvasTimeLabel(prompt.updatedAt)}`}
               status={getPromptStatusLabel(prompt.status)}
               active={currentPrompt?.id === prompt.id}
+              checked={selectedPromptIds.includes(prompt.id)}
               onClick={() => void handlePromptClick(prompt.id)}
+              onCheckedChange={(checked) =>
+                setSelectedPromptIds((prev) =>
+                  checked ? Array.from(new Set([...prev, prompt.id])) : prev.filter((id) => id !== prompt.id)
+                )
+              }
+              onDelete={() => handleRequestDeletePrompts([prompt.id])}
             />
           ))
         )}
@@ -1267,6 +1485,17 @@ export default function MainPage() {
     setPromptCanvasMode("empty")
     setVersions([])
   }
+
+  const promptDeleteTargets = prompts.filter((prompt) => promptIdsPendingDelete.includes(prompt.id))
+  const promptDeleteDescription =
+    promptIdsPendingDelete.length === 1
+      ? `确定要删除 Prompt「${promptDeleteTargets[0]?.title ?? ""}」吗？此操作无法撤销。`
+      : `确定要删除已选中的 ${promptIdsPendingDelete.length} 个 Prompt 吗？此操作无法撤销。`
+  const testSuitePendingDelete =
+    testSuiteIdPendingDelete
+      ? testSuites.find((suite) => suite.id === testSuiteIdPendingDelete) ?? null
+      : null
+  const testSuiteDeleteDescription = `确定要删除测试集「${testSuitePendingDelete?.name ?? ""}」吗？此操作无法撤销。`
 
   function renderTestCanvasList() {
     return (
@@ -1297,9 +1526,22 @@ export default function MainPage() {
               statusNode={
                 generationJobsBySuiteId.has(suite.id) ? (
                   <TestSuiteGenerationStatus job={generationJobsBySuiteId.get(suite.id)!} />
+                ) : runningTestSuiteProgressBySuiteId.has(suite.id) ? (
+                  <TestSuiteRunStatus progress={runningTestSuiteProgressBySuiteId.get(suite.id)!} />
                 ) : undefined
               }
               active={currentTestSuiteId === suite.id}
+              actions={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => handleRequestDeleteTestSuite(suite.id)}
+                  aria-label={`删除测试集 ${suite.name}`}
+                >
+                  <Trash2 className="size-4 text-zinc-500" />
+                </Button>
+              }
               onClick={() => void handleTestSuiteClick(suite.id)}
             />
           ))
@@ -1334,7 +1576,7 @@ export default function MainPage() {
           suite={currentSuite}
           cases={currentTestCases}
           latestRun={currentTestRun}
-          prompts={prompts.map((prompt) => ({ id: prompt.id, title: prompt.title }))}
+          prompts={prompts.map((prompt) => ({ id: prompt.id, title: prompt.title, content: prompt.content }))}
           indexVersions={indexVersionOptions}
           onSuiteUpdate={() => {
             refreshTestSuites()
@@ -1731,7 +1973,7 @@ export default function MainPage() {
         <ChatArea
           messages={currentSessionId ? messages : []}
           sessionId={currentSessionId}
-          prompts={prompts.map((prompt) => ({ id: prompt.id, title: prompt.title }))}
+          prompts={prompts.map((prompt) => ({ id: prompt.id, title: prompt.title, content: prompt.content }))}
           documents={documents.map((document) => ({ id: document.id, name: document.name }))}
           indexVersions={indexVersionOptions}
           onMessagesChange={refreshMessages}
@@ -1834,7 +2076,7 @@ export default function MainPage() {
         <TestSuiteConfigDrawer
           open={testSuiteConfigDrawerOpen}
           section={testCanvasSection}
-          prompts={prompts.map((prompt) => ({ id: prompt.id, title: prompt.title }))}
+          prompts={prompts.map((prompt) => ({ id: prompt.id, title: prompt.title, content: prompt.content }))}
           documents={documents.map((document) => ({ id: document.id, name: document.name }))}
           indexVersions={indexVersionOptions}
           onClose={() => setTestSuiteConfigDrawerOpen(false)}
@@ -1857,6 +2099,74 @@ export default function MainPage() {
         onOpenChange={setBatchPromptUploadOpen}
         onUpload={handleBatchPromptUpload}
       />
+      <Dialog
+        open={promptDeleteDialogOpen}
+        onOpenChange={(open) => {
+          setPromptDeleteDialogOpen(open)
+          if (!open && !deletingPrompts) {
+            setPromptIdsPendingDelete([])
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>确认删除</DialogTitle>
+            <DialogDescription>{promptDeleteDescription}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setPromptDeleteDialogOpen(false)
+                setPromptIdsPendingDelete([])
+              }}
+              disabled={deletingPrompts}
+            >
+              取消
+            </Button>
+            <Button variant="destructive" onClick={() => void handleConfirmDeletePrompts()} disabled={deletingPrompts}>
+              <Trash2 className="size-4" />
+              删除
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={testSuiteDeleteDialogOpen}
+        onOpenChange={(open) => {
+          setTestSuiteDeleteDialogOpen(open)
+          if (!open && !deletingTestSuite) {
+            setTestSuiteIdPendingDelete(null)
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>确认删除</DialogTitle>
+            <DialogDescription>{testSuiteDeleteDescription}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setTestSuiteDeleteDialogOpen(false)
+                setTestSuiteIdPendingDelete(null)
+              }}
+              disabled={deletingTestSuite}
+            >
+              取消
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => void handleConfirmDeleteTestSuite()}
+              disabled={deletingTestSuite}
+            >
+              <Trash2 className="size-4" />
+              删除测试集
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

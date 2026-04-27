@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 
 import { findProjectById } from '@/lib/db/repositories/projects'
-import { buildKnowledgeTaskForProject, findKnowledgeBaseForProject, listKnowledgeBuildTasks } from '@/lib/knowledge/service'
+import { findKnowledgeBaseForProject, listKnowledgeBuildTasks, startKnowledgeBuildTaskForProject } from '@/lib/knowledge/service'
+import { resumeKnowledgeBuildTasks, scheduleKnowledgeBuildTask } from '@/lib/knowledge/task-scheduler'
 
 function hasBuildSources(body: {
   documentIds?: string[]
@@ -42,6 +43,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params
+    resumeKnowledgeBuildTasks(id)
     const data = listKnowledgeBuildTasks(id)
     return NextResponse.json({ success: true, data, error: null })
   } catch (error) {
@@ -92,7 +94,7 @@ export async function POST(
       )
     }
 
-    const data = buildKnowledgeTaskForProject(id, {
+    const data = startKnowledgeBuildTaskForProject(id, {
       name: body.name,
       taskType: body.taskType,
       baseVersionId: body.baseVersionId ?? null,
@@ -101,7 +103,9 @@ export async function POST(
       repairQuestions: body.repairQuestions ?? [],
     })
 
-    return NextResponse.json({ success: true, data, error: null }, { status: 201 })
+    scheduleKnowledgeBuildTask(data.task.id)
+
+    return NextResponse.json({ success: true, data, error: null }, { status: 202 })
   } catch (error) {
     console.error('[POST /api/projects/[id]/knowledge-build-tasks]', error)
     return NextResponse.json(

@@ -148,6 +148,11 @@ export async function* runTestSuite(
         reason: '',
       })
 
+      updateTestRun(runId, {
+        status: 'running',
+        results: [...caseResults],
+      })
+
       yield {
         type: 'test-case-done',
         data: {
@@ -255,6 +260,11 @@ export async function* runTestSuite(
 
         evalResults.push(evalResult)
 
+        updateTestRun(runId, {
+          status: 'running',
+          results: mergePersistedResults(caseResults, evalResults),
+        })
+
         yield {
           type: 'eval-case-done',
           data: {
@@ -282,6 +292,11 @@ export async function* runTestSuite(
           reason: '单条评估失败',
         }
         evalResults.push(fallbackResult)
+
+        updateTestRun(runId, {
+          status: 'running',
+          results: mergePersistedResults(caseResults, evalResults),
+        })
 
         yield {
           type: 'eval-case-done',

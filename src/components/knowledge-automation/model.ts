@@ -23,7 +23,42 @@ export interface KnowledgeTaskRow {
   owner: string
   stage: string
   status: string
+  progress: number
+  isRunning: boolean
   updatedAt: string
+}
+
+export function resolveEffectiveTaskState(task: KnowledgeBuildTask, versions: KnowledgeVersion[]) {
+  if (task.status === "running" || ((task.currentStep === "queued" || task.currentStep === "building_artifacts") && !task.completedAt)) {
+    return {
+      status: "running" as const,
+      currentStep: task.currentStep,
+    }
+  }
+
+  const linkedVersion = task.knowledgeVersionId
+    ? versions.find((version) => version.id === task.knowledgeVersionId)
+    : null
+  const stageSummary = task.stageSummary ?? linkedVersion?.stageSummary ?? null
+
+  if (linkedVersion?.status === "draft" && stageSummary) {
+    if (stageSummary.highRiskCount > 0 || stageSummary.blockedCount > 0) {
+      return {
+        status: "pending" as const,
+        currentStep: "risk_review",
+      }
+    }
+
+    return {
+      status: "pending" as const,
+      currentStep: "result_review",
+    }
+  }
+
+  return {
+    status: task.status,
+    currentStep: task.currentStep,
+  }
 }
 
 export interface KnowledgePushRecord {
@@ -112,7 +147,11 @@ function getKnowledgeTaskStageLabel(step: string): string {
     case "queued":
       return "排队中"
     case "building_artifacts":
-      return "构建产物"
+      return "清洗处理中"
+    case "risk_review":
+      return "风险与确认"
+    case "result_review":
+      return "清洗结果确认"
     case "completed":
       return "已完成"
     case "failed":
@@ -148,17 +187,22 @@ export function buildKnowledgeVersionRows(
   })
 }
 
-export function buildKnowledgeTaskRows(tasks: KnowledgeBuildTask[]): KnowledgeTaskRow[] {
-  return tasks.map((task) => ({
+export function buildKnowledgeTaskRows(tasks: KnowledgeBuildTask[], versions: KnowledgeVersion[] = []): KnowledgeTaskRow[] {
+  return tasks.map((task) => {
+    const effective = resolveEffectiveTaskState(task, versions)
+
+    return ({
     id: task.id,
     knowledgeVersionId: task.knowledgeVersionId,
     name: task.name,
     type: getKnowledgeTaskTypeLabel(task.taskType),
     owner: "系统",
-    stage: getKnowledgeTaskStageLabel(task.currentStep),
-    status: getKnowledgeTaskStatusLabel(task.status),
+    stage: getKnowledgeTaskStageLabel(effective.currentStep),
+    status: getKnowledgeTaskStatusLabel(effective.status),
+    progress: task.progress,
+    isRunning: effective.status === "running",
     updatedAt: formatKnowledgeTimestamp(task.updatedAt),
-  }))
+  })})
 }
 
 export function buildKnowledgePushRecords(versions: KnowledgeVersion[]): KnowledgePushRecord[] {

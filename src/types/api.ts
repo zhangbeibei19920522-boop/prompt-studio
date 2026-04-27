@@ -13,6 +13,7 @@ import type {
   Project,
   Prompt,
   TestConversationMode,
+  TestGenerationDocumentRouteMode,
   TestGenerationTargetType,
   TestGenerationSection,
   TestGenerationStructure,
@@ -77,6 +78,8 @@ export interface CreateTestSuiteRequest {
 
 export interface GenerateConfiguredTestSuiteRequest {
   section: TestGenerationSection
+  suiteName: string
+  suiteLanguage: 'zh' | 'en'
   structure: TestGenerationStructure
   promptId: string | null
   routingConfig: TestSuiteRoutingConfig | null
@@ -89,6 +92,7 @@ export interface GenerateConfiguredTestSuiteRequest {
   minTurns: number | null
   maxTurns: number | null
   generationSourceIds: string[]
+  generationDocumentRouteModes?: TestGenerationDocumentRouteMode[]
 }
 
 export interface GenerateConfiguredTestSuiteResponse {
@@ -177,7 +181,7 @@ export interface CreateKnowledgeBuildTaskRequest {
 
 export interface CreateKnowledgeBuildTaskResponse {
   task: KnowledgeBuildTask
-  version: KnowledgeVersion
+  version: KnowledgeVersion | null
 }
 
 export interface UpdateKnowledgeBuildTaskRequest {

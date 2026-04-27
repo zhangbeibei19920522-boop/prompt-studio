@@ -1,7 +1,8 @@
-import { NextRequest } from 'next/server'
-
 import { handleTestAgentChat } from '@/lib/ai/agent'
 import { createSession } from '@/lib/db/repositories/sessions'
+import {
+  replaceTestCasesForSuite,
+} from '@/lib/db/repositories/test-cases'
 import {
   updateTestSuite,
 } from '@/lib/db/repositories/test-suites'
@@ -9,43 +10,20 @@ import {
   updateTestSuiteGenerationJob,
 } from '@/lib/db/repositories/test-suite-generation-jobs'
 import {
+  buildGenerationMetadataForCase,
   buildGenerationContent,
   buildGenerationReferences,
   getConfiguredSuitePromptId,
   getConfiguredSuiteWorkflowMode,
+  normalizeGenerationDocumentRouteModes,
+  validateGeneratedCasesAgainstDocumentRouteModes,
 } from '@/lib/test-suite-generation/configured-generation'
+import { enrichGeneratedCasesForSuite } from '@/lib/test-suite-generation/enrich-generated-cases'
 import type { TestSuiteGenerationData } from '@/types/ai'
 import type {
   GenerateConfiguredTestSuiteRequest,
 } from '@/types/api'
-import type { TestCase, TestSuiteRoutingConfig } from '@/types/database'
-
-async function createCasesViaRoute(
-  testSuiteId: string,
-  cases: Array<{
-    title: string
-    context: string
-    input: string
-    expectedOutput: string
-    expectedIntent?: string | null
-  }>
-) {
-  const casesRoute = await import('@/app/api/test-suites/[id]/cases/route')
-  const response = await casesRoute.POST(
-    new NextRequest('http://localhost', {
-      method: 'POST',
-      body: JSON.stringify(cases),
-    }),
-    { params: Promise.resolve({ id: testSuiteId }) }
-  )
-
-  const payload = await response.json()
-  if (!response.ok || !payload.success) {
-    throw new Error(payload.error ?? 'Failed to create generated test cases')
-  }
-
-  return payload.data as TestCase[]
-}
+import type { TestSuiteRoutingConfig } from '@/types/database'
 
 export async function runConfiguredTestSuiteGenerationJob(data: {
   projectId: string
@@ -77,9 +55,14 @@ export async function runConfiguredTestSuiteGenerationJob(data: {
         : null
 
     let generatedSuite: TestSuiteGenerationData | null = null
+    const normalizedGenerationDocumentRouteModes = normalizeGenerationDocumentRouteModes({
+      generationSourceIds: request.generationSourceIds,
+      generationDocumentRouteModes: request.generationDocumentRouteModes,
+    })
 
     for await (const event of handleTestAgentChat(generationSession.id, content, references, {
       routingConfig,
+      documentRouteModes: normalizedGenerationDocumentRouteModes,
     })) {
       if (event.type === 'test-suite-progress') {
         updateTestSuiteGenerationJob(jobId, {
@@ -102,11 +85,13 @@ export async function runConfiguredTestSuiteGenerationJob(data: {
       throw new Error('未生成测试集结果')
     }
 
+    const workflowMode = generatedSuite.workflowMode ?? getConfiguredSuiteWorkflowMode(request)
+
     const persistedSuite = updateTestSuite(suiteId, {
-      name: generatedSuite.name,
+      name: request.suiteName.trim() || generatedSuite.name,
       description: generatedSuite.description,
       promptId: getConfiguredSuitePromptId(request),
-      workflowMode: generatedSuite.workflowMode ?? getConfiguredSuiteWorkflowMode(request),
+      workflowMode,
       routingConfig: generatedSuite.routingConfig ?? routingConfig,
       status: 'draft',
     })
@@ -115,14 +100,30 @@ export async function runConfiguredTestSuiteGenerationJob(data: {
       throw new Error('Failed to update generated test suite')
     }
 
-    await createCasesViaRoute(
+    const casesToPersist =
+      request.section === 'full-flow' && request.conversationMode === 'multi-turn'
+        ? await enrichGeneratedCasesForSuite(persistedSuite, generatedSuite.cases)
+        : generatedSuite.cases
+
+    validateGeneratedCasesAgainstDocumentRouteModes(casesToPersist, {
+      generationSourceIds: request.generationSourceIds,
+      generationDocumentRouteModes: normalizedGenerationDocumentRouteModes,
+      workflowMode,
+    })
+
+    replaceTestCasesForSuite(
       suiteId,
-      generatedSuite.cases.map((testCase) => ({
+      casesToPersist.map((testCase) => ({
         title: testCase.title,
         context: testCase.context,
         input: testCase.input,
         expectedOutput: testCase.expectedOutput,
+        expectedOutputDiagnostics: testCase.expectedOutputDiagnostics,
         expectedIntent: testCase.expectedIntent ?? null,
+        generationMetadata: buildGenerationMetadataForCase(testCase, {
+          generationSourceIds: request.generationSourceIds,
+          generationDocumentRouteModes: normalizedGenerationDocumentRouteModes,
+        }),
       }))
     )
 

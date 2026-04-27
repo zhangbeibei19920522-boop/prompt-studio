@@ -360,9 +360,29 @@ describe("KnowledgeAutomationPanel", () => {
     expect(html).toContain("清洗任务")
     expect(html).toContain("任务列表")
     expect(html).toContain("新建任务")
+    expect(html).toContain("进度")
     expect(html).toContain("进行中")
+    expect(html).toContain("40%")
     expect(html).not.toContain("版本列表")
     expect(html).not.toContain("回滚")
+  })
+
+  it("opens task detail before loading heavy version detail payloads", () => {
+    const panelSource = readFileSync(
+      join(process.cwd(), "src/components/knowledge-automation/knowledge-automation-panel.tsx"),
+      "utf8"
+    )
+    const detailSource = readFileSync(
+      join(process.cwd(), "src/components/knowledge-automation/detail-view.tsx"),
+      "utf8"
+    )
+
+    expect(panelSource).toContain('setView("detail")')
+    expect(panelSource).toContain("void ensureVersionDetail")
+    expect(panelSource).not.toContain("await ensureVersionDetail(task.knowledgeVersionId)")
+    expect(panelSource).toContain("isVersionLoading=")
+    expect(panelSource).toContain("hasVersionDetailLoaded=")
+    expect(detailSource).toContain("正在加载任务详情")
   })
 
   it("uses the 问答对 wording and exposes content for prototype actions", () => {
@@ -404,7 +424,6 @@ describe("KnowledgeAutomationPanel", () => {
     expect(detailSource).not.toContain("Parent 草稿")
     expect(detailSource).not.toContain("parents/chunks")
     expect(detailSource).not.toContain("查看 parent")
-    expect(detailSource).not.toContain("KnowledgeIndexVersion")
     expect(dataSource).not.toContain("Parent")
     expect(dataSource).not.toContain("Chunk")
   })
@@ -416,13 +435,23 @@ describe("KnowledgeAutomationPanel", () => {
     )
 
     expect(detailSource).toContain("待处理事项")
+    expect(detailSource).toContain("待归类与待补充")
     expect(detailSource).toContain("合并冲突确认")
     expect(detailSource).toContain("高风险内容删除")
+    expect(detailSource).toContain("合并冲突（${conflictItems.length}）")
+    expect(detailSource).toContain("高风险删除（${deleteItems.length}）")
+    expect(detailSource).toContain("待归类与待补充（${supplementCount}）")
+    expect(detailSource).toContain("归入现有问答对")
+    expect(detailSource).toContain("补充答案")
     expect(detailSource).toContain("当前知识版本内容")
     expect(detailSource).toContain("本次文档库内容")
     expect(detailSource).toContain("系统建议")
     expect(detailSource).toContain("原始内容")
-    expect(detailSource).toContain("系统建议保留的内容")
+    expect(detailSource).toContain("系统建议删除")
+    expect(detailSource).toContain("处理结果")
+    expect(detailSource).toContain("findMatchingParent")
+    expect(detailSource).not.toContain("当前知识版本中存在同题内容，请结合本次内容确认最终口径。")
+    expect(detailSource).not.toContain("系统建议保留的内容")
     expect(detailSource).toContain("为什么需要确认")
     expect(detailSource).not.toContain("处理原则")
     expect(detailSource).not.toContain("审核结论只对当前任务和当前轮次生效")
@@ -587,7 +616,6 @@ describe("KnowledgeAutomationPanel", () => {
     expect(detailSource).not.toContain("raw_2024_0288")
     expect(detailSource).not.toContain("amb_01")
     expect(detailSource).not.toContain("去归类")
-    expect(detailSource).not.toContain("新建问答对")
     expect(detailSource).not.toContain("去确认")
     expect(detailSource).not.toContain("查看原因")
     expect(detailSource).not.toContain("继续处理风险")

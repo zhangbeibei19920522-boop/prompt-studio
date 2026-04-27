@@ -1,5 +1,6 @@
 import { getDb } from '@/lib/db'
 import { nanoid } from 'nanoid'
+import type { GenerateConfiguredTestSuiteRequest } from '@/types/api'
 import type { TestSuiteGenerationJob, TestSuiteGenerationJobStatus } from '@/types/database'
 
 interface TestSuiteGenerationJobRow {
@@ -9,6 +10,7 @@ interface TestSuiteGenerationJobRow {
   status: TestSuiteGenerationJobStatus
   generated_count: number
   total_count: number
+  request_json: string | null
   error_message: string | null
   created_at: string
   updated_at: string
@@ -52,6 +54,7 @@ export function createTestSuiteGenerationJob(data: {
   projectId: string
   suiteId: string
   totalCount: number
+  request?: GenerateConfiguredTestSuiteRequest | null
 }): TestSuiteGenerationJob {
   const db = getDb()
   const id = nanoid()
@@ -65,12 +68,13 @@ export function createTestSuiteGenerationJob(data: {
       status,
       generated_count,
       total_count,
+      request_json,
       error_message,
       created_at,
       updated_at,
       completed_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     data.projectId,
@@ -78,6 +82,7 @@ export function createTestSuiteGenerationJob(data: {
     'queued',
     0,
     data.totalCount,
+    data.request ? JSON.stringify(data.request) : null,
     null,
     now,
     now,
@@ -96,6 +101,41 @@ export function createTestSuiteGenerationJob(data: {
     updatedAt: now,
     completedAt: null,
   }
+}
+
+export interface ResumableTestSuiteGenerationJob {
+  id: string
+  projectId: string
+  suiteId: string
+  status: TestSuiteGenerationJobStatus
+  request: GenerateConfiguredTestSuiteRequest
+}
+
+export function findResumableTestSuiteGenerationJobsByProject(projectId: string): ResumableTestSuiteGenerationJob[] {
+  const db = getDb()
+  const rows = db
+    .prepare(
+      "SELECT * FROM test_suite_generation_jobs WHERE project_id = ? AND status IN ('queued', 'running') AND request_json IS NOT NULL ORDER BY created_at DESC"
+    )
+    .all(projectId) as TestSuiteGenerationJobRow[]
+
+  return rows.flatMap((row) => {
+    if (!row.request_json) return []
+
+    try {
+      return [
+        {
+          id: row.id,
+          projectId: row.project_id,
+          suiteId: row.suite_id,
+          status: row.status,
+          request: JSON.parse(row.request_json) as GenerateConfiguredTestSuiteRequest,
+        },
+      ]
+    } catch {
+      return []
+    }
+  })
 }
 
 export function updateTestSuiteGenerationJob(

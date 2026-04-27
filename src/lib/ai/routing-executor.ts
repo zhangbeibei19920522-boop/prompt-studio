@@ -5,6 +5,10 @@ import type {
   TestCaseRoutingStep,
   TestSuite,
 } from "@/types/database"
+import { generateAnswer } from "@/lib/ai/rag/answer-generator"
+import { searchIndexIngest } from "@/lib/ai/rag/retriever"
+import { createGlobalRagLlmReranker } from "@/lib/ai/rag/llm-reranker"
+import { ensureIndexIngestForIndexVersionId } from "@/lib/knowledge/index-ingest"
 import { extractJson } from "./test-evaluator"
 import { throwIfAborted } from "@/lib/test-run-abort"
 
@@ -63,9 +67,12 @@ const ENTRY_ROUTER_OPTIONS = {
   maxTokens: 20,
 } as const
 
+const RAG_RETRIEVAL_TOP_K = 10
+const RAG_LLM_RERANK_CANDIDATE_TOP_K = 40
+
 function isLikelyIntentValue(value: string): boolean {
   const trimmed = value.trim()
-  if (!trimmed || trimmed.length > 40) return false
+  if (!trimmed) return false
   if (trimmed.includes("\n")) return false
   if (/[，。！？：；、"'“”‘’（）()]/.test(trimmed)) return false
   return /^[\p{L}\p{N}_./-]+$/u.test(trimmed)
@@ -127,7 +134,17 @@ function buildConversationMessages(
   context: string,
   turns: Array<{ role: "user" | "assistant"; content: string }>
 ): ChatMessage[] {
-  const messages: ChatMessage[] = [{ role: "system", content: prompt.content }]
+  return [
+    { role: "system", content: prompt.content },
+    ...buildConversationContextMessages(context, turns),
+  ]
+}
+
+function buildConversationContextMessages(
+  context: string,
+  turns: Array<{ role: "user" | "assistant"; content: string }>
+): ChatMessage[] {
+  const messages: ChatMessage[] = []
 
   if (context) {
     messages.push({ role: "system", content: `Context: ${context}` })
@@ -303,7 +320,11 @@ export async function executeRoutingPromptForCase(
       ? suite.routingConfig?.routes.find((route) => route.intent === resolvedIntent)
       : null
     const actualIntent = matchedRoute ? resolvedIntent : null
-    const matchedPrompt = matchedRoute ? options.routePrompts?.[matchedRoute.promptId] : null
+    const isRagRoute = matchedRoute?.intent === "R"
+    const matchedPromptId = matchedRoute
+      ? (isRagRoute ? matchedRoute.ragPromptId?.trim() ?? "" : matchedRoute.promptId)
+      : ""
+    const matchedPrompt = matchedPromptId ? options.routePrompts?.[matchedPromptId] : null
     const routingError = !rawIntent
       ? "入口 Prompt 未返回有效的 intent"
       : rawIntent === "G" && !lastResolvedIntent
@@ -311,7 +332,7 @@ export async function executeRoutingPromptForCase(
         : !matchedRoute
           ? `未找到 intent "${resolvedIntent}" 对应的 Prompt`
           : !matchedPrompt
-            ? `未找到目标 Prompt: ${matchedRoute.promptId}`
+            ? `未找到目标 Prompt: ${matchedPromptId}`
             : null
 
     logPromptExecution({
@@ -328,7 +349,7 @@ export async function executeRoutingPromptForCase(
       rawResponse: intentOutput,
       rawIntent,
       resolvedIntent,
-      matchedPromptId: matchedRoute?.promptId ?? null,
+      matchedPromptId: matchedPromptId || null,
       matchedPromptTitle: matchedPrompt?.title ?? null,
       routingError,
     })
@@ -382,10 +403,138 @@ export async function executeRoutingPromptForCase(
         rawIntent,
         rawIntentOutput: intentOutput,
         actualIntent,
-        matchedPromptId: matchedRoute.promptId,
+        matchedPromptId: matchedPromptId || null,
         matchedPromptTitle: null,
         actualReply: "",
         routingError,
+      }
+    }
+
+    if (isRagRoute) {
+      const ragPromptId = matchedRoute.ragPromptId?.trim() ?? ""
+      const ragIndexVersionId = matchedRoute.ragIndexVersionId?.trim() ?? ""
+
+      if (!ragPromptId || !ragIndexVersionId) {
+        return {
+          turnIndex,
+          userInput,
+          rawIntent,
+          rawIntentOutput: intentOutput,
+          actualIntent,
+          matchedPromptId: ragPromptId || null,
+          matchedPromptTitle: matchedPrompt.title,
+          actualReply: "",
+          routeMode: "rag",
+          ragPromptId: ragPromptId || null,
+          ragIndexVersionId: ragIndexVersionId || null,
+          retrievalTopK: RAG_RETRIEVAL_TOP_K,
+          routingError: 'intent "R" 需要同时配置 ragPromptId 和 ragIndexVersionId',
+        }
+      }
+
+      if (!matchedPrompt.content.includes("{rag_qas_text}")) {
+        return {
+          turnIndex,
+          userInput,
+          rawIntent,
+          rawIntentOutput: intentOutput,
+          actualIntent,
+          matchedPromptId: ragPromptId,
+          matchedPromptTitle: matchedPrompt.title,
+          actualReply: "",
+          routeMode: "rag",
+          ragPromptId,
+          ragIndexVersionId,
+          retrievalTopK: RAG_RETRIEVAL_TOP_K,
+          routingError: 'RAG Prompt 必须包含 {rag_qas_text}',
+        }
+      }
+
+      try {
+        const llmReranker = createGlobalRagLlmReranker()
+        const retrievalTopK = llmReranker ? RAG_LLM_RERANK_CANDIDATE_TOP_K : RAG_RETRIEVAL_TOP_K
+        const ingestResult = await ensureIndexIngestForIndexVersionId(ragIndexVersionId, {
+          query: userInput,
+        })
+        const retrievalResult = searchIndexIngest({
+          query: userInput,
+          ingest: ingestResult.ingest,
+          topK: retrievalTopK,
+          queryVector: ingestResult.queryVector,
+        })
+        const recallResults = llmReranker
+          ? await llmReranker.rerank(userInput, retrievalResult.results, RAG_RETRIEVAL_TOP_K)
+          : retrievalResult.results
+        const answer = await generateAnswer({
+          query: userInput,
+          recallResults,
+          promptTemplate: matchedPrompt.content,
+          contextMessages: buildConversationContextMessages(testCase.context, history),
+          llmClient: {
+            generate: (messages, chatOptions) =>
+              executePromptMessages(provider, messages, {
+                ...DEFAULT_PROMPT_OPTIONS,
+                ...chatOptions,
+                signal: options.signal,
+              }),
+          },
+        })
+
+        logPromptExecution({
+          workflowMode: debugContext?.workflowMode ?? "routing",
+          stage: "target",
+          caseId: debugContext?.caseId ?? testCase.id,
+          caseTitle: debugContext?.caseTitle ?? testCase.title,
+          turnIndex,
+          provider: debugContext?.provider,
+          model: debugContext?.model,
+          promptId: matchedPrompt.id,
+          promptTitle: matchedPrompt.title,
+          messages: answer.llmMessages,
+          rawResponse: answer.answerText,
+          rawIntent,
+          resolvedIntent: actualIntent,
+          matchedPromptId: matchedPrompt.id,
+          matchedPromptTitle: matchedPrompt.title,
+        })
+
+        lastResolvedIntent = actualIntent
+
+        return {
+          turnIndex,
+          userInput,
+          rawIntent,
+          rawIntentOutput: intentOutput,
+          actualIntent,
+          matchedPromptId: matchedPrompt.id,
+          matchedPromptTitle: matchedPrompt.title,
+          actualReply: answer.answerText,
+          routeMode: "rag",
+          ragPromptId,
+          ragIndexVersionId,
+          retrievalTopK: RAG_RETRIEVAL_TOP_K,
+          selectedDocId: answer.selectedDocId,
+          selectedChunkIds: answer.selectedChunkIds,
+          selectionMargin: answer.selectionMargin,
+          answerMode: answer.answerMode,
+          ingestBackfilled: ingestResult.backfilled,
+        }
+      } catch (error) {
+        return {
+          turnIndex,
+          userInput,
+          rawIntent,
+          rawIntentOutput: intentOutput,
+          actualIntent,
+          matchedPromptId: ragPromptId || null,
+          matchedPromptTitle: matchedPrompt.title,
+          actualReply: "",
+          routeMode: "rag",
+          ragPromptId: ragPromptId || null,
+          ragIndexVersionId: ragIndexVersionId || null,
+          retrievalTopK: RAG_RETRIEVAL_TOP_K,
+          routingError: error instanceof Error ? error.message : String(error),
+        }
       }
     }
 
@@ -421,9 +570,10 @@ export async function executeRoutingPromptForCase(
       rawIntent,
       rawIntentOutput: intentOutput,
       actualIntent,
-      matchedPromptId: matchedRoute.promptId,
+      matchedPromptId: matchedPromptId || null,
       matchedPromptTitle: matchedPrompt.title,
       actualReply,
+      routeMode: "prompt",
     }
   }
 

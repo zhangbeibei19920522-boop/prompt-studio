@@ -176,7 +176,9 @@ export interface TestSuiteGenerationData {
     title: string
     context: string
     input: string
+    sourceDocumentId?: string | null
     expectedOutput: string
+    expectedOutputDiagnostics?: TestCaseRoutingStep[] | null
     expectedIntent?: string | null
   }>
 }
@@ -192,7 +194,9 @@ export interface TestSuiteBatchData {
     title: string
     context: string
     input: string
+    sourceDocumentId?: string | null
     expectedOutput: string
+    expectedOutputDiagnostics?: TestCaseRoutingStep[] | null
     expectedIntent?: string | null
   }>
 }

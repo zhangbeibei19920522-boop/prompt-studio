@@ -56,10 +56,14 @@ export async function POST(
     const routePrompts =
       suite.workflowMode === 'routing' && suite.routingConfig
         ? Object.fromEntries(
-            suite.routingConfig.routes
-              .map((route) => {
-                const routePrompt = findPromptById(route.promptId)
-                return routePrompt ? [route.promptId, routePrompt] : null
+            [...new Set(
+              suite.routingConfig.routes
+                .map((route) => route.intent === 'R' ? route.ragPromptId : route.promptId)
+                .filter((promptId): promptId is string => typeof promptId === 'string' && promptId.trim().length > 0),
+            )]
+              .map((promptId) => {
+                const routePrompt = findPromptById(promptId)
+                return routePrompt ? [promptId, routePrompt] : null
               })
               .filter((entry): entry is [string, NonNullable<ReturnType<typeof findPromptById>>] => entry !== null)
           )

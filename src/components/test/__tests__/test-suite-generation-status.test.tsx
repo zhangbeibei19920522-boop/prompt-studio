@@ -21,6 +21,24 @@ describe("TestSuiteGenerationStatus", () => {
     expect(html).toContain("width:37.5%")
   })
 
+  it("renders a visible in-progress bar even before the first case is generated", () => {
+    const html = renderToStaticMarkup(
+      <TestSuiteGenerationStatus
+        job={{
+          status: "running",
+          generatedCount: 0,
+          totalCount: 8,
+          errorMessage: null,
+        }}
+      />
+    )
+
+    expect(html).toContain("生成中")
+    expect(html).toContain("0/8")
+    expect(html).toContain("width:36%")
+    expect(html).toContain("animate-pulse")
+  })
+
   it("renders failed state with error message", () => {
     const html = renderToStaticMarkup(
       <TestSuiteGenerationStatus

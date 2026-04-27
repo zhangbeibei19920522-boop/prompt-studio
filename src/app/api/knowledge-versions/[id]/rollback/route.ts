@@ -12,7 +12,7 @@ export async function POST(
 ) {
   try {
     const { id } = await params
-    const data = rollbackKnowledgeVersion(id)
+    const data = await rollbackKnowledgeVersion(id)
     return NextResponse.json({ success: true, data, error: null })
   } catch (error) {
     console.error('[POST /api/knowledge-versions/[id]/rollback]', error)

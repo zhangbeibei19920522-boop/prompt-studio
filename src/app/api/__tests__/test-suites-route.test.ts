@@ -136,9 +136,126 @@ async function waitFor<T>(
 }
 
 describe("test suite routes", () => {
+  it("resumes queued generation jobs when listing project generation jobs", async () => {
+    const testContext = await setupTestSuiteRouteTest()
+    vi.resetModules()
+
+    const resumeConfiguredTestSuiteGenerationJobs = vi.fn()
+
+    vi.doMock("@/lib/test-suite-generation/job-scheduler", () => ({
+      resumeConfiguredTestSuiteGenerationJobs,
+    }))
+
+    try {
+      const { getDb } = await import("@/lib/db")
+      const db = getDb()
+      const now = "2026-03-20T00:10:00.000Z"
+
+      db.prepare(`
+        INSERT INTO test_suites (
+          id,
+          project_id,
+          section,
+          name,
+          description,
+          prompt_id,
+          workflow_mode,
+          config,
+          status,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "suite-queued",
+        "project-1",
+        "full-flow",
+        "待生成测试集",
+        "",
+        "prompt-d",
+        "single",
+        "{}",
+        "draft",
+        now,
+        now
+      )
+
+      db.prepare(`
+        INSERT INTO test_suite_generation_jobs (
+          id,
+          project_id,
+          suite_id,
+          status,
+          generated_count,
+          total_count,
+          request_json,
+          error_message,
+          created_at,
+          updated_at,
+          completed_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "job-queued",
+        "project-1",
+        "suite-queued",
+        "queued",
+        0,
+        4,
+        JSON.stringify({
+          suiteName: "待生成测试集",
+          suiteLanguage: "zh",
+          section: "full-flow",
+          structure: "single",
+          promptId: "prompt-d",
+          routingConfig: null,
+          targetType: "prompt",
+          targetId: null,
+          caseCount: 4,
+          conversationMode: "single-turn",
+          minTurns: null,
+          maxTurns: null,
+          generationSourceIds: ["document:doc-1"],
+        }),
+        null,
+        now,
+        now,
+        null
+      )
+
+      const jobsRoute = await import("@/app/api/projects/[id]/test-suite-generation-jobs/route")
+      const response = await jobsRoute.GET(new Request("http://localhost"), {
+        params: Promise.resolve({ id: "project-1" }),
+      })
+      const payload = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(payload.success).toBe(true)
+      expect(resumeConfiguredTestSuiteGenerationJobs).toHaveBeenCalledWith("project-1")
+      expect(payload.data).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: "job-queued",
+            status: "queued",
+          }),
+        ])
+      )
+    } finally {
+      vi.doUnmock("@/lib/test-suite-generation/job-scheduler")
+      testContext.cleanup()
+    }
+  })
+
   it("creates a configured single-prompt generation job and persists the generated suite", async () => {
     const testContext = await setupTestSuiteRouteTest()
     vi.resetModules()
+
+    const chatStream = vi
+      .fn()
+      .mockImplementationOnce(async function* () {
+        yield "退款通常会在审核通过后 1 到 3 个工作日内到账。"
+      })
+      .mockImplementationOnce(async function* () {
+        yield "退货寄回时需要保留商品完整并按售后指引提供物流信息。"
+      })
 
     const handleTestAgentChat = vi.fn(async function* (_sessionId: string, content: string, references: Array<{ type: string; id: string; title: string }>) {
       expect(content).toContain("单 Prompt")
@@ -172,6 +289,7 @@ describe("test suite routes", () => {
               title: "退款政策咨询",
               context: "用户想了解退款时效",
               input: "User: 退款多久能到账？\nAssistant:\nUser: 物流寄回有什么要求？\nAssistant:",
+              sourceDocumentId: "doc-1",
               expectedOutput: "说明退款到账时效和物流要求",
             },
           ],
@@ -183,6 +301,22 @@ describe("test suite routes", () => {
       handleTestAgentChat,
     }))
 
+    vi.doMock("@/lib/ai/provider", () => ({
+      createAiProvider: () => ({
+        chat: vi.fn(),
+        chatStream,
+      }),
+    }))
+
+    vi.doMock("@/lib/db/repositories/settings", () => ({
+      getSettings: () => ({
+        provider: "openai",
+        apiKey: "test-key",
+        model: "gpt-test",
+        baseUrl: "",
+      }),
+    }))
+
     try {
       const generateRoute = await import("@/app/api/projects/[id]/test-suites/generate/route")
       const detailRoute = await import("@/app/api/test-suites/[id]/route")
@@ -192,6 +326,8 @@ describe("test suite routes", () => {
         new Request("http://localhost", {
           method: "POST",
           body: JSON.stringify({
+            suiteName: "客服主 Prompt 回归测试",
+            suiteLanguage: "zh",
             section: "full-flow",
             structure: "single",
             promptId: "prompt-d",
@@ -203,6 +339,7 @@ describe("test suite routes", () => {
             minTurns: 2,
             maxTurns: 4,
             generationSourceIds: ["document:doc-1"],
+            generationDocumentRouteModes: [{ documentId: "doc-1", routeMode: "non-r" }],
           }),
         }),
         { params: Promise.resolve({ id: "project-1" }) }
@@ -213,7 +350,7 @@ describe("test suite routes", () => {
       expect(response.status).toBe(202)
       expect(payload.data.suite).toMatchObject({
         section: "full-flow",
-        name: "客服主 Prompt 测试集",
+        name: "客服主 Prompt 回归测试",
         workflowMode: "single",
         promptId: "prompt-d",
       })
@@ -258,18 +395,65 @@ describe("test suite routes", () => {
 
       expect(detailPayload.data.promptId).toBe("prompt-d")
       expect(detailPayload.data.section).toBe("full-flow")
-      expect(detailPayload.data.name).toBe("客服主 Prompt 全流程测试")
+      expect(detailPayload.data.name).toBe("客服主 Prompt 回归测试")
       expect(detailPayload.data.cases).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             title: "退款政策咨询",
-            expectedOutput: "说明退款到账时效和物流要求",
+            generationMetadata: {
+              sourceDocumentId: "doc-1",
+              sourceDocumentName: "退款政策.docx",
+              sourceRouteMode: "non-r",
+            },
+            expectedOutput:
+              "User: 退款多久能到账？\nAssistant: 退款通常会在审核通过后 1 到 3 个工作日内到账。\nUser: 物流寄回有什么要求？\nAssistant: 退货寄回时需要保留商品完整并按售后指引提供物流信息。",
           }),
         ])
       )
       expect(handleTestAgentChat).toHaveBeenCalledTimes(1)
     } finally {
       vi.doUnmock("@/lib/ai/agent")
+      vi.doUnmock("@/lib/ai/provider")
+      vi.doUnmock("@/lib/db/repositories/settings")
+      testContext.cleanup()
+    }
+  })
+
+  it("rejects configured generation when selected documents are missing route modes", async () => {
+    const testContext = await setupTestSuiteRouteTest()
+    vi.resetModules()
+
+    try {
+      const generateRoute = await import("@/app/api/projects/[id]/test-suites/generate/route")
+
+      const response = await generateRoute.POST(
+        new Request("http://localhost", {
+          method: "POST",
+          body: JSON.stringify({
+            suiteName: "客服主 Prompt 回归测试",
+            suiteLanguage: "zh",
+            section: "full-flow",
+            structure: "single",
+            promptId: "prompt-d",
+            routingConfig: null,
+            targetType: "prompt",
+            targetId: null,
+            caseCount: 4,
+            conversationMode: "single-turn",
+            minTurns: null,
+            maxTurns: null,
+            generationSourceIds: ["document:doc-1"],
+            generationDocumentRouteModes: [],
+          }),
+        }),
+        { params: Promise.resolve({ id: "project-1" }) }
+      )
+
+      const payload = await response.json()
+
+      expect(response.status).toBe(400)
+      expect(payload.error).toBe("Each selected document must declare a route mode")
+    } finally {
       testContext.cleanup()
     }
   })
@@ -322,6 +506,7 @@ describe("test suite routes", () => {
               title: "先咨询再寄修",
               context: "用户先问政策再追问寄修",
               input: "User: 退款多久到账？\nAssistant:\nUser: 如果商品坏了怎么寄修？\nAssistant:",
+              sourceDocumentId: "doc-1",
               expectedIntent: "P-SQ",
               expectedOutput: "先回答退款时效，再回答寄修流程",
             },
@@ -343,6 +528,8 @@ describe("test suite routes", () => {
         new Request("http://localhost", {
           method: "POST",
           body: JSON.stringify({
+            suiteName: "客服路由回归测试",
+            suiteLanguage: "zh",
             section: "full-flow",
             structure: "multi",
             promptId: null,
@@ -360,6 +547,7 @@ describe("test suite routes", () => {
             minTurns: null,
             maxTurns: null,
             generationSourceIds: ["document:doc-1"],
+            generationDocumentRouteModes: [{ documentId: "doc-1", routeMode: "non-r" }],
           }),
         }),
         { params: Promise.resolve({ id: "project-1" }) }
@@ -370,7 +558,7 @@ describe("test suite routes", () => {
       expect(response.status).toBe(202)
       expect(payload.data.suite).toMatchObject({
         section: "full-flow",
-        name: "Intent Router 全流程测试集",
+        name: "客服路由回归测试",
         workflowMode: "routing",
         promptId: null,
         routingConfig: {
@@ -413,7 +601,7 @@ describe("test suite routes", () => {
 
       expect(detailPayload.data).toMatchObject({
         section: "full-flow",
-        name: "售后路由测试",
+        name: "客服路由回归测试",
         workflowMode: "routing",
         promptId: null,
         routingConfig: {
@@ -434,6 +622,151 @@ describe("test suite routes", () => {
       expect(handleTestAgentChat).toHaveBeenCalledTimes(1)
     } finally {
       vi.doUnmock("@/lib/ai/agent")
+      testContext.cleanup()
+    }
+  })
+
+  it("persists full multi-turn transcripts for generated routing suites", async () => {
+    const testContext = await setupTestSuiteRouteTest()
+    vi.resetModules()
+
+    const chatStream = vi
+      .fn()
+      .mockImplementationOnce(async function* () {
+        yield '{"intent":"P-SQ"}'
+      })
+      .mockImplementationOnce(async function* () {
+        yield "退款通常会在审核通过后 1 到 3 个工作日内到账。"
+      })
+      .mockImplementationOnce(async function* () {
+        yield '{"intent":"P-JX"}'
+      })
+      .mockImplementationOnce(async function* () {
+        yield "如果商品损坏，可以先提交寄修申请并按指引寄回。"
+      })
+
+    const handleTestAgentChat = vi.fn(async function* (
+      _sessionId: string,
+      content: string,
+      _references: Array<{ type: string; id: string; title: string }>,
+      options?: { routingConfig?: { entryPromptId: string; routes: Array<{ intent: string; promptId: string }> } | null }
+    ) {
+      expect(content).toContain("多 Prompt")
+      expect(content).toContain("多轮对话")
+
+      yield {
+        type: "test-suite",
+        data: {
+          name: "售后路由测试",
+          description: "覆盖咨询和寄修 intent",
+          workflowMode: "routing",
+          routingConfig: options?.routingConfig ?? null,
+          cases: [
+            {
+              title: "先咨询再寄修",
+              context: "用户先问政策再追问寄修",
+              input: "User: 退款多久到账？\nAssistant:\nUser: 如果商品坏了怎么寄修？\nAssistant:",
+              sourceDocumentId: "doc-1",
+              expectedIntent: "P-SQ",
+              expectedOutput: "先回答退款时效，再回答寄修流程",
+            },
+          ],
+        },
+      }
+    })
+
+    vi.doMock("@/lib/ai/agent", () => ({
+      handleTestAgentChat,
+    }))
+
+    vi.doMock("@/lib/ai/provider", () => ({
+      createAiProvider: () => ({
+        chat: vi.fn(),
+        chatStream,
+      }),
+    }))
+
+    vi.doMock("@/lib/db/repositories/settings", () => ({
+      getSettings: () => ({
+        provider: "openai",
+        apiKey: "test-key",
+        model: "gpt-test",
+        baseUrl: "",
+      }),
+    }))
+
+    try {
+      const generateRoute = await import("@/app/api/projects/[id]/test-suites/generate/route")
+      const detailRoute = await import("@/app/api/test-suites/[id]/route")
+      const jobsRoute = await import("@/app/api/projects/[id]/test-suite-generation-jobs/route")
+
+      const response = await generateRoute.POST(
+        new Request("http://localhost", {
+          method: "POST",
+          body: JSON.stringify({
+            suiteName: "客服路由回归测试",
+            suiteLanguage: "zh",
+            section: "full-flow",
+            structure: "multi",
+            promptId: null,
+            routingConfig: {
+              entryPromptId: "prompt-a",
+              routes: [
+                { intent: "P-SQ", promptId: "prompt-b" },
+                { intent: "P-JX", promptId: "prompt-c" },
+              ],
+            },
+            targetType: "prompt",
+            targetId: null,
+            caseCount: 3,
+            conversationMode: "multi-turn",
+            minTurns: 2,
+            maxTurns: 4,
+            generationSourceIds: ["document:doc-1"],
+            generationDocumentRouteModes: [{ documentId: "doc-1", routeMode: "non-r" }],
+          }),
+        }),
+        { params: Promise.resolve({ id: "project-1" }) }
+      )
+
+      const payload = await response.json()
+
+      expect(response.status).toBe(202)
+
+      await waitFor(
+        async () => {
+          const jobsResponse = await jobsRoute.GET(new Request("http://localhost"), {
+            params: Promise.resolve({ id: "project-1" }),
+          })
+          return jobsResponse.json()
+        },
+        (jobsPayload) =>
+          Array.isArray(jobsPayload.data) &&
+          jobsPayload.data.some(
+            (job: { id: string; status: string; generatedCount: number }) =>
+              job.id === payload.data.job.id && job.status === "completed" && job.generatedCount === 1
+          )
+      )
+
+      const detailResponse = await detailRoute.GET(new Request("http://localhost"), {
+        params: Promise.resolve({ id: payload.data.suite.id }),
+      })
+      const detailPayload = await detailResponse.json()
+
+      expect(detailPayload.data.cases).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            title: "先咨询再寄修",
+            expectedIntent: "P-SQ",
+            expectedOutput:
+              "User: 退款多久到账？\nAssistant: P-SQ\n退款通常会在审核通过后 1 到 3 个工作日内到账。\nUser: 如果商品坏了怎么寄修？\nAssistant: P-JX\n如果商品损坏，可以先提交寄修申请并按指引寄回。",
+          }),
+        ])
+      )
+    } finally {
+      vi.doUnmock("@/lib/ai/agent")
+      vi.doUnmock("@/lib/ai/provider")
+      vi.doUnmock("@/lib/db/repositories/settings")
       testContext.cleanup()
     }
   })
@@ -461,6 +794,7 @@ describe("test suite routes", () => {
               title: "FAQ 检索",
               context: "验证知识问答检索",
               input: "如何申请退款？",
+              sourceDocumentId: "doc-1",
               expectedOutput: "命中退款相关知识并返回正确要点",
             },
           ],
@@ -481,6 +815,8 @@ describe("test suite routes", () => {
         new Request("http://localhost", {
           method: "POST",
           body: JSON.stringify({
+            suiteName: "索引版本单元测试",
+            suiteLanguage: "zh",
             section: "unit",
             structure: "single",
             promptId: null,
@@ -494,6 +830,7 @@ describe("test suite routes", () => {
             minTurns: null,
             maxTurns: null,
             generationSourceIds: ["document:doc-1"],
+            generationDocumentRouteModes: [{ documentId: "doc-1", routeMode: "non-r" }],
           }),
         }),
         { params: Promise.resolve({ id: "project-1" }) }
@@ -504,7 +841,7 @@ describe("test suite routes", () => {
       expect(response.status).toBe(202)
       expect(payload.data.suite).toMatchObject({
         section: "unit",
-        name: "kb-index-2024-04-20 单元测试",
+        name: "索引版本单元测试",
         promptId: null,
         workflowMode: "single",
       })

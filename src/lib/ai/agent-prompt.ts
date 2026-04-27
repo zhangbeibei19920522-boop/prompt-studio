@@ -1,4 +1,9 @@
 import type { AgentContext, ChatMessage } from '@/types/ai'
+import {
+  appendBoundedDocumentReferences,
+  appendBoundedPromptReferences,
+  buildBoundedHistoryMessages,
+} from '@/lib/ai/context-window'
 
 const SYSTEM_PROMPT = `你是一个专业的 Prompt 工程师 Agent。你的职责是根据业务上下文帮用户生成和优化 prompt。
 
@@ -167,34 +172,13 @@ export function buildPlanMessages(context: AgentContext): ChatMessage[] {
     }
   }
 
-  // Referenced prompts
-  if (context.referencedPrompts.length > 0) {
-    system += '\n\n## 引用的 Prompt'
-    for (const p of context.referencedPrompts) {
-      system += `\n\n### ${p.title} (ID: ${p.id})`
-      if (p.description) system += `\n说明: ${p.description}`
-      system += `\n内容:\n${p.content}`
-    }
-  }
-
-  // Referenced documents
-  if (context.referencedDocuments.length > 0) {
-    system += '\n\n## 引用的知识库文档'
-    for (const d of context.referencedDocuments) {
-      system += `\n\n### ${d.name} (${d.type})`
-      system += `\n${d.content}`
-    }
-  }
+  system = appendBoundedPromptReferences(system, context.referencedPrompts)
+  system = appendBoundedDocumentReferences(system, context.referencedDocuments)
 
   messages.push({ role: 'system', content: system })
 
   // Session history
-  for (const msg of context.sessionHistory) {
-    messages.push({
-      role: msg.role,
-      content: msg.content,
-    })
-  }
+  messages.push(...buildBoundedHistoryMessages(context.sessionHistory))
 
   // Current user message
   messages.push({ role: 'user', content: context.userMessage })

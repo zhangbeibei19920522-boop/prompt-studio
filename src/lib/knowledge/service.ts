@@ -17,7 +17,6 @@ import {
 import { findDocumentById, findDocumentsByProject } from '@/lib/db/repositories/documents'
 import {
   createKnowledgeIndexVersion,
-  findKnowledgeIndexVersionById,
   findKnowledgeIndexVersionByKnowledgeVersionId,
   findKnowledgeIndexVersionsByProject,
   updateKnowledgeIndexVersion,
@@ -47,6 +46,7 @@ import type {
 } from '@/types/database'
 
 import { buildKnowledgeArtifacts } from './builder'
+import { ensureIndexIngestArtifacts, resolveIndexEmbeddingClient } from './index-ingest'
 import { buildKnowledgeArtifactPaths, ensureKnowledgeArtifactDir } from './storage'
 
 function writeJsonLines(filePath: string, rows: unknown[]): void {
@@ -104,6 +104,53 @@ function buildIndexManifest(version: KnowledgeVersion, knowledgeBase: KnowledgeB
   }
 }
 
+function resolvePostBuildTaskState(stageSummary: KnowledgeVersion['stageSummary']) {
+  if (stageSummary.highRiskCount > 0 || stageSummary.blockedCount > 0) {
+    return {
+      status: 'pending' as const,
+      currentStep: 'risk_review',
+      progress: 100,
+      completedAt: null,
+    }
+  }
+
+  return {
+    status: 'pending' as const,
+    currentStep: 'result_review',
+    progress: 100,
+    completedAt: null,
+  }
+}
+
+function getTaskProgressForStage(stage: string): number {
+  switch (stage) {
+    case 'stage1_source_manifest':
+      return 12
+    case 'stage2_raw_records':
+      return 20
+    case 'stage3_cleaned_records':
+      return 28
+    case 'stage4_routing':
+      return 36
+    case 'stage5_structure':
+      return 44
+    case 'stage6_promotion':
+      return 52
+    case 'stage7_merge':
+      return 62
+    case 'stage8_conflict_detection':
+      return 72
+    case 'stage9_release_gating':
+      return 82
+    case 'stage10_parents':
+      return 90
+    case 'stage11_coverage_audit':
+      return 96
+    default:
+      return 10
+  }
+}
+
 export function findKnowledgeBaseForProject(projectId: string): KnowledgeBase | null {
   return findKnowledgeBaseByProjectId(projectId)
 }
@@ -130,7 +177,7 @@ export function listKnowledgeIndexVersions(projectId: string): KnowledgeIndexVer
   return findKnowledgeIndexVersionsByProject(projectId)
 }
 
-export function buildKnowledgeTaskForProject(
+export function startKnowledgeBuildTaskForProject(
   projectId: string,
   request: CreateKnowledgeBuildTaskRequest,
 ): CreateKnowledgeBuildTaskResponse {
@@ -145,7 +192,7 @@ export function buildKnowledgeTaskForProject(
   }
 
   const input = normalizeTaskInput(request)
-  const documents = resolveDocumentsForTask(projectId, request.taskType, input.documentIds)
+  resolveDocumentsForTask(projectId, request.taskType, input.documentIds)
 
   const task = createKnowledgeBuildTask({
     projectId,
@@ -156,8 +203,43 @@ export function buildKnowledgeTaskForProject(
     input,
   })
 
+  const queuedTask = updateKnowledgeBuildTask(task.id, {
+    status: 'running',
+    currentStep: 'queued',
+    progress: 0,
+    errorMessage: null,
+  })
+
+  return {
+    task: queuedTask ?? task,
+    version: null,
+  }
+}
+
+export async function runKnowledgeBuildTask(taskId: string): Promise<void> {
+  const task = findKnowledgeBuildTaskById(taskId)
+  if (!task) {
+    throw new Error(`Knowledge build task "${taskId}" was not found`)
+  }
+
+  if (task.completedAt || task.currentStep === 'risk_review' || task.currentStep === 'result_review' || task.currentStep === 'completed') {
+    return
+  }
+
+  const project = findProjectById(task.projectId)
+  if (!project) {
+    throw new Error(`Project "${task.projectId}" was not found`)
+  }
+
+  const knowledgeBase = findKnowledgeBaseById(task.knowledgeBaseId)
+  if (!knowledgeBase) {
+    throw new Error(`Knowledge base "${task.knowledgeBaseId}" was not found`)
+  }
+
+  const documents = resolveDocumentsForTask(task.projectId, task.taskType, task.input.documentIds)
+
   try {
-    const startedAt = new Date().toISOString()
+    const startedAt = task.startedAt ?? new Date().toISOString()
     updateKnowledgeBuildTask(task.id, {
       status: 'running',
       currentStep: 'building_artifacts',
@@ -171,13 +253,20 @@ export function buildKnowledgeTaskForProject(
       profileKey: knowledgeBase.profileKey,
       profileConfig: knowledgeBase.profileConfig,
       sourceDocuments: documents,
-      manualDrafts: input.manualDrafts,
-      repairQuestions: input.repairQuestions,
+      manualDrafts: task.input.manualDrafts,
+      repairQuestions: task.input.repairQuestions,
+      onStageChange: (stage) => {
+        updateKnowledgeBuildTask(task.id, {
+          status: 'running',
+          currentStep: 'building_artifacts',
+          progress: getTaskProgressForStage(stage),
+        })
+      },
     })
 
     const knowledgeVersionId = nanoid()
     const paths = buildKnowledgeArtifactPaths({
-      projectId,
+      projectId: task.projectId,
       knowledgeBaseId: knowledgeBase.id,
       knowledgeVersionId,
     })
@@ -186,11 +275,17 @@ export function buildKnowledgeTaskForProject(
     writeJsonLines(paths.chunksFilePath, artifacts.chunks)
     writeJsonFile(paths.manifestFilePath, artifacts.manifest)
 
+    updateKnowledgeBuildTask(task.id, {
+      status: 'running',
+      currentStep: 'building_artifacts',
+      progress: 98,
+    })
+
     createKnowledgeVersion({
       id: knowledgeVersionId,
       knowledgeBaseId: knowledgeBase.id,
       taskId: task.id,
-      name: request.name,
+      name: task.name,
       buildProfile: knowledgeBase.profileKey,
       sourceSummary: artifacts.sourceSummary,
       stageSummary: artifacts.stageSummary,
@@ -236,23 +331,19 @@ export function buildKnowledgeTaskForProject(
       })),
     )
 
-    const completedTask = updateKnowledgeBuildTask(task.id, {
-      status: 'succeeded',
-      currentStep: 'completed',
-      progress: 100,
+    const nextTaskState = resolvePostBuildTaskState(artifacts.stageSummary)
+    updateKnowledgeBuildTask(task.id, {
+      status: nextTaskState.status,
+      currentStep: nextTaskState.currentStep,
+      progress: nextTaskState.progress,
       knowledgeVersionId,
       stageSummary: artifacts.stageSummary,
-      completedAt: new Date().toISOString(),
+      completedAt: nextTaskState.completedAt,
     })
 
     updateKnowledgeBase(knowledgeBase.id, {
       currentDraftVersionId: knowledgeVersionId,
     })
-
-    return {
-      task: completedTask ?? findKnowledgeBuildTaskById(task.id)!,
-      version: findKnowledgeVersionById(knowledgeVersionId)!,
-    }
   } catch (error) {
     updateKnowledgeBuildTask(task.id, {
       status: 'failed',
@@ -282,6 +373,7 @@ export function ensureKnowledgeIndexVersion(versionId: string): KnowledgeIndexVe
       knowledgeBaseId: knowledgeBase.id,
       knowledgeVersionId: version.id,
     })
+    ensureIndexIngestArtifacts({ paths })
     writeJsonFile(paths.indexManifestFilePath, buildIndexManifest(version, knowledgeBase, existing))
     return existing
   }
@@ -303,11 +395,12 @@ export function ensureKnowledgeIndexVersion(versionId: string): KnowledgeIndexVe
     manifestFilePath: paths.indexManifestFilePath,
   })
 
+  ensureIndexIngestArtifacts({ paths })
   writeJsonFile(paths.indexManifestFilePath, buildIndexManifest(version, knowledgeBase, indexVersion))
   return indexVersion
 }
 
-export function pushKnowledgeVersionToStg(versionId: string): KnowledgeVersionPushResponse {
+export async function ensureKnowledgeIndexVersionWithEmbedding(versionId: string): Promise<KnowledgeIndexVersion> {
   const version = findKnowledgeVersionById(versionId)
   if (!version) {
     throw new Error(`Knowledge version "${versionId}" was not found`)
@@ -318,7 +411,66 @@ export function pushKnowledgeVersionToStg(versionId: string): KnowledgeVersionPu
     throw new Error(`Knowledge base "${version.knowledgeBaseId}" was not found`)
   }
 
-  const indexVersion = ensureKnowledgeIndexVersion(versionId)
+  const embeddingClient = resolveIndexEmbeddingClient()
+  const existing = findKnowledgeIndexVersionByKnowledgeVersionId(versionId)
+  const paths = buildKnowledgeArtifactPaths({
+    projectId: knowledgeBase.projectId,
+    knowledgeBaseId: knowledgeBase.id,
+    knowledgeVersionId: version.id,
+  })
+
+  if (existing) {
+    if (embeddingClient) {
+      await ensureIndexIngestArtifacts({
+        paths,
+        embeddingClient,
+      })
+    } else {
+      ensureIndexIngestArtifacts({
+        paths,
+      })
+    }
+    writeJsonFile(paths.indexManifestFilePath, buildIndexManifest(version, knowledgeBase, existing))
+    return existing
+  }
+
+  const indexVersion = createKnowledgeIndexVersion({
+    knowledgeBaseId: knowledgeBase.id,
+    knowledgeVersionId: version.id,
+    name: `${version.name} Index`,
+    profileKey: knowledgeBase.profileKey,
+    parentCount: version.parentCount,
+    chunkCount: version.chunkCount,
+    stageSummary: version.stageSummary,
+    manifestFilePath: paths.indexManifestFilePath,
+  })
+
+  if (embeddingClient) {
+    await ensureIndexIngestArtifacts({
+      paths,
+      embeddingClient,
+    })
+  } else {
+    ensureIndexIngestArtifacts({
+      paths,
+    })
+  }
+  writeJsonFile(paths.indexManifestFilePath, buildIndexManifest(version, knowledgeBase, indexVersion))
+  return indexVersion
+}
+
+export async function pushKnowledgeVersionToStg(versionId: string): Promise<KnowledgeVersionPushResponse> {
+  const version = findKnowledgeVersionById(versionId)
+  if (!version) {
+    throw new Error(`Knowledge version "${versionId}" was not found`)
+  }
+
+  const knowledgeBase = findKnowledgeBaseById(version.knowledgeBaseId)
+  if (!knowledgeBase) {
+    throw new Error(`Knowledge base "${version.knowledgeBaseId}" was not found`)
+  }
+
+  const indexVersion = await ensureKnowledgeIndexVersionWithEmbedding(versionId)
   const previousStgVersionId = knowledgeBase.currentStgVersionId
   const previousStgIndexVersionId = knowledgeBase.currentStgIndexVersionId
   const now = new Date().toISOString()
@@ -358,6 +510,17 @@ export function pushKnowledgeVersionToStg(versionId: string): KnowledgeVersionPu
     currentStgIndexVersionId: indexVersion.id,
   })!
 
+  if (version.taskId) {
+    updateKnowledgeBuildTask(version.taskId, {
+      status: 'succeeded',
+      currentStep: 'completed',
+      progress: 100,
+      knowledgeIndexVersionId: indexVersion.id,
+      completedAt: now,
+      errorMessage: null,
+    })
+  }
+
   return {
     knowledgeBase: updatedKnowledgeBase,
     version: updatedVersion,
@@ -365,7 +528,7 @@ export function pushKnowledgeVersionToStg(versionId: string): KnowledgeVersionPu
   }
 }
 
-export function pushKnowledgeVersionToProd(versionId: string): KnowledgeVersionPushResponse {
+export async function pushKnowledgeVersionToProd(versionId: string): Promise<KnowledgeVersionPushResponse> {
   const version = findKnowledgeVersionById(versionId)
   if (!version) {
     throw new Error(`Knowledge version "${versionId}" was not found`)
@@ -376,7 +539,7 @@ export function pushKnowledgeVersionToProd(versionId: string): KnowledgeVersionP
     throw new Error(`Knowledge base "${version.knowledgeBaseId}" was not found`)
   }
 
-  const indexVersion = ensureKnowledgeIndexVersion(versionId)
+  const indexVersion = await ensureKnowledgeIndexVersionWithEmbedding(versionId)
   const previousProdVersionId = knowledgeBase.currentProdVersionId
   const previousProdIndexVersionId = knowledgeBase.currentProdIndexVersionId
   const now = new Date().toISOString()
@@ -410,6 +573,17 @@ export function pushKnowledgeVersionToProd(versionId: string): KnowledgeVersionP
     currentStgIndexVersionId: indexVersion.id,
   })!
 
+  if (version.taskId) {
+    updateKnowledgeBuildTask(version.taskId, {
+      status: 'succeeded',
+      currentStep: 'completed',
+      progress: 100,
+      knowledgeIndexVersionId: indexVersion.id,
+      completedAt: now,
+      errorMessage: null,
+    })
+  }
+
   return {
     knowledgeBase: updatedKnowledgeBase,
     version: updatedVersion,
@@ -417,6 +591,6 @@ export function pushKnowledgeVersionToProd(versionId: string): KnowledgeVersionP
   }
 }
 
-export function rollbackKnowledgeVersion(versionId: string): KnowledgeVersionPushResponse {
+export async function rollbackKnowledgeVersion(versionId: string): Promise<KnowledgeVersionPushResponse> {
   return pushKnowledgeVersionToProd(versionId)
 }

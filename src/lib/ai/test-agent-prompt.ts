@@ -1,8 +1,13 @@
 import type { AgentContext, ChatMessage, TestSuiteBatchData } from '@/types/ai'
-import type { TestSuiteRoutingConfig } from '@/types/database'
+import type { TestGenerationDocumentRouteMode, TestSuiteRoutingConfig } from '@/types/database'
 import { findKnowledgeIndexVersionById } from '@/lib/db/repositories/knowledge-index-versions'
 import { findPromptById } from '@/lib/db/repositories/prompts'
 import { getTestRouteTargetId, getTestRouteTargetType } from '@/lib/test-suite-routing'
+import {
+  appendBoundedDocumentReferences,
+  appendBoundedPromptReferences,
+  buildBoundedHistoryMessages,
+} from '@/lib/ai/context-window'
 
 const INITIAL_TEST_SYSTEM_PROMPT = `你是一个专业的 Prompt 测试专家。你的任务是帮助用户创建高质量的测试集，用于评估 Prompt 的质量和效果。
 
@@ -45,6 +50,7 @@ const INITIAL_TEST_SYSTEM_PROMPT = `你是一个专业的 Prompt 测试专家。
       "title": "用例标题",
       "context": "模拟的用户场景上下文",
       "input": "用户输入内容",
+      "sourceDocumentId": "主文档 ID（如果本次生成选择了文档来源，则必填）",
       "expectedOutput": "预期输出描述（不需要完全精确，描述要点即可）"
     }
   ]
@@ -145,6 +151,7 @@ const ROUTING_GENERATION_SYSTEM_PROMPT = `你是一个专业的 Prompt 测试专
       "title": "用例标题",
       "context": "用户场景上下文",
       "input": "用户输入",
+      "sourceDocumentId": "主文档 ID（如果本次生成选择了文档来源，则必填）",
       "expectedIntent": "用户配置的 intent 值之一",
       "expectedOutput": "最终回复应满足的要点"
     }
@@ -163,25 +170,46 @@ const ROUTING_GENERATION_SYSTEM_PROMPT = `你是一个专业的 Prompt 测试专
 8. 多轮 input 里的 \`Assistant:\` 占位必须留空；“应回答…” 这类说明只能写在 \`expectedOutput\`
 9. 始终使用中文交互`
 
+function appendDocumentRouteModes(
+  system: string,
+  context: AgentContext,
+  documentRouteModes: TestGenerationDocumentRouteMode[],
+  options: {
+    routingEnabled: boolean
+  }
+) {
+  if (documentRouteModes.length === 0) {
+    return system
+  }
+
+  const documentNameById = new Map(context.referencedDocuments.map((document) => [document.id, document.name]))
+  const routeLines = documentRouteModes
+    .map((mode) => {
+      const label = documentNameById.get(mode.documentId) ?? mode.documentId
+      return `- ${mode.documentId}（${label}） -> ${mode.routeMode === 'rag' ? 'rag' : 'non-r'}`
+    })
+    .join('\n')
+
+  return `${system}
+
+## 文档路由归类
+本次生成选择了文档来源。每条用例必须标注一个 sourceDocumentId，表示这条用例的主文档来源。
+
+已选文档与归类：
+${routeLines}
+
+生成约束：
+1. 每条用例必须标注一个 sourceDocumentId
+2. sourceDocumentId 必须从上面的文档 ID 中选择，不能留空，不能自造
+3. 如果一条用例主要来自 Prompt 而不是文档，不要生成这条用例；本次文档归类约束下，每条用例都必须绑定一个主文档
+${options.routingEnabled ? '4. rag 文档必须输出 expectedIntent = R\n5. non-r 文档不得输出 expectedIntent = R' : '4. 不要把文档归类直接写进 input，input 仍然只能是用户 query'}`
+}
+
 function appendSharedContext(system: string, context: AgentContext): string {
   let nextSystem = system
 
-  if (context.referencedPrompts.length > 0) {
-    nextSystem += '\n\n## 引用的 Prompt'
-    for (const p of context.referencedPrompts) {
-      nextSystem += `\n\n### ${p.title} (ID: ${p.id})`
-      if (p.description) nextSystem += `\n说明: ${p.description}`
-      nextSystem += `\n内容:\n${p.content}`
-    }
-  }
-
-  if (context.referencedDocuments.length > 0) {
-    nextSystem += '\n\n## 引用的知识库文档'
-    for (const d of context.referencedDocuments) {
-      nextSystem += `\n\n### ${d.name} (${d.type})`
-      nextSystem += `\n${d.content}`
-    }
-  }
+  nextSystem = appendBoundedPromptReferences(nextSystem, context.referencedPrompts)
+  nextSystem = appendBoundedDocumentReferences(nextSystem, context.referencedDocuments)
 
   if (context.projectBusiness.description || context.projectBusiness.goal || context.projectBusiness.background) {
     nextSystem += '\n\n## 项目业务信息'
@@ -196,12 +224,12 @@ function appendSharedContext(system: string, context: AgentContext): string {
 function appendRoutingConfig(system: string, routingConfig: TestSuiteRoutingConfig): string {
   const routeLines = routingConfig.routes
     .map((route) => {
-      const targetType = getTestRouteTargetType(route)
-      const targetId = getTestRouteTargetId(route)
       const targetLabel =
-        targetType === 'index-version'
-          ? `索引版本 ${findKnowledgeIndexVersionById(targetId)?.name ?? targetId}`
-          : `Prompt ${findPromptById(targetId)?.title ?? targetId}`
+        route.intent === 'R'
+          ? `RAG Prompt ${findPromptById(route.ragPromptId ?? '')?.title ?? route.ragPromptId ?? ''} + 索引版本 ${findKnowledgeIndexVersionById(route.ragIndexVersionId ?? '')?.name ?? route.ragIndexVersionId ?? ''}`
+          : getTestRouteTargetType(route) === 'index-version'
+            ? `索引版本 ${findKnowledgeIndexVersionById(getTestRouteTargetId(route))?.name ?? getTestRouteTargetId(route)}`
+            : `Prompt ${findPromptById(getTestRouteTargetId(route))?.title ?? getTestRouteTargetId(route)}`
       return `- ${route.intent} -> ${targetLabel}`
     })
     .join('\n')
@@ -219,6 +247,7 @@ export function buildTestAgentMessages(
   context: AgentContext,
   options: {
     routingConfig?: TestSuiteRoutingConfig | null
+    documentRouteModes?: TestGenerationDocumentRouteMode[]
   } = {}
 ): ChatMessage[] {
   let system = options.routingConfig
@@ -230,15 +259,16 @@ export function buildTestAgentMessages(
   if (options.routingConfig) {
     system = appendRoutingConfig(system, options.routingConfig)
   }
+  system = appendDocumentRouteModes(system, context, options.documentRouteModes ?? [], {
+    routingEnabled: Boolean(options.routingConfig),
+  })
 
   const messages: ChatMessage[] = [
     { role: 'system', content: system },
   ]
 
   // Session history
-  for (const msg of context.sessionHistory) {
-    messages.push({ role: msg.role, content: msg.content })
-  }
+  messages.push(...buildBoundedHistoryMessages(context.sessionHistory))
 
   // Current user message
   messages.push({ role: 'user', content: context.userMessage })
@@ -257,6 +287,7 @@ export function buildBatchContinuationMessages(
   allCasesSoFar: TestSuiteBatchData['cases'],
   options: {
     routingConfig?: TestSuiteRoutingConfig | null
+    documentRouteModes?: TestGenerationDocumentRouteMode[]
   } = {}
 ): ChatMessage[] {
   let system = options.routingConfig
@@ -268,15 +299,16 @@ export function buildBatchContinuationMessages(
   if (options.routingConfig) {
     system = appendRoutingConfig(system, options.routingConfig)
   }
+  system = appendDocumentRouteModes(system, context, options.documentRouteModes ?? [], {
+    routingEnabled: Boolean(options.routingConfig),
+  })
 
   const messages: ChatMessage[] = [
     { role: 'system', content: system },
   ]
 
   // Include original session history for full context
-  for (const msg of context.sessionHistory) {
-    messages.push({ role: msg.role, content: msg.content })
-  }
+  messages.push(...buildBoundedHistoryMessages(context.sessionHistory))
 
   // Original user message
   messages.push({ role: 'user', content: context.userMessage })
