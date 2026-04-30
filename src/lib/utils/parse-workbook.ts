@@ -26,13 +26,15 @@ export function parseWorkbookBuffer(buffer: Buffer): string {
       header: 1,
       raw: false,
       blankrows: false,
+      defval: '',
     })
 
     for (const row of rows) {
-      const text = row
-        .map(normalizeCellValue)
-        .filter(Boolean)
-        .join(' | ')
+      const cells = row.map(normalizeCellValue)
+      while (cells.length > 0 && !cells[cells.length - 1]) {
+        cells.pop()
+      }
+      const text = cells.join(' | ')
 
       if (text) {
         sections.push(text)

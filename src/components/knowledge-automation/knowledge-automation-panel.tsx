@@ -7,6 +7,7 @@ import type {
   KnowledgeBase,
   KnowledgeBuildTask,
   KnowledgeIndexVersion,
+  KnowledgeScopeMapping,
   KnowledgeVersion,
 } from "@/types/database"
 import { knowledgeApi } from "@/lib/utils/api-client"
@@ -40,6 +41,7 @@ interface KnowledgeAutomationPanelProps {
     tasks: KnowledgeBuildTask[]
     versions: KnowledgeVersion[]
     indexVersions: KnowledgeIndexVersion[]
+    scopeMappings?: KnowledgeScopeMapping[]
   }
 }
 
@@ -60,6 +62,7 @@ export function KnowledgeAutomationPanel({
   const [tasks, setTasks] = useState<KnowledgeBuildTask[]>(initialData?.tasks ?? [])
   const [versions, setVersions] = useState<KnowledgeVersion[]>(initialData?.versions ?? [])
   const [indexVersions, setIndexVersions] = useState<KnowledgeIndexVersion[]>(initialData?.indexVersions ?? [])
+  const [scopeMappings, setScopeMappings] = useState<KnowledgeScopeMapping[]>(initialData?.scopeMappings ?? [])
   const [versionDetails, setVersionDetails] = useState<Record<string, KnowledgeVersion>>({})
   const [loadingVersionIds, setLoadingVersionIds] = useState<Record<string, boolean>>({})
   const [actionNotice, setActionNotice] = useState<string | null>(null)
@@ -130,17 +133,19 @@ export function KnowledgeAutomationPanel({
 
     setIsLoading(true)
     try {
-      const [nextKnowledgeBase, nextTasks, nextVersions, nextIndexVersions] = await Promise.all([
+      const [nextKnowledgeBase, nextTasks, nextVersions, nextIndexVersions, nextScopeMappings] = await Promise.all([
         knowledgeApi.getKnowledgeBase(projectId),
         knowledgeApi.listKnowledgeTasks(projectId),
         knowledgeApi.listKnowledgeVersions(projectId),
         knowledgeApi.listKnowledgeIndexVersions(projectId),
+        knowledgeApi.listKnowledgeScopeMappings(projectId),
       ])
 
       setKnowledgeBase(nextKnowledgeBase)
       setTasks(nextTasks)
       setVersions(nextVersions)
       setIndexVersions(nextIndexVersions)
+      setScopeMappings(nextScopeMappings)
     } catch (error) {
       setActionNotice(error instanceof Error ? error.message : "加载知识库数据失败")
     } finally {
@@ -223,10 +228,7 @@ export function KnowledgeAutomationPanel({
     return { state: "risk", tab: "risk", mode: "candidate" }
   }
 
-  async function openDetail(taskId: string) {
-    const task = tasks.find((item) => item.id === taskId)
-    if (!task) return
-
+  function openTaskDetail(task: KnowledgeBuildTask) {
     const linkedVersion = task.knowledgeVersionId
       ? versionDetails[task.knowledgeVersionId] ??
         versions.find((version) => version.id === task.knowledgeVersionId) ??
@@ -234,7 +236,7 @@ export function KnowledgeAutomationPanel({
       : null
     const next = resolveTaskDetailState(task, linkedVersion)
 
-    setSelectedTaskId(taskId)
+    setSelectedTaskId(task.id)
     setDetailState(next.state)
     setDetailMode(next.mode)
     setActiveTab(next.tab)
@@ -251,6 +253,13 @@ export function KnowledgeAutomationPanel({
         setActionNotice("加载任务关联知识版本失败")
       })
     }
+  }
+
+  async function openDetail(taskId: string) {
+    const task = tasks.find((item) => item.id === taskId)
+    if (!task) return
+
+    openTaskDetail(task)
   }
 
   async function openVersionDetail(knowledgeVersionId: string, nextMode: DetailMode = "history") {
@@ -282,13 +291,14 @@ export function KnowledgeAutomationPanel({
         taskType: payload.taskType,
         baseVersionId: payload.baseVersionId,
         documentIds: payload.documentIds,
+        mappingId: payload.mappingId,
         manualDrafts: payload.manualDrafts,
         repairQuestions: payload.repairQuestions,
       })
 
       await loadKnowledgeData()
       setActionNotice(`已启动任务：${result.task.name}`)
-      await openDetail(result.task.id)
+      openTaskDetail(result.task)
     } catch (error) {
       setActionNotice(error instanceof Error ? error.message : "启动任务失败")
       throw error
@@ -413,6 +423,7 @@ export function KnowledgeAutomationPanel({
             <CreateView
               customer={customer}
               sourceDocuments={documents}
+              scopeMappings={scopeMappings}
               versionOptions={versionRows
                 .filter((row) => row.status !== "草稿")
                 .map((row) => ({

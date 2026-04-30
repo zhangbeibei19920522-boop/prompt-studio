@@ -3,7 +3,12 @@ import type {
   CreateKnowledgeBaseRequest,
   CreateKnowledgeBuildTaskRequest,
   CreateKnowledgeBuildTaskResponse,
+  CreateKnowledgeMappingVersionRequest,
+  CreateKnowledgeScopeMappingRecordRequest,
+  CreateKnowledgeScopeMappingRequest,
   CreateMemoryRequest,
+  UpdateKnowledgeScopeMappingRecordRequest,
+  UpdateKnowledgeScopeMappingRequest,
   UpdateMemoryRequest,
   CreateTestSuiteRequest,
   GenerateConfiguredTestSuiteRequest,
@@ -21,6 +26,10 @@ import type {
   KnowledgeBase,
   KnowledgeBuildTask,
   KnowledgeIndexVersion,
+  KnowledgeScopeMapping,
+  KnowledgeScopeMappingDetail,
+  KnowledgeScopeMappingRecord,
+  KnowledgeScopeMappingVersion,
   KnowledgeVersion,
   Session,
   Message,
@@ -325,6 +334,71 @@ export const knowledgeApi = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+  listKnowledgeMappingVersions: (projectId: string) =>
+    fetchApi<KnowledgeScopeMappingVersion[]>(`/api/projects/${projectId}/knowledge-mapping-versions`),
+  createKnowledgeMappingVersion: (projectId: string, data: CreateKnowledgeMappingVersionRequest) =>
+    fetchApi<KnowledgeScopeMappingVersion>(`/api/projects/${projectId}/knowledge-mapping-versions`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  listKnowledgeScopeMappings: (projectId: string) =>
+    fetchApi<KnowledgeScopeMapping[]>(`/api/projects/${projectId}/knowledge-scope-mappings`),
+  createKnowledgeScopeMapping: (projectId: string, data: CreateKnowledgeScopeMappingRequest) =>
+    fetchApi<KnowledgeScopeMappingDetail>(`/api/projects/${projectId}/knowledge-scope-mappings`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateKnowledgeScopeMapping: (id: string, data: UpdateKnowledgeScopeMappingRequest) =>
+    fetchApi<KnowledgeScopeMappingDetail>(`/api/knowledge-scope-mappings/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+  deleteKnowledgeScopeMapping: (id: string) =>
+    fetchApi<null>(`/api/knowledge-scope-mappings/${id}`, { method: 'DELETE' }),
+  getKnowledgeScopeMapping: (id: string) =>
+    fetchApi<KnowledgeScopeMappingDetail>(`/api/knowledge-scope-mappings/${id}`),
+  createKnowledgeScopeMappingRecord: (mappingId: string, data: CreateKnowledgeScopeMappingRecordRequest) =>
+    fetchApi<KnowledgeScopeMappingRecord>(`/api/knowledge-scope-mappings/${mappingId}/records`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateKnowledgeScopeMappingRecord: (id: string, data: UpdateKnowledgeScopeMappingRecordRequest) =>
+    fetchApi<KnowledgeScopeMappingRecord>(`/api/knowledge-scope-mapping-records/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+  deleteKnowledgeScopeMappingRecord: (id: string) =>
+    fetchApi<null>(`/api/knowledge-scope-mapping-records/${id}`, { method: 'DELETE' }),
+  uploadKnowledgeMappingVersions: async (projectId: string, files: File[]): Promise<KnowledgeScopeMappingVersion[]> => {
+    const formData = new FormData()
+    for (const file of files) {
+      formData.append('files', file)
+    }
+    const res = await fetch(`/api/projects/${projectId}/knowledge-mapping-versions`, {
+      method: 'POST',
+      body: formData,
+    })
+    const json = await res.json()
+    if (!json.success) {
+      throw new Error(json.error ?? '上传映射表失败')
+    }
+    return json.data as KnowledgeScopeMappingVersion[]
+  },
+  uploadKnowledgeScopeMappings: async (projectId: string, files: File[]): Promise<KnowledgeScopeMappingDetail[]> => {
+    const formData = new FormData()
+    for (const file of files) {
+      formData.append('files', file)
+    }
+    const res = await fetch(`/api/projects/${projectId}/knowledge-scope-mappings`, {
+      method: 'POST',
+      body: formData,
+    })
+    const json = await res.json()
+    if (!json.success) {
+      throw new Error(json.error ?? '上传映射表失败')
+    }
+    return json.data as KnowledgeScopeMappingDetail[]
+  },
   listKnowledgeVersions: (projectId: string) =>
     fetchApi<KnowledgeVersion[]>(`/api/projects/${projectId}/knowledge-versions`),
   listKnowledgeIndexVersions: (projectId: string) =>

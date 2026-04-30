@@ -8,6 +8,19 @@ interface KnowledgeRepositories {
   updateKnowledgeBase: typeof import('@/lib/db/repositories/knowledge-bases').updateKnowledgeBase
   createKnowledgeBuildTask: typeof import('@/lib/db/repositories/knowledge-build-tasks').createKnowledgeBuildTask
   updateKnowledgeBuildTask: typeof import('@/lib/db/repositories/knowledge-build-tasks').updateKnowledgeBuildTask
+  createKnowledgeScopeMappingVersion: typeof import('@/lib/db/repositories/knowledge-mapping-versions').createKnowledgeScopeMappingVersion
+  findKnowledgeScopeMappingVersionById: typeof import('@/lib/db/repositories/knowledge-mapping-versions').findKnowledgeScopeMappingVersionById
+  findKnowledgeScopeMappingVersionsByProject: typeof import('@/lib/db/repositories/knowledge-mapping-versions').findKnowledgeScopeMappingVersionsByProject
+  createKnowledgeScopeMapping: typeof import('@/lib/db/repositories/knowledge-scope-mappings').createKnowledgeScopeMapping
+  findKnowledgeScopeMappingById: typeof import('@/lib/db/repositories/knowledge-scope-mappings').findKnowledgeScopeMappingById
+  findKnowledgeScopeMappingsByProject: typeof import('@/lib/db/repositories/knowledge-scope-mappings').findKnowledgeScopeMappingsByProject
+  updateKnowledgeScopeMapping: typeof import('@/lib/db/repositories/knowledge-scope-mappings').updateKnowledgeScopeMapping
+  deleteKnowledgeScopeMapping: typeof import('@/lib/db/repositories/knowledge-scope-mappings').deleteKnowledgeScopeMapping
+  createKnowledgeScopeMappingRecord: typeof import('@/lib/db/repositories/knowledge-scope-mappings').createKnowledgeScopeMappingRecord
+  findKnowledgeScopeMappingRecords: typeof import('@/lib/db/repositories/knowledge-scope-mappings').findKnowledgeScopeMappingRecords
+  updateKnowledgeScopeMappingRecord: typeof import('@/lib/db/repositories/knowledge-scope-mappings').updateKnowledgeScopeMappingRecord
+  deleteKnowledgeScopeMappingRecord: typeof import('@/lib/db/repositories/knowledge-scope-mappings').deleteKnowledgeScopeMappingRecord
+  refreshKnowledgeScopeMappingSummary: typeof import('@/lib/db/repositories/knowledge-scope-mappings').refreshKnowledgeScopeMappingSummary
   createKnowledgeVersion: typeof import('@/lib/db/repositories/knowledge-versions').createKnowledgeVersion
   replaceKnowledgeParents: typeof import('@/lib/db/repositories/knowledge-versions').replaceKnowledgeParents
   replaceKnowledgeChunks: typeof import('@/lib/db/repositories/knowledge-versions').replaceKnowledgeChunks
@@ -29,6 +42,8 @@ async function setupKnowledgeRepositoryTest() {
   const repositories = {
     ...(await import('@/lib/db/repositories/knowledge-bases')),
     ...(await import('@/lib/db/repositories/knowledge-build-tasks')),
+    ...(await import('@/lib/db/repositories/knowledge-mapping-versions')),
+    ...(await import('@/lib/db/repositories/knowledge-scope-mappings')),
     ...(await import('@/lib/db/repositories/knowledge-versions')),
     ...(await import('@/lib/db/repositories/knowledge-index-versions')),
     ...(await import('@/lib/knowledge/storage')),
@@ -60,6 +75,149 @@ async function setupKnowledgeRepositoryTest() {
 }
 
 describe('knowledge repositories', () => {
+  it('creates and lists scope mapping versions with parsed mapping records', async () => {
+    const testContext = await setupKnowledgeRepositoryTest()
+
+    try {
+      const mappingVersion = testContext.repositories.createKnowledgeScopeMappingVersion({
+        projectId: 'project-1',
+        name: 'TV model platform mapping',
+        fileName: 'tv-model-platform.xlsx',
+        fileHash: 'hash-1',
+        rowCount: 2,
+        keyField: 'productModel',
+        scopeFields: ['productModel', 'platform', 'productCategory'],
+        recordsFilePath: '/tmp/mapping-records.jsonl',
+        records: [
+          {
+            lookupKey: '85QD7N',
+            scope: {
+              productModel: ['85QD7N'],
+              platform: ['Google TV'],
+              productCategory: ['TV'],
+            },
+          },
+        ],
+      })
+
+      expect(testContext.repositories.findKnowledgeScopeMappingVersionById(mappingVersion.id)).toMatchObject({
+        id: mappingVersion.id,
+        projectId: 'project-1',
+        rowCount: 2,
+        keyField: 'productModel',
+        records: [
+          expect.objectContaining({
+            lookupKey: '85QD7N',
+            scope: expect.objectContaining({
+              platform: ['Google TV'],
+            }),
+          }),
+        ],
+      })
+      expect(testContext.repositories.findKnowledgeScopeMappingVersionsByProject('project-1')).toEqual([
+        expect.objectContaining({
+          id: mappingVersion.id,
+          fileName: 'tv-model-platform.xlsx',
+        }),
+      ])
+    } finally {
+      testContext.cleanup()
+    }
+  })
+
+  it('creates, edits, and deletes managed scope mappings and records', async () => {
+    const testContext = await setupKnowledgeRepositoryTest()
+
+    try {
+      const mapping = testContext.repositories.createKnowledgeScopeMapping({
+        projectId: 'project-1',
+        name: 'TV model platform mapping',
+        sourceFileName: 'tv-model-platform.xlsx',
+        sourceFileHash: 'hash-1',
+        keyField: 'productModel',
+        scopeFields: ['productModel', 'platform'],
+        rowCount: 0,
+      })
+      const record = testContext.repositories.createKnowledgeScopeMappingRecord({
+        mappingId: mapping.id,
+        lookupKey: '85QD7N',
+        scope: {
+          productModel: ['85QD7N'],
+          platform: ['Google TV'],
+        },
+        raw: {
+          rowIndex: 2,
+        },
+      })
+
+      testContext.repositories.refreshKnowledgeScopeMappingSummary(mapping.id)
+
+      expect(testContext.repositories.findKnowledgeScopeMappingsByProject('project-1')).toEqual([
+        expect.objectContaining({
+          id: mapping.id,
+          name: 'TV model platform mapping',
+          rowCount: 1,
+          scopeFields: ['productModel', 'platform'],
+        }),
+      ])
+      expect(testContext.repositories.findKnowledgeScopeMappingRecords(mapping.id)).toEqual([
+        expect.objectContaining({
+          id: record.id,
+          lookupKey: '85QD7N',
+          scope: expect.objectContaining({
+            platform: ['Google TV'],
+          }),
+          raw: {
+            rowIndex: 2,
+          },
+        }),
+      ])
+
+      const updatedRecord = testContext.repositories.updateKnowledgeScopeMappingRecord(record.id, {
+        lookupKey: '85QD7N',
+        scope: {
+          productModel: ['85QD7N'],
+          platform: ['Roku TV'],
+          productCategory: ['TV'],
+        },
+        raw: {
+          editedBy: 'operator',
+        },
+      })
+      testContext.repositories.refreshKnowledgeScopeMappingSummary(mapping.id)
+
+      expect(updatedRecord).toMatchObject({
+        id: record.id,
+        lookupKey: '85QD7N',
+        scope: {
+          productModel: ['85QD7N'],
+          platform: ['Roku TV'],
+          productCategory: ['TV'],
+        },
+      })
+      expect(testContext.repositories.findKnowledgeScopeMappingById(mapping.id)).toMatchObject({
+        id: mapping.id,
+        rowCount: 1,
+        scopeFields: ['productModel', 'platform', 'productCategory'],
+      })
+
+      expect(testContext.repositories.updateKnowledgeScopeMapping(mapping.id, { name: 'Updated mapping' })).toMatchObject({
+        id: mapping.id,
+        name: 'Updated mapping',
+      })
+      expect(testContext.repositories.deleteKnowledgeScopeMappingRecord(record.id)).toBe(true)
+      testContext.repositories.refreshKnowledgeScopeMappingSummary(mapping.id)
+      expect(testContext.repositories.findKnowledgeScopeMappingById(mapping.id)).toMatchObject({
+        rowCount: 0,
+        scopeFields: [],
+      })
+      expect(testContext.repositories.deleteKnowledgeScopeMapping(mapping.id)).toBe(true)
+      expect(testContext.repositories.findKnowledgeScopeMappingById(mapping.id)).toBeNull()
+    } finally {
+      testContext.cleanup()
+    }
+  })
+
   it('creates, updates, and links knowledge base, task, version, and index records', async () => {
     const testContext = await setupKnowledgeRepositoryTest()
 

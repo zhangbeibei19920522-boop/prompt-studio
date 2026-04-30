@@ -21,6 +21,16 @@ export interface KnowledgeArtifactPaths {
   indexIngestFilePath: string
 }
 
+export interface KnowledgeMappingArtifactPathsInput {
+  projectId: string
+  mappingVersionId: string
+}
+
+export interface KnowledgeMappingArtifactPaths {
+  mappingDir: string
+  recordsFilePath: string
+}
+
 export function buildKnowledgeArtifactPaths(input: KnowledgeArtifactPathsInput): KnowledgeArtifactPaths {
   const baseDir = path.join(process.cwd(), 'data', 'knowledge', input.projectId, input.knowledgeBaseId)
   const versionDir = path.join(baseDir, 'versions', input.knowledgeVersionId)
@@ -38,6 +48,15 @@ export function buildKnowledgeArtifactPaths(input: KnowledgeArtifactPathsInput):
     indexChunksFilePath: path.join(indexDir, 'chunks.jsonl'),
     indexVectorsFilePath: path.join(indexDir, 'vectors.jsonl'),
     indexIngestFilePath: path.join(indexDir, 'ingest.json'),
+  }
+}
+
+export function buildKnowledgeMappingArtifactPaths(input: KnowledgeMappingArtifactPathsInput): KnowledgeMappingArtifactPaths {
+  const mappingDir = path.join(process.cwd(), 'data', 'knowledge', input.projectId, 'mappings', input.mappingVersionId)
+
+  return {
+    mappingDir,
+    recordsFilePath: path.join(mappingDir, 'records.jsonl'),
   }
 }
 

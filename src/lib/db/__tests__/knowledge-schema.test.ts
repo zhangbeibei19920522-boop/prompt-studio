@@ -60,6 +60,9 @@ describe('knowledge schema', () => {
         'knowledge_chunks',
         'knowledge_index_versions',
         'knowledge_parents',
+        'knowledge_scope_mapping_records',
+        'knowledge_scope_mapping_versions',
+        'knowledge_scope_mappings',
         'knowledge_versions',
       ])
 

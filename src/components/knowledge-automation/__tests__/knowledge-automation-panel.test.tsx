@@ -2,6 +2,7 @@ import React from "react"
 import { readFileSync } from "fs"
 import { join } from "path"
 import { renderToStaticMarkup } from "react-dom/server"
+import { describe, expect, it } from "vitest"
 
 import { KnowledgeAutomationPanel } from "@/components/knowledge-automation/knowledge-automation-panel"
 
@@ -380,6 +381,13 @@ describe("KnowledgeAutomationPanel", () => {
     expect(panelSource).toContain('setView("detail")')
     expect(panelSource).toContain("void ensureVersionDetail")
     expect(panelSource).not.toContain("await ensureVersionDetail(task.knowledgeVersionId)")
+    expect(panelSource).toContain("openTaskDetail(result.task)")
+    expect(panelSource).not.toContain("openDetail(result.task.id)")
+    expect(panelSource).toContain("knowledgeApi.listKnowledgeScopeMappings")
+    expect(panelSource).toContain("scopeMappings={scopeMappings}")
+    expect(panelSource).toContain("mappingId: payload.mappingId")
+    expect(panelSource).not.toContain("listKnowledgeMappingVersions(projectId)")
+    expect(panelSource).not.toContain("mappingVersionId: payload.mappingVersionId")
     expect(panelSource).toContain("isVersionLoading=")
     expect(panelSource).toContain("hasVersionDetailLoaded=")
     expect(detailSource).toContain("正在加载任务详情")

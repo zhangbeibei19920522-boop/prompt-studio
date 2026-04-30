@@ -334,4 +334,240 @@ describe('knowledge builder', () => {
       }),
     )
   })
+
+  it('turns matrix answer columns into platform scope and keeps chunks inheriting parent scope', () => {
+    const artifacts = buildKnowledgeArtifacts({
+      projectName: 'Project 1',
+      profileKey: 'generic_customer_service',
+      sourceDocuments: [
+        {
+          id: 'doc-matrix-1',
+          name: 'agent-assist.xlsx',
+          type: 'xlsx',
+          content: [
+            'Sheet: CDMTV Top Question',
+            'MQ | Roku | Google',
+            'The TV will not turn on | Check Roku TV power settings. | Check Google TV power settings.',
+          ].join('\n'),
+        },
+      ],
+    })
+
+    const rokuParent = artifacts.parents.find((parent) => parent.answer.includes('Roku TV'))
+    expect(rokuParent?.metadata).toEqual(
+      expect.objectContaining({
+        sheetLayout: 'faq_matrix',
+        scope: {
+          platform: ['Roku TV'],
+        },
+        scopeSignature: 'platform=Roku TV',
+        scopeRaw: expect.objectContaining({
+          variantLabel: 'Roku',
+        }),
+      }),
+    )
+
+    const rokuChunk = artifacts.chunks.find((chunk) => chunk.parent_id === rokuParent?.id)
+    expect(rokuChunk?.metadata).toEqual(
+      expect.objectContaining({
+        scope: {
+          platform: ['Roku TV'],
+        },
+        scopeSignature: 'platform=Roku TV',
+      }),
+    )
+    expect(rokuChunk?.embedding_text).toContain('适用范围：platform=Roku TV')
+  })
+
+  it('enriches sheet-scoped FAQ records with optional mapping scope', () => {
+    const artifacts = buildKnowledgeArtifacts({
+      projectName: 'Project 1',
+      profileKey: 'generic_customer_service',
+      mappingVersionId: 'mapping-tv-v1',
+      mappingRecords: [
+        {
+          lookupKey: '85QD7N',
+          scope: {
+            platform: ['Google TV'],
+            productCategory: ['TV'],
+          },
+        },
+      ],
+      sourceDocuments: [
+        {
+          id: 'doc-model-1',
+          name: 'Cdmtv Model Spec.xlsx',
+          type: 'xlsx',
+          content: [
+            'Sheet: model - 85QD7N',
+            'Question | answer',
+            'How long is the Warranty? | The warranty is 1 year.',
+          ].join('\n'),
+        },
+      ],
+    })
+
+    expect(artifacts.parents[0]?.metadata).toEqual(
+      expect.objectContaining({
+        sheetLayout: 'sheet_scoped_faq',
+        scope: {
+          productModel: ['85QD7N'],
+          platform: ['Google TV'],
+          productCategory: ['TV'],
+        },
+        scopeSignature: 'platform=Google TV|productCategory=TV|productModel=85QD7N',
+        scopeSource: expect.objectContaining({
+          mappingVersionId: 'mapping-tv-v1',
+          lookupKey: '85QD7N',
+          matched: true,
+        }),
+      }),
+    )
+  })
+
+  it('keeps explicit product category and device category scope fields separate', () => {
+    const artifacts = buildKnowledgeArtifacts({
+      projectName: 'Project 1',
+      profileKey: 'generic_customer_service',
+      sourceDocuments: [
+        {
+          id: 'doc-device-category-1',
+          name: 'product-faq.xlsx',
+          type: 'xlsx',
+          content: [
+            'Sheet: FAQ',
+            'Question | Answer | product | deviceCategory',
+            'How do I clean the filter? | Clean the filter every month. | Refrigerator | appliance',
+          ].join('\n'),
+        },
+      ],
+    })
+
+    expect(artifacts.parents[0]?.metadata.scope).toEqual({
+      productCategory: ['Refrigerator'],
+      deviceCategory: ['appliance'],
+    })
+  })
+
+  it('does not treat same question with different scope as a conflict', () => {
+    const artifacts = buildKnowledgeArtifacts({
+      projectName: 'Project 1',
+      profileKey: 'generic_customer_service',
+      sourceDocuments: [
+        {
+          id: 'doc-scope-conflict-1',
+          name: 'agent-assist.xlsx',
+          type: 'xlsx',
+          content: [
+            'Sheet: CDMTV Platform',
+            'Question | Roku | Google',
+            'How do I update apps? | Open Roku Channel Store. | Open Google Play Store.',
+          ].join('\n'),
+        },
+      ],
+    })
+
+    expect(artifacts.stageSummary.conflictCount).toBe(0)
+    expect(artifacts.parents).toHaveLength(2)
+    expect(artifacts.parents.map((parent) => parent.metadata.scopeSignature).sort()).toEqual([
+      'platform=Google TV',
+      'platform=Roku TV',
+    ])
+  })
+
+  it('supports common answer aliases such as exp_voice_answer', () => {
+    const artifacts = buildKnowledgeArtifacts({
+      projectName: 'Project 1',
+      profileKey: 'generic_customer_service',
+      sourceDocuments: [
+        {
+          id: 'doc-alias-1',
+          name: 'Refrigerator_Agent Assist.xlsx',
+          type: 'xlsx',
+          content: [
+            'Sheet: Refrigerator_default',
+            'Question | exp_voice_answer',
+            'How do I adjust temperature? | Press Fridge and Freezer buttons to set the temperature.',
+          ].join('\n'),
+        },
+      ],
+    })
+
+    expect(artifacts.parents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          question_clean: 'How do I adjust temperature?',
+          answer: 'Press Fridge and Freezer buttons to set the temperature.',
+          metadata: expect.objectContaining({
+            sheetLayout: 'faq_table',
+          }),
+        }),
+      ]),
+    )
+  })
+
+  it('converts model spec tables into scoped parent records', () => {
+    const artifacts = buildKnowledgeArtifacts({
+      projectName: 'Project 1',
+      profileKey: 'generic_customer_service',
+      sourceDocuments: [
+        {
+          id: 'doc-spec-1',
+          name: 'Refrigerator_Agent Assist.xlsx',
+          type: 'xlsx',
+          content: [
+            'Sheet: Refrigerator_model',
+            'model | spec_term | spec_value',
+            'FU140N3SWEL | Garage Ready | This model is designed for garage use.',
+          ].join('\n'),
+        },
+      ],
+    })
+
+    expect(artifacts.parents[0]).toEqual(
+      expect.objectContaining({
+        question_clean: 'FU140N3SWEL - Garage Ready',
+        answer: 'This model is designed for garage use.',
+        record_kind: 'spec_table_record',
+        metadata: expect.objectContaining({
+          sheetLayout: 'spec_table',
+          scope: {
+            productModel: ['FU140N3SWEL'],
+            productCategory: ['Refrigerator'],
+          },
+        }),
+      }),
+    )
+  })
+
+  it('keeps unsupported spreadsheet sheets out of parents and writes parse diagnostics', () => {
+    const artifacts = buildKnowledgeArtifacts({
+      projectName: 'Project 1',
+      profileKey: 'generic_customer_service',
+      sourceDocuments: [
+        {
+          id: 'doc-unsupported-1',
+          name: 'Agent Assist.xlsx',
+          type: 'xlsx',
+          content: [
+            'Sheet: Toshiba',
+            'random | empty | notes',
+            'only one useful value',
+          ].join('\n'),
+        },
+      ],
+    })
+
+    expect(artifacts.parents).toHaveLength(0)
+    expect(artifacts.manifest.documentDiagnostics).toEqual([
+      expect.objectContaining({
+        documentId: 'doc-unsupported-1',
+        sourceName: 'Agent Assist.xlsx',
+        sheetName: 'Toshiba',
+        status: 'unsupported',
+        message: 'Agent Assist.xlsx 中的 Toshiba 工作表暂时无法解析',
+      }),
+    ])
+    expect(artifacts.coverageAudit.reasons).toContain('Some spreadsheet sheets could not be parsed')
+  })
 })

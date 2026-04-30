@@ -2,6 +2,7 @@ import React from "react"
 import fs from "node:fs"
 import path from "node:path"
 import { renderToStaticMarkup } from "react-dom/server"
+import { describe, expect, it } from "vitest"
 
 import { CreateView } from "@/components/knowledge-automation/create-view"
 
@@ -18,7 +19,7 @@ describe("CreateView", () => {
         }}
         sourceDocuments={[{ id: "doc-1", name: "HR-policy-2024.docx", type: "docx" }]}
         onBack={() => undefined}
-        onStart={() => undefined}
+        onSubmit={() => undefined}
       />
     )
 
@@ -52,7 +53,7 @@ describe("CreateView", () => {
         }}
         sourceDocuments={[{ id: "doc-1", name: "HR-policy-2024.docx", type: "docx" }]}
         onBack={() => undefined}
-        onStart={() => undefined}
+        onSubmit={() => undefined}
       />
     )
 
@@ -60,6 +61,38 @@ describe("CreateView", () => {
     expect(html).toContain("文档库选择文件")
     expect(html).toContain("已选择：1 个文件")
     expect(html).not.toContain("当前任务类型为全量重建，不需要选择版本。")
+  })
+
+  it("shows optional managed mapping selection in the task drawer", () => {
+    const html = renderToStaticMarkup(
+      <CreateView
+        customer={{
+          id: "acme",
+          name: "客服项目",
+          hasKnowledgeBase: true,
+          knowledgeBaseName: "客服项目 知识库",
+          currentVersion: "当前版本",
+        }}
+        sourceDocuments={[{ id: "doc-1", name: "Cdmtv Model Spec.xlsx", type: "xlsx" }]}
+        scopeMappings={[
+          {
+            id: "mapping-tv-v1",
+            name: "TV 型号平台映射",
+            rowCount: 756,
+            keyField: "productModel",
+            scopeFields: ["productModel", "platform"],
+          },
+        ]}
+        onBack={() => undefined}
+        onSubmit={() => undefined}
+      />
+    )
+
+    expect(html).toContain("映射表")
+    expect(html).toContain("不使用映射表")
+    expect(html).toContain("TV 型号平台映射")
+    expect(html).toContain("756 条")
+    expect(html).toContain("productModel")
   })
 
   it("keeps manual supplement and repair interactions while hiding version selection for full rebuild", () => {
@@ -106,6 +139,11 @@ describe("CreateView", () => {
     expect(source).toContain("全选")
     expect(source).toContain("取消全选")
     expect(source).toContain("requiresDocuments")
+    expect(source).toContain("mappingId")
+    expect(source).toContain("scopeMappings")
+    expect(source).toContain("映射表")
+    expect(source).not.toContain("mappingVersionId")
+    expect(source).not.toContain("mappingVersions")
     expect(source).toContain("启动任务")
     expect(source).not.toContain("参考历史维护")
     expect(source).not.toContain("任务配置确认")

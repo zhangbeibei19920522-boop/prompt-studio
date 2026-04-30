@@ -42,6 +42,21 @@ describe('parseDocumentBuffer', () => {
     expect(result).toContain('Use the password reset link')
   })
 
+  it('preserves empty cells inside workbook rows so matrix columns do not shift', async () => {
+    const workbook = XLSX.utils.book_new()
+    const worksheet = XLSX.utils.aoa_to_sheet([
+      ['Question', 'Roku', 'Google'],
+      ['No picture', '', 'Use Google TV picture settings'],
+    ])
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Matrix')
+
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer
+    const result = await parseDocumentBuffer(buffer, 'xlsx')
+
+    expect(result).toContain('Question | Roku | Google')
+    expect(result).toContain('No picture |  | Use Google TV picture settings')
+  })
+
   it('keeps plain text documents unchanged', async () => {
     const result = await parseDocumentBuffer(Buffer.from('plain text body'), 'txt')
 

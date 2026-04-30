@@ -1,5 +1,6 @@
 import fs from "node:fs"
 import path from "node:path"
+import { describe, expect, it } from "vitest"
 
 describe("main page workspace layout", () => {
   it("uses a function-first workspace shell with chat as a drawer", () => {
@@ -83,17 +84,22 @@ describe("main page workspace layout", () => {
     const source = fs.readFileSync(pagePath, "utf8")
 
     expect(source).toContain("KnowledgeAutomationPanel")
+    expect(source).toContain("MappingManagementView")
     expect(source).toContain("projectName={currentProject?.name ?? \"当前项目\"}")
     expect(source).toContain("documents={documents.map((document) => ({")
     expect(source).toContain('subtitle={`${documents.length} 份文档`}')
     expect(source).toContain("children:")
     expect(source).toContain('label: "文档库"')
+    expect(source).toContain('label: "映射管理"')
     expect(source).toContain('label: "版本管理"')
     expect(source).toContain('label: "清洗任务"')
     expect(source.indexOf('label: "文档库"')).toBeLessThan(source.indexOf('label: "清洗任务"'))
     expect(source.indexOf('label: "清洗任务"')).toBeLessThan(source.indexOf('label: "版本管理"'))
+    expect(source.indexOf('label: "文档库"')).toBeLessThan(source.indexOf('label: "映射管理"'))
+    expect(source.indexOf('label: "映射管理"')).toBeLessThan(source.indexOf('label: "清洗任务"'))
     expect(source).toContain('section="versions"')
     expect(source).toContain('section="tasks"')
+    expect(source).toContain('knowledgeCanvasView === "mappings"')
     expect(source).toContain("key={knowledgeCanvasView}")
     expect(source).toContain("onModuleChildSelect")
     expect(source).not.toContain("功能开发中")

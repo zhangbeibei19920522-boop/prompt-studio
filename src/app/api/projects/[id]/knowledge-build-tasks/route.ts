@@ -99,6 +99,8 @@ export async function POST(
       taskType: body.taskType,
       baseVersionId: body.baseVersionId ?? null,
       documentIds: body.documentIds ?? [],
+      mappingId: body.mappingId ?? null,
+      mappingVersionId: body.mappingVersionId ?? null,
       manualDrafts: body.manualDrafts ?? [],
       repairQuestions: body.repairQuestions ?? [],
     })

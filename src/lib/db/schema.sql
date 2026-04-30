@@ -169,6 +169,45 @@ CREATE TABLE IF NOT EXISTS knowledge_index_versions (
   published_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS knowledge_scope_mapping_versions (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  file_name TEXT NOT NULL,
+  file_hash TEXT NOT NULL,
+  row_count INTEGER NOT NULL DEFAULT 0,
+  key_field TEXT NOT NULL DEFAULT '',
+  scope_fields_json TEXT NOT NULL DEFAULT '[]',
+  records_file_path TEXT NOT NULL DEFAULT '',
+  records_json TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS knowledge_scope_mappings (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  source_file_name TEXT NOT NULL DEFAULT '',
+  source_file_hash TEXT NOT NULL DEFAULT '',
+  key_field TEXT NOT NULL DEFAULT '',
+  scope_fields_json TEXT NOT NULL DEFAULT '[]',
+  row_count INTEGER NOT NULL DEFAULT 0,
+  diagnostics_json TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS knowledge_scope_mapping_records (
+  id TEXT PRIMARY KEY,
+  mapping_id TEXT NOT NULL REFERENCES knowledge_scope_mappings(id) ON DELETE CASCADE,
+  lookup_key TEXT NOT NULL,
+  scope_json TEXT NOT NULL DEFAULT '{}',
+  raw_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -199,6 +238,10 @@ CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_version ON knowledge_chunks(know
 CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_parent ON knowledge_chunks(parent_id);
 CREATE INDEX IF NOT EXISTS idx_knowledge_index_versions_base ON knowledge_index_versions(knowledge_base_id);
 CREATE INDEX IF NOT EXISTS idx_knowledge_index_versions_version ON knowledge_index_versions(knowledge_version_id);
+CREATE INDEX IF NOT EXISTS idx_knowledge_scope_mappings_project ON knowledge_scope_mapping_versions(project_id);
+CREATE INDEX IF NOT EXISTS idx_knowledge_managed_scope_mappings_project ON knowledge_scope_mappings(project_id);
+CREATE INDEX IF NOT EXISTS idx_knowledge_scope_mapping_records_mapping ON knowledge_scope_mapping_records(mapping_id);
+CREATE INDEX IF NOT EXISTS idx_knowledge_scope_mapping_records_lookup ON knowledge_scope_mapping_records(mapping_id, lookup_key);
 CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id);
 CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id);
 

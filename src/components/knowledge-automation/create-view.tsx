@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { ArrowLeft, Check, ChevronsUpDown, LoaderCircle, Plus } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils"
 import type {
   KnowledgeManualDraftInput,
   KnowledgeRepairQuestionInput,
+  KnowledgeScopeMapping,
   KnowledgeTaskType,
 } from "@/types/database"
 import { type CustomerState } from "./prototype-data"
@@ -52,6 +53,7 @@ export interface CreateKnowledgeTaskPayload {
   taskType: KnowledgeTaskType
   baseVersionId: string | null
   documentIds: string[]
+  mappingId: string | null
   manualDrafts: KnowledgeManualDraftInput[]
   repairQuestions: KnowledgeRepairQuestionInput[]
 }
@@ -95,6 +97,7 @@ export function CreateView(props: {
   customer: CustomerState
   sourceDocuments?: SourceDocument[]
   versionOptions?: KnowledgeVersionOption[]
+  scopeMappings?: Array<Pick<KnowledgeScopeMapping, "id" | "name" | "rowCount" | "keyField" | "scopeFields">>
   isSubmitting?: boolean
   onBack: () => void
   onSubmit: (payload: CreateKnowledgeTaskPayload) => Promise<void> | void
@@ -103,6 +106,7 @@ export function CreateView(props: {
     customer,
     sourceDocuments = [],
     versionOptions = [],
+    scopeMappings = [],
     isSubmitting = false,
     onBack,
     onSubmit,
@@ -112,6 +116,7 @@ export function CreateView(props: {
   const [taskType, setTaskType] = useState<KnowledgeTaskType>(isCreateKnowledgeBase ? "full" : "batch")
   const [taskName, setTaskName] = useState(isCreateKnowledgeBase ? "第一版全量构建" : "Q4 第 3 轮内容维护")
   const [selectedVersionId, setSelectedVersionId] = useState(versionOptions[0]?.value ?? "")
+  const [selectedMappingId, setSelectedMappingId] = useState("")
   const [selectedDocumentIds, setSelectedDocumentIds] = useState(() => sourceDocuments.map((document) => document.id))
   const [manualDrafts, setManualDrafts] = useState<ManualDraft[]>([])
   const [manualFormOpen, setManualFormOpen] = useState(false)
@@ -125,20 +130,17 @@ export function CreateView(props: {
   const activeTaskOption = taskOptions.find((option) => option.value === taskType) ?? taskOptions[0]
   const requiresVersion = !isCreateKnowledgeBase && taskType !== "full"
   const requiresDocuments = taskType === "batch" || taskType === "full"
+  const allowsScopeMapping = taskType === "batch" || taskType === "full" || taskType === "repair"
   const requiresManualDrafts = taskType === "manual"
   const requiresRepairQuestions = taskType === "repair"
+  const effectiveSelectedVersionId = selectedVersionId || versionOptions[0]?.value || ""
+  const selectedScopeMapping = scopeMappings.find((scopeMapping) => scopeMapping.id === selectedMappingId) ?? null
   const canStart =
     taskName.trim().length > 0 &&
-    (!requiresVersion || selectedVersionId.length > 0) &&
+    (!requiresVersion || effectiveSelectedVersionId.length > 0) &&
     (!requiresDocuments || selectedDocumentIds.length > 0) &&
     (!requiresManualDrafts || manualDrafts.length > 0) &&
     (!requiresRepairQuestions || repairQuestions.length > 0)
-
-  useEffect(() => {
-    if (requiresVersion && !selectedVersionId && versionOptions[0]?.value) {
-      setSelectedVersionId(versionOptions[0].value)
-    }
-  }, [requiresVersion, selectedVersionId, versionOptions])
 
   const versionSelectOptions = useMemo(() => {
     if (versionOptions.length > 0) return versionOptions
@@ -242,8 +244,9 @@ export function CreateView(props: {
       await onSubmit({
         name: taskName.trim(),
         taskType,
-        baseVersionId: requiresVersion ? selectedVersionId : null,
+        baseVersionId: requiresVersion ? effectiveSelectedVersionId : null,
         documentIds: selectedDocumentIds,
+        mappingId: selectedMappingId || null,
         manualDrafts: manualDrafts.map((draft) => ({
           title: draft.title,
           content: draft.content,
@@ -316,7 +319,7 @@ export function CreateView(props: {
           {requiresVersion ? (
             <FormField label="选择版本" hint="从已有知识版本继续维护当前内容。">
               <select
-                value={selectedVersionId}
+                value={effectiveSelectedVersionId}
                 onChange={(event) => setSelectedVersionId(event.target.value)}
                 className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                 disabled={isSubmitting || versionOptions.length === 0}
@@ -332,6 +335,32 @@ export function CreateView(props: {
             <div className="rounded-md border border-blue-100 bg-blue-50 px-3 py-3 text-sm leading-6 text-zinc-600">
               当前任务类型为全量重建，不需要选择版本。
             </div>
+          ) : null}
+
+          {allowsScopeMapping ? (
+            <FormField
+              label="映射表"
+              hint="可选。用于给 FAQ 补充产品型号、平台、品类等 scope；不会进入生成流程的用户 query。"
+            >
+              <select
+                value={selectedMappingId}
+                onChange={(event) => setSelectedMappingId(event.target.value)}
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                disabled={isSubmitting}
+              >
+                <option value="">不使用映射表</option>
+                {scopeMappings.map((scopeMapping) => (
+                  <option key={scopeMapping.id} value={scopeMapping.id}>
+                    {scopeMapping.name} / {scopeMapping.rowCount} 条 / {scopeMapping.keyField}
+                  </option>
+                ))}
+              </select>
+              {selectedScopeMapping ? (
+                <span className="block text-xs leading-5 text-zinc-500">
+                  当前可补充字段：{selectedScopeMapping.scopeFields.join("、") || "-"}
+                </span>
+              ) : null}
+            </FormField>
           ) : null}
 
           {taskType === "manual" ? (

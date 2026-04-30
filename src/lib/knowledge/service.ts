@@ -1,4 +1,5 @@
 import fs from 'node:fs'
+import { createHash } from 'node:crypto'
 
 import { nanoid } from 'nanoid'
 
@@ -14,6 +15,24 @@ import {
   findKnowledgeBuildTasksByProject,
   updateKnowledgeBuildTask,
 } from '@/lib/db/repositories/knowledge-build-tasks'
+import {
+  createKnowledgeScopeMappingVersion,
+  findKnowledgeScopeMappingVersionById,
+  findKnowledgeScopeMappingVersionsByProject,
+} from '@/lib/db/repositories/knowledge-mapping-versions'
+import {
+  createKnowledgeScopeMapping,
+  createKnowledgeScopeMappingRecord,
+  deleteKnowledgeScopeMapping,
+  deleteKnowledgeScopeMappingRecord,
+  findKnowledgeScopeMappingById,
+  findKnowledgeScopeMappingRecordById,
+  findKnowledgeScopeMappingRecords,
+  findKnowledgeScopeMappingsByProject,
+  refreshKnowledgeScopeMappingSummary,
+  updateKnowledgeScopeMapping,
+  updateKnowledgeScopeMappingRecord,
+} from '@/lib/db/repositories/knowledge-scope-mappings'
 import { findDocumentById, findDocumentsByProject } from '@/lib/db/repositories/documents'
 import {
   createKnowledgeIndexVersion,
@@ -34,20 +53,30 @@ import type {
   CreateKnowledgeBaseRequest,
   CreateKnowledgeBuildTaskRequest,
   CreateKnowledgeBuildTaskResponse,
+  CreateKnowledgeMappingVersionRequest,
+  CreateKnowledgeScopeMappingRecordRequest,
+  CreateKnowledgeScopeMappingRequest,
   KnowledgeVersionPushResponse,
+  UpdateKnowledgeScopeMappingRecordRequest,
+  UpdateKnowledgeScopeMappingRequest,
 } from '@/types/api'
 import type {
   Document,
   KnowledgeBase,
   KnowledgeBuildTask,
   KnowledgeIndexVersion,
+  KnowledgeScopeMapping,
+  KnowledgeScopeMappingDetail,
+  KnowledgeScopeMappingRecord,
+  KnowledgeScopeMappingVersion,
   KnowledgeTaskInput,
   KnowledgeVersion,
 } from '@/types/database'
 
 import { buildKnowledgeArtifacts } from './builder'
 import { ensureIndexIngestArtifacts, resolveIndexEmbeddingClient } from './index-ingest'
-import { buildKnowledgeArtifactPaths, ensureKnowledgeArtifactDir } from './storage'
+import { parseKnowledgeScopeMappingContent } from './mapping-parser'
+import { buildKnowledgeArtifactPaths, buildKnowledgeMappingArtifactPaths, ensureKnowledgeArtifactDir } from './storage'
 
 function writeJsonLines(filePath: string, rows: unknown[]): void {
   ensureKnowledgeArtifactDir(filePath)
@@ -60,11 +89,55 @@ function writeJsonFile(filePath: string, data: unknown): void {
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8')
 }
 
+function sha256(value: string): string {
+  return createHash('sha256').update(value).digest('hex')
+}
+
 function normalizeTaskInput(request: CreateKnowledgeBuildTaskRequest): KnowledgeTaskInput {
   return {
     documentIds: [...new Set(request.documentIds ?? [])],
+    mappingId: request.mappingId ?? null,
+    mappingVersionId: request.mappingVersionId ?? null,
+    mappingRecords: request.mappingRecords ?? [],
     manualDrafts: request.manualDrafts ?? [],
     repairQuestions: request.repairQuestions ?? [],
+  }
+}
+
+function resolveMappingVersionForTask(projectId: string, input: KnowledgeTaskInput): KnowledgeTaskInput {
+  if (input.mappingId) {
+    const mapping = findKnowledgeScopeMappingById(input.mappingId)
+    if (!mapping || mapping.projectId !== projectId) {
+      throw new Error(`Scope mapping "${input.mappingId}" was not found in project "${projectId}"`)
+    }
+
+    return {
+      ...input,
+      mappingId: mapping.id,
+      mappingVersionId: null,
+      mappingRecords: findKnowledgeScopeMappingRecords(mapping.id),
+    }
+  }
+
+  if (!input.mappingVersionId) {
+    return {
+      ...input,
+      mappingId: null,
+      mappingVersionId: null,
+      mappingRecords: input.mappingRecords ?? [],
+    }
+  }
+
+  const mappingVersion = findKnowledgeScopeMappingVersionById(input.mappingVersionId)
+  if (!mappingVersion || mappingVersion.projectId !== projectId) {
+    throw new Error(`Mapping version "${input.mappingVersionId}" was not found in project "${projectId}"`)
+  }
+
+  return {
+    ...input,
+    mappingId: null,
+    mappingVersionId: mappingVersion.id,
+    mappingRecords: mappingVersion.records,
   }
 }
 
@@ -177,6 +250,239 @@ export function listKnowledgeIndexVersions(projectId: string): KnowledgeIndexVer
   return findKnowledgeIndexVersionsByProject(projectId)
 }
 
+export function listKnowledgeMappingVersions(projectId: string): KnowledgeScopeMappingVersion[] {
+  return findKnowledgeScopeMappingVersionsByProject(projectId)
+}
+
+function buildKnowledgeScopeMappingDetail(mapping: KnowledgeScopeMapping): KnowledgeScopeMappingDetail {
+  return {
+    ...mapping,
+    records: findKnowledgeScopeMappingRecords(mapping.id),
+  }
+}
+
+function normalizeManagedScopeRecord(record: KnowledgeScopeMappingRecord): KnowledgeScopeMappingRecord {
+  const scope = (record.scope && typeof record.scope === 'object' ? record.scope : {}) as Record<string, unknown>
+  return {
+    ...record,
+    lookupKey: String(record.lookupKey ?? '').trim(),
+    scope: Object.fromEntries(
+      Object.entries(scope).flatMap(([key, values]) => {
+        const normalizedValues = (Array.isArray(values) ? values : [values])
+          .map((value) => String(value).trim())
+          .filter(Boolean)
+        return normalizedValues.length > 0 ? [[key, [...new Set(normalizedValues)]]] : []
+      }),
+    ),
+    raw: record.raw && typeof record.raw === 'object' ? record.raw : {},
+  }
+}
+
+function normalizeManagedLookupKey(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '').trim()
+}
+
+function assertUniqueManagedLookupKey(mappingId: string, lookupKey: string, currentRecordId?: string): void {
+  const normalizedLookupKey = normalizeManagedLookupKey(lookupKey)
+  const duplicated = findKnowledgeScopeMappingRecords(mappingId).find((record) => {
+    return record.id !== currentRecordId && normalizeManagedLookupKey(record.lookupKey) === normalizedLookupKey
+  })
+
+  if (duplicated) {
+    throw new Error(`Mapping record lookupKey "${lookupKey}" already exists`)
+  }
+}
+
+function validateManagedScopeRecord(record: KnowledgeScopeMappingRecord): KnowledgeScopeMappingRecord {
+  const normalized = normalizeManagedScopeRecord(record)
+  if (!normalized.lookupKey) {
+    throw new Error('Mapping record lookupKey is required')
+  }
+  if (Object.keys(normalized.scope).length === 0) {
+    throw new Error('Mapping record scope is required')
+  }
+  return normalized
+}
+
+export function listKnowledgeScopeMappings(projectId: string): KnowledgeScopeMapping[] {
+  return findKnowledgeScopeMappingsByProject(projectId)
+}
+
+export function getKnowledgeScopeMappingDetail(mappingId: string): KnowledgeScopeMappingDetail {
+  const mapping = findKnowledgeScopeMappingById(mappingId)
+  if (!mapping) {
+    throw new Error(`Scope mapping "${mappingId}" was not found`)
+  }
+
+  return buildKnowledgeScopeMappingDetail(mapping)
+}
+
+export function createKnowledgeScopeMappingForProject(
+  projectId: string,
+  request: CreateKnowledgeScopeMappingRequest,
+): KnowledgeScopeMappingDetail {
+  const project = findProjectById(projectId)
+  if (!project) {
+    throw new Error(`Project "${projectId}" was not found`)
+  }
+
+  const parsed = parseKnowledgeScopeMappingContent(request.content)
+  if (parsed.records.length === 0) {
+    throw new Error(`${request.fileName} 映射表暂时无法解析：未识别到可用映射记录`)
+  }
+
+  const mapping = createKnowledgeScopeMapping({
+    projectId,
+    name: request.name,
+    sourceFileName: request.fileName,
+    sourceFileHash: sha256(request.content),
+    keyField: parsed.keyField,
+    scopeFields: parsed.scopeFields,
+    rowCount: 0,
+  })
+
+  for (const [index, record] of parsed.records.entries()) {
+    const normalized = validateManagedScopeRecord(record)
+    createKnowledgeScopeMappingRecord({
+      mappingId: mapping.id,
+      lookupKey: normalized.lookupKey,
+      scope: normalized.scope,
+      raw: {
+        sourceFileName: request.fileName,
+        rowIndex: index + 1,
+      },
+    })
+  }
+
+  const updated = refreshKnowledgeScopeMappingSummary(mapping.id) ?? mapping
+  return buildKnowledgeScopeMappingDetail(updated)
+}
+
+export function updateKnowledgeScopeMappingForProject(
+  mappingId: string,
+  request: UpdateKnowledgeScopeMappingRequest,
+): KnowledgeScopeMappingDetail {
+  const mapping = findKnowledgeScopeMappingById(mappingId)
+  if (!mapping) {
+    throw new Error(`Scope mapping "${mappingId}" was not found`)
+  }
+
+  const updated = updateKnowledgeScopeMapping(mappingId, {
+    name: request.name?.trim() || undefined,
+  })
+  if (!updated) {
+    throw new Error(`Scope mapping "${mappingId}" was not found`)
+  }
+
+  return buildKnowledgeScopeMappingDetail(updated)
+}
+
+export function deleteKnowledgeScopeMappingForProject(mappingId: string): void {
+  const deleted = deleteKnowledgeScopeMapping(mappingId)
+  if (!deleted) {
+    throw new Error(`Scope mapping "${mappingId}" was not found`)
+  }
+}
+
+export function createKnowledgeScopeMappingRecordForMapping(
+  mappingId: string,
+  request: CreateKnowledgeScopeMappingRecordRequest,
+): KnowledgeScopeMappingRecord {
+  const mapping = findKnowledgeScopeMappingById(mappingId)
+  if (!mapping) {
+    throw new Error(`Scope mapping "${mappingId}" was not found`)
+  }
+
+  const normalized = validateManagedScopeRecord({
+    lookupKey: request.lookupKey,
+    scope: request.scope,
+    raw: request.raw ?? {},
+  })
+  assertUniqueManagedLookupKey(mappingId, normalized.lookupKey)
+  const record = createKnowledgeScopeMappingRecord({
+    mappingId,
+    lookupKey: normalized.lookupKey,
+    scope: normalized.scope,
+    raw: normalized.raw,
+  })
+  refreshKnowledgeScopeMappingSummary(mappingId)
+  return record
+}
+
+export function updateKnowledgeScopeMappingRecordForMapping(
+  recordId: string,
+  request: UpdateKnowledgeScopeMappingRecordRequest,
+): KnowledgeScopeMappingRecord {
+  const existing = findKnowledgeScopeMappingRecordById(recordId)
+  if (!existing?.mappingId) {
+    throw new Error(`Scope mapping record "${recordId}" was not found`)
+  }
+
+  const normalized = validateManagedScopeRecord({
+    ...existing,
+    lookupKey: request.lookupKey ?? existing.lookupKey,
+    scope: request.scope ?? existing.scope,
+    raw: request.raw ?? existing.raw ?? {},
+  })
+  assertUniqueManagedLookupKey(existing.mappingId, normalized.lookupKey, existing.id)
+  const updated = updateKnowledgeScopeMappingRecord(recordId, {
+    lookupKey: normalized.lookupKey,
+    scope: normalized.scope,
+    raw: normalized.raw,
+  })
+  if (!updated) {
+    throw new Error(`Scope mapping record "${recordId}" was not found`)
+  }
+
+  refreshKnowledgeScopeMappingSummary(existing.mappingId)
+  return updated
+}
+
+export function deleteKnowledgeScopeMappingRecordForMapping(recordId: string): void {
+  const existing = findKnowledgeScopeMappingRecordById(recordId)
+  if (!existing?.mappingId) {
+    throw new Error(`Scope mapping record "${recordId}" was not found`)
+  }
+
+  const deleted = deleteKnowledgeScopeMappingRecord(recordId)
+  if (!deleted) {
+    throw new Error(`Scope mapping record "${recordId}" was not found`)
+  }
+  refreshKnowledgeScopeMappingSummary(existing.mappingId)
+}
+
+export function createKnowledgeMappingVersionForProject(
+  projectId: string,
+  request: CreateKnowledgeMappingVersionRequest,
+): KnowledgeScopeMappingVersion {
+  const project = findProjectById(projectId)
+  if (!project) {
+    throw new Error(`Project "${projectId}" was not found`)
+  }
+
+  const parsed = parseKnowledgeScopeMappingContent(request.content)
+  if (parsed.records.length === 0) {
+    throw new Error(`${request.fileName} 映射表暂时无法解析：未识别到可用映射记录`)
+  }
+
+  const mappingVersionId = nanoid()
+  const paths = buildKnowledgeMappingArtifactPaths({ projectId, mappingVersionId })
+  writeJsonLines(paths.recordsFilePath, parsed.records)
+
+  return createKnowledgeScopeMappingVersion({
+    id: mappingVersionId,
+    projectId,
+    name: request.name,
+    fileName: request.fileName,
+    fileHash: sha256(request.content),
+    rowCount: parsed.rowCount,
+    keyField: parsed.keyField,
+    scopeFields: parsed.scopeFields,
+    recordsFilePath: paths.recordsFilePath,
+    records: parsed.records,
+  })
+}
+
 export function startKnowledgeBuildTaskForProject(
   projectId: string,
   request: CreateKnowledgeBuildTaskRequest,
@@ -191,7 +497,7 @@ export function startKnowledgeBuildTaskForProject(
     throw new Error(`Knowledge base for project "${projectId}" was not found`)
   }
 
-  const input = normalizeTaskInput(request)
+  const input = resolveMappingVersionForTask(projectId, normalizeTaskInput(request))
   resolveDocumentsForTask(projectId, request.taskType, input.documentIds)
 
   const task = createKnowledgeBuildTask({
@@ -253,6 +559,9 @@ export async function runKnowledgeBuildTask(taskId: string): Promise<void> {
       profileKey: knowledgeBase.profileKey,
       profileConfig: knowledgeBase.profileConfig,
       sourceDocuments: documents,
+      mappingId: task.input.mappingId,
+      mappingVersionId: task.input.mappingVersionId,
+      mappingRecords: task.input.mappingRecords,
       manualDrafts: task.input.manualDrafts,
       repairQuestions: task.input.repairQuestions,
       onStageChange: (stage) => {

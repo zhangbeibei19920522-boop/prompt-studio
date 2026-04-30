@@ -83,8 +83,54 @@ export interface KnowledgeRepairQuestionInput {
   direction: string
 }
 
+export interface KnowledgeScopeMappingRecord {
+  id?: string
+  mappingId?: string
+  lookupKey: string
+  scope: Record<string, string[]>
+  raw?: Record<string, unknown>
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface KnowledgeScopeMapping {
+  id: string
+  projectId: string
+  name: string
+  sourceFileName: string
+  sourceFileHash: string
+  keyField: string
+  scopeFields: string[]
+  rowCount: number
+  diagnostics: Array<Record<string, unknown>>
+  createdAt: string
+  updatedAt: string
+}
+
+export interface KnowledgeScopeMappingDetail extends KnowledgeScopeMapping {
+  records: KnowledgeScopeMappingRecord[]
+}
+
+export interface KnowledgeScopeMappingVersion {
+  id: string
+  projectId: string
+  name: string
+  fileName: string
+  fileHash: string
+  rowCount: number
+  keyField: string
+  scopeFields: string[]
+  recordsFilePath: string
+  records: KnowledgeScopeMappingRecord[]
+  createdAt: string
+  updatedAt: string
+}
+
 export interface KnowledgeTaskInput {
   documentIds: string[]
+  mappingId?: string | null
+  mappingVersionId?: string | null
+  mappingRecords?: KnowledgeScopeMappingRecord[]
   manualDrafts: KnowledgeManualDraftInput[]
   repairQuestions: KnowledgeRepairQuestionInput[]
 }
@@ -109,6 +155,13 @@ export interface KnowledgeRetrievalContract {
   enrichedMetadataKeys: string[]
 }
 
+export interface KnowledgeCleaningContract {
+  version: number
+  supportsScope: boolean
+  supportsMappingVersion: boolean
+  supportsSheetLayoutDiagnostics: boolean
+}
+
 export interface KnowledgeArtifactManifest {
   generatedAt: string
   profileKey: string
@@ -119,9 +172,12 @@ export interface KnowledgeArtifactManifest {
   pendingRecords: Array<Record<string, unknown>>
   blockedRecords: Array<Record<string, unknown>>
   highRiskRecords: Array<Record<string, unknown>>
+  documentDiagnostics?: Array<Record<string, unknown>>
+  scopeDiagnostics?: Array<Record<string, unknown>>
   stageArtifacts: Record<string, Array<Record<string, unknown>>>
   snapshotHash: string
   retrievalContract?: KnowledgeRetrievalContract
+  cleaningContract?: KnowledgeCleaningContract
 }
 
 export interface KnowledgeStageSummary {

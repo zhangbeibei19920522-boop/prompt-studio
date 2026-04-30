@@ -21,6 +21,7 @@ import {
 import { ConversationAuditDetail } from "@/components/audit/conversation-audit-detail"
 import { ChatArea } from "@/components/chat/chat-area"
 import { KnowledgeAutomationPanel } from "@/components/knowledge-automation/knowledge-automation-panel"
+import { MappingManagementView } from "@/components/knowledge-automation/mapping-management-view"
 import { DocumentPreview } from "@/components/knowledge/document-preview"
 import { UploadDialog } from "@/components/knowledge/upload-dialog"
 import { MemoryList } from "@/components/memory/memory-list"
@@ -96,7 +97,7 @@ type PromptCanvasMode = "empty" | "preview" | "edit" | "history"
 type TestCanvasView = "list" | "detail"
 type TestCanvasSection = "full-flow" | "unit"
 type AuditCanvasView = "list" | "detail"
-type KnowledgeCanvasView = "documents" | "versions" | "tasks"
+type KnowledgeCanvasView = "documents" | "mappings" | "versions" | "tasks"
 type LibraryFilter = "all" | "active" | "draft"
 
 function formatUpdatedLabel(updatedAt: string): string {
@@ -1197,6 +1198,7 @@ export default function MainPage() {
       active: activeModuleId === "knowledge",
       children: [
         { id: "documents", label: "文档库", active: activeModuleId === "knowledge" && knowledgeCanvasView === "documents" },
+        { id: "mappings", label: "映射管理", active: activeModuleId === "knowledge" && knowledgeCanvasView === "mappings" },
         { id: "tasks", label: "清洗任务", active: activeModuleId === "knowledge" && knowledgeCanvasView === "tasks" },
         { id: "versions", label: "版本管理", active: activeModuleId === "knowledge" && knowledgeCanvasView === "versions" },
       ],
@@ -1751,6 +1753,11 @@ export default function MainPage() {
               </CanvasSection>
             )}
           </>
+        ) : knowledgeCanvasView === "mappings" ? (
+          <MappingManagementView
+            key={knowledgeCanvasView}
+            projectId={currentProject?.id ?? null}
+          />
         ) : knowledgeCanvasView === "versions" ? (
           <KnowledgeAutomationPanel
             key={knowledgeCanvasView}

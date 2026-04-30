@@ -26,6 +26,9 @@ interface KnowledgeBuildTaskRow {
 
 const EMPTY_TASK_INPUT: KnowledgeTaskInput = {
   documentIds: [],
+  mappingId: null,
+  mappingVersionId: null,
+  mappingRecords: [],
   manualDrafts: [],
   repairQuestions: [],
 }
@@ -180,4 +183,3 @@ export function updateKnowledgeBuildTask(
   db.prepare(`UPDATE knowledge_build_tasks SET ${fields.join(', ')} WHERE id = ?`).run(...values)
   return findKnowledgeBuildTaskById(id)
 }
-

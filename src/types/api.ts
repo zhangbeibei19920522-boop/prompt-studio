@@ -5,6 +5,10 @@ import type {
   KnowledgeIndexVersion,
   KnowledgeManualDraftInput,
   KnowledgeRepairQuestionInput,
+  KnowledgeScopeMapping,
+  KnowledgeScopeMappingRecord,
+  KnowledgeScopeMappingDetail,
+  KnowledgeScopeMappingVersion,
   KnowledgeStageSummary,
   KnowledgeTaskType,
   KnowledgeVersion,
@@ -175,8 +179,45 @@ export interface CreateKnowledgeBuildTaskRequest {
   taskType: KnowledgeTaskType
   baseVersionId?: string | null
   documentIds?: string[]
+  mappingId?: string | null
+  mappingVersionId?: string | null
+  mappingRecords?: KnowledgeScopeMappingRecord[]
   manualDrafts?: KnowledgeManualDraftInput[]
   repairQuestions?: KnowledgeRepairQuestionInput[]
+}
+
+export interface CreateKnowledgeScopeMappingRequest {
+  name: string
+  fileName: string
+  content: string
+}
+
+export type UpdateKnowledgeScopeMappingRequest = Partial<Pick<KnowledgeScopeMapping, 'name'>>
+
+export interface CreateKnowledgeScopeMappingRecordRequest {
+  lookupKey: string
+  scope: Record<string, string[]>
+  raw?: Record<string, unknown>
+}
+
+export interface UpdateKnowledgeScopeMappingRecordRequest {
+  lookupKey?: string
+  scope?: Record<string, string[]>
+  raw?: Record<string, unknown>
+}
+
+export interface KnowledgeScopeMappingResponse {
+  mapping: KnowledgeScopeMappingDetail
+}
+
+export interface CreateKnowledgeMappingVersionRequest {
+  name: string
+  fileName: string
+  content: string
+}
+
+export interface CreateKnowledgeMappingVersionResponse {
+  mappingVersion: KnowledgeScopeMappingVersion
 }
 
 export interface CreateKnowledgeBuildTaskResponse {

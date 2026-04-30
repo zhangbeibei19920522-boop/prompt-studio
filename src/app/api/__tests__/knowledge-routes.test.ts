@@ -378,4 +378,357 @@ describe('knowledge routes', () => {
       testContext.cleanup()
     }
   })
+
+  it('creates a scope mapping version and applies it when building a knowledge version', async () => {
+    const testContext = await setupKnowledgeRouteTest()
+
+    try {
+      testContext.db.prepare(`
+        INSERT INTO documents (
+          id,
+          project_id,
+          name,
+          type,
+          content,
+          created_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+      `).run(
+        'doc-model-faq',
+        'project-1',
+        'Cdmtv Model Spec.xlsx',
+        'xlsx',
+        [
+          'Sheet: model - 85QD7N',
+          'Question | answer',
+          'How long is the Warranty? | The warranty is 1 year.',
+        ].join('\n'),
+        '2026-04-21T00:00:00.000Z',
+      )
+
+      const projectBaseRoute = await import('@/app/api/projects/[id]/knowledge-base/route')
+      const projectTaskRoute = await import('@/app/api/projects/[id]/knowledge-build-tasks/route')
+      const projectMappingRoute = await import('@/app/api/projects/[id]/knowledge-mapping-versions/route')
+      const taskRoute = await import('@/app/api/knowledge-build-tasks/[id]/route')
+      const versionRoute = await import('@/app/api/knowledge-versions/[id]/route')
+
+      await projectBaseRoute.POST(
+        new Request('http://localhost', {
+          method: 'POST',
+          body: JSON.stringify({ name: 'Customer Support KB' }),
+        }),
+        { params: Promise.resolve({ id: 'project-1' }) },
+      )
+
+      const mappingResponse = await projectMappingRoute.POST(
+        new Request('http://localhost', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: 'TV model platform mapping',
+            fileName: 'tv-model-platform.xlsx',
+            content: [
+              'model | platform | product',
+              '85QD7N | Google | TV',
+            ].join('\n'),
+          }),
+        }),
+        { params: Promise.resolve({ id: 'project-1' }) },
+      )
+      const mappingPayload = await mappingResponse.json()
+      expect(mappingResponse.status).toBe(201)
+      expect(mappingPayload.data).toMatchObject({
+        name: 'TV model platform mapping',
+        rowCount: 1,
+        keyField: 'productModel',
+      })
+
+      const createTaskResponse = await projectTaskRoute.POST(
+        new Request('http://localhost', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: 'Mapped Batch Update',
+            taskType: 'batch',
+            documentIds: ['doc-model-faq'],
+            mappingVersionId: mappingPayload.data.id,
+          }),
+        }),
+        { params: Promise.resolve({ id: 'project-1' }) },
+      )
+      const createTaskPayload = await createTaskResponse.json()
+      expect(createTaskResponse.status).toBe(202)
+
+      const completedTask = await waitForTaskCompletion(taskRoute, createTaskPayload.data.task.id as string)
+      expect(completedTask.input).toEqual(
+        expect.objectContaining({
+          mappingVersionId: mappingPayload.data.id,
+          mappingRecords: [
+            expect.objectContaining({
+              lookupKey: '85QD7N',
+            }),
+          ],
+        }),
+      )
+
+      const versionDetailResponse = await versionRoute.GET(new Request('http://localhost'), {
+        params: Promise.resolve({ id: completedTask.knowledgeVersionId as string }),
+      })
+      const versionDetailPayload = await versionDetailResponse.json()
+
+      expect(versionDetailPayload.data.parents[0].metadata.scope).toEqual({
+        productModel: ['85QD7N'],
+        platform: ['Google TV'],
+        productCategory: ['TV'],
+      })
+      expect(versionDetailPayload.data.manifest.sourceSummary).toEqual(
+        expect.objectContaining({
+          mappingVersionId: mappingPayload.data.id,
+          mappingRecordCount: 1,
+        }),
+      )
+    } finally {
+      testContext.cleanup()
+    }
+  })
+
+  it('manages scope mappings through standalone backend APIs and freezes records into build tasks', async () => {
+    const testContext = await setupKnowledgeRouteTest()
+
+    try {
+      testContext.db.prepare(`
+        INSERT INTO documents (
+          id,
+          project_id,
+          name,
+          type,
+          content,
+          created_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+      `).run(
+        'doc-managed-model-faq',
+        'project-1',
+        'Cdmtv Model Spec.xlsx',
+        'xlsx',
+        [
+          'Sheet: model - 85QD7N',
+          'Question | answer',
+          'How long is the Warranty? | The warranty is 1 year.',
+        ].join('\n'),
+        '2026-04-21T00:00:00.000Z',
+      )
+
+      const projectBaseRoute = await import('@/app/api/projects/[id]/knowledge-base/route')
+      const projectTaskRoute = await import('@/app/api/projects/[id]/knowledge-build-tasks/route')
+      const projectMappingRoute = await import('@/app/api/projects/[id]/knowledge-scope-mappings/route')
+      const mappingDetailRoute = await import('@/app/api/knowledge-scope-mappings/[id]/route')
+      const mappingRecordsRoute = await import('@/app/api/knowledge-scope-mappings/[id]/records/route')
+      const mappingRecordRoute = await import('@/app/api/knowledge-scope-mapping-records/[id]/route')
+      const taskRoute = await import('@/app/api/knowledge-build-tasks/[id]/route')
+      const versionRoute = await import('@/app/api/knowledge-versions/[id]/route')
+
+      await projectBaseRoute.POST(
+        new Request('http://localhost', {
+          method: 'POST',
+          body: JSON.stringify({ name: 'Customer Support KB' }),
+        }),
+        { params: Promise.resolve({ id: 'project-1' }) },
+      )
+
+      const createMappingResponse = await projectMappingRoute.POST(
+        new Request('http://localhost', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: 'TV model scope mapping',
+            fileName: 'tv-model-platform.xlsx',
+            content: [
+              'model | platform | product',
+              '85QD7N | Google | TV',
+            ].join('\n'),
+          }),
+        }),
+        { params: Promise.resolve({ id: 'project-1' }) },
+      )
+      const createMappingPayload = await createMappingResponse.json()
+      expect(createMappingResponse.status).toBe(201)
+      expect(createMappingPayload.data).toMatchObject({
+        name: 'TV model scope mapping',
+        rowCount: 1,
+        keyField: 'productModel',
+        records: [
+          expect.objectContaining({
+            lookupKey: '85QD7N',
+            scope: expect.objectContaining({
+              platform: ['Google TV'],
+            }),
+          }),
+        ],
+      })
+
+      const mappingId = createMappingPayload.data.id as string
+      const createdRecordId = createMappingPayload.data.records[0].id as string
+      const duplicateRecordResponse = await mappingRecordsRoute.POST(
+        new Request('http://localhost', {
+          method: 'POST',
+          body: JSON.stringify({
+            lookupKey: '85 QD7N',
+            scope: {
+              productModel: ['85 QD7N'],
+              platform: ['Fire TV'],
+            },
+          }),
+        }),
+        { params: Promise.resolve({ id: mappingId }) },
+      )
+      const duplicateRecordPayload = await duplicateRecordResponse.json()
+      expect(duplicateRecordResponse.status).toBe(409)
+      expect(duplicateRecordPayload.error).toContain('already exists')
+
+      const updateRecordResponse = await mappingRecordRoute.PATCH(
+        new Request('http://localhost', {
+          method: 'PATCH',
+          body: JSON.stringify({
+            scope: {
+              productModel: ['85QD7N'],
+              platform: ['Roku TV'],
+              productCategory: ['TV'],
+            },
+          }),
+        }),
+        { params: Promise.resolve({ id: createdRecordId }) },
+      )
+      expect(updateRecordResponse.status).toBe(200)
+
+      const addRecordResponse = await mappingRecordsRoute.POST(
+        new Request('http://localhost', {
+          method: 'POST',
+          body: JSON.stringify({
+            lookupKey: '55R6G',
+            scope: {
+              productModel: ['55R6G'],
+              platform: ['Google TV'],
+            },
+          }),
+        }),
+        { params: Promise.resolve({ id: mappingId }) },
+      )
+      const addRecordPayload = await addRecordResponse.json()
+      expect(addRecordResponse.status).toBe(201)
+
+      const duplicateUpdateResponse = await mappingRecordRoute.PATCH(
+        new Request('http://localhost', {
+          method: 'PATCH',
+          body: JSON.stringify({
+            lookupKey: '85QD7N',
+          }),
+        }),
+        { params: Promise.resolve({ id: addRecordPayload.data.id as string }) },
+      )
+      const duplicateUpdatePayload = await duplicateUpdateResponse.json()
+      expect(duplicateUpdateResponse.status).toBe(409)
+      expect(duplicateUpdatePayload.error).toContain('already exists')
+
+      const deleteRecordResponse = await mappingRecordRoute.DELETE(new Request('http://localhost', { method: 'DELETE' }), {
+        params: Promise.resolve({ id: addRecordPayload.data.id as string }),
+      })
+      expect(deleteRecordResponse.status).toBe(200)
+
+      const renameResponse = await mappingDetailRoute.PATCH(
+        new Request('http://localhost', {
+          method: 'PATCH',
+          body: JSON.stringify({ name: 'Updated TV model scope mapping' }),
+        }),
+        { params: Promise.resolve({ id: mappingId }) },
+      )
+      expect(renameResponse.status).toBe(200)
+
+      const detailResponse = await mappingDetailRoute.GET(new Request('http://localhost'), {
+        params: Promise.resolve({ id: mappingId }),
+      })
+      const detailPayload = await detailResponse.json()
+      expect(detailPayload.data).toMatchObject({
+        id: mappingId,
+        name: 'Updated TV model scope mapping',
+        rowCount: 1,
+        records: [
+          expect.objectContaining({
+            lookupKey: '85QD7N',
+            scope: {
+              productModel: ['85QD7N'],
+              platform: ['Roku TV'],
+              productCategory: ['TV'],
+            },
+          }),
+        ],
+      })
+
+      const createTaskResponse = await projectTaskRoute.POST(
+        new Request('http://localhost', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: 'Managed Mapping Build',
+            taskType: 'batch',
+            documentIds: ['doc-managed-model-faq'],
+            mappingId,
+          }),
+        }),
+        { params: Promise.resolve({ id: 'project-1' }) },
+      )
+      const createTaskPayload = await createTaskResponse.json()
+      expect(createTaskResponse.status).toBe(202)
+
+      const completedTask = await waitForTaskCompletion(taskRoute, createTaskPayload.data.task.id as string)
+      expect(completedTask.input).toEqual(
+        expect.objectContaining({
+          mappingId,
+          mappingRecords: [
+            expect.objectContaining({
+              lookupKey: '85QD7N',
+              scope: expect.objectContaining({
+                platform: ['Roku TV'],
+              }),
+            }),
+          ],
+        }),
+      )
+
+      const versionDetailResponse = await versionRoute.GET(new Request('http://localhost'), {
+        params: Promise.resolve({ id: completedTask.knowledgeVersionId as string }),
+      })
+      const versionDetailPayload = await versionDetailResponse.json()
+      expect(versionDetailPayload.data.parents[0].metadata.scope).toEqual({
+        productModel: ['85QD7N'],
+        platform: ['Roku TV'],
+        productCategory: ['TV'],
+      })
+    } finally {
+      testContext.cleanup()
+    }
+  })
+
+  it('rejects mapping version content that cannot be parsed into scope records', async () => {
+    const testContext = await setupKnowledgeRouteTest()
+
+    try {
+      const projectMappingRoute = await import('@/app/api/projects/[id]/knowledge-mapping-versions/route')
+
+      const mappingResponse = await projectMappingRoute.POST(
+        new Request('http://localhost', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: 'Invalid mapping',
+            fileName: 'invalid-mapping.xlsx',
+            content: [
+              'random | notes',
+              'only text | no scope fields',
+            ].join('\n'),
+          }),
+        }),
+        { params: Promise.resolve({ id: 'project-1' }) },
+      )
+      const mappingPayload = await mappingResponse.json()
+
+      expect(mappingResponse.status).toBe(400)
+      expect(mappingPayload.error).toContain('映射表暂时无法解析')
+    } finally {
+      testContext.cleanup()
+    }
+  })
 })
